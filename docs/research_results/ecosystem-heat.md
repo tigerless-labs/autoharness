@@ -1,0 +1,18 @@
+# Ecosystem heat: skill packs vs optimizers, and virality
+
+**The star gap is 2-4 orders of magnitude.** Content packs dwarf optimizers:
+- Skill/config content: obra/superpowers ~223k★, affaan-m/ECC ~212k★, karpathy-skills ~173k★, anthropics/skills ~149k★, mattpocock/skills ~124k★.
+- Optimizer/bootstrap layer: microsoft/SkillOpt ~5.6k★, EvoSkill ~870★, kayba ~290★, retro-harness (RHO) ~14★, MOSS ~8★.
+
+**Why — three structural reasons:** (1) content = copy-paste, zero-config, instant value, audience = every user; infrastructure needs API budget, trust to edit your config, repeat cycles. Star measures distribution efficiency, not which direction is right (cf. prompt-collection repos >> DSPy in 2023). (2) Time lag — bootstrap papers are 2-6 weeks old (RHO 6 days). (3) Value-realization delay — a skill helps on first use; an optimizer needs accumulated trajectories + several cycles.
+
+**superpowers** ([obra/superpowers](https://github.com/obra/superpowers), ~223k★) — Jesse Vincent's "skills framework + dev methodology": auto-triggering **mandatory workflows** (brainstorm → spec → plan → subagent-driven TDD → review → finish; deletes code written before tests). No automatic learning loop — all skills hand-curated, new ones generally not accepted. A static, human-maintained symbol layer. Its 223k★ proves the demand for these artifacts; autoharness's job is to make them grow/improve from trajectories — exactly what superpowers refuses to do.
+  - This project's CLAUDE.md rules (docs→tests→code, every feature ships a test, verify-before-done) are nearly isomorphic to superpowers' methodology — worth reading its skill texts.
+
+**ECC** ([affaan-m/ECC](https://github.com/affaan-m/ECC), ~212k★) — the key counter-example to "optimizers can't be popular." Mostly a curated pack, but ships a real opt-in learning loop: **Instincts (Continuous Learning v2)** — a Stop-hook auto-extracts patterns into confidence-scored "instincts"; `/evolve` clusters them into skills (work→extract→score→promote). Plus `/skill-create` from git history, SessionStart/End memory hooks. → the category wins when packaged as "install-and-it-works content pack + an optional learning loop hidden inside," not as a research framework.
+
+**How superpowers went viral (≈ the playbook):** small credibility × **launch-day timing** (shipped same morning Anthropic released the Claude Code plugin system) × **official marketplace shelf** × instant felt value. Author fame (Jesse Vincent: Request Tracker, K-9 Mail) was the lowest-weight factor — he had no viral HN post (highest was a 50-pt third-party review). Stars accrued slowly via blogs/reviews/word-of-mouth.
+
+**Trending-GitHub × autoharness intersection** (last30days, 2026-06-10): "agent harness" became a high-frequency HN/Show-HN term (O'Reilly Radar "Agent Harness Engineering", Code-as-Agent-Harness, multiple Show-HN harness impls). Direct hits on the bootstrap theme: henrypan.com "What 1k Harness Experiments Taught Me About Self-Improving Agents", Recursi (recursi.dev), hexo-ai/sia, "Claude Code OS: self-updating operational memory". Memory architecture is a parallel hot topic (graph-DB fact stores, "stop putting memory in the context window"). Ecosystem anxiety (r/opensource "Flood of AI garbage", Miasma worm targeting AI coding agents via GitHub repos) reinforces the "outputs must be gated/verified" design principle.
+
+**Implication for autoharness:** moat = the optimizer (bootstrap-validation discipline), but adoption entry must sit on artifacts users already have — read/write CLAUDE.md & skills dirs, install as plugin/hook, produce a reviewable diff on night one. ECC (distribution) + SkillOpt-Sleep (engineering skeleton) + RHO (validation method) each own a corner; nobody has all three.
