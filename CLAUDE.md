@@ -48,9 +48,8 @@ out of order is *incomplete*.
 7. **Commit.** Run the relevant unit *and* system tests before each commit; commit at every
    green-test point (the natural TDD commit moments) and `git push` after every completed task
    and at every phase gate — progress must never exist only on this machine.
-8. **Sweep docs & indexes.** Confirm whether the change needs updates to the design docs, the
-   doc/file-tree indexes (`docs/design/index.md`), and the dev-skill summaries
-   (`dev_skills/index.md`) — update them in the same change.
+8. **Sweep docs & indexes.** Confirm whether the change needs updates to the design docs and
+   the doc/file-tree indexes (`docs/design/index.md`) — update them in the same change.
 9. **Drive CI green.** After opening the PR, watch CI and code-quality checks (CI runs, lint,
    static analysis, doc-automation checks). On any failure, locate, fix, and push immediately
    — repeat until every required check passes.
@@ -60,10 +59,13 @@ out of order is *incomplete*.
 Multiple agents develop in parallel; isolation is mandatory and the repo root is sacred.
 
 - **One task, one branch, one worktree.** Each agent binds to exactly one explicit task, on its
-  own branch, in its own worktree — created with `git worktree add .worktrees/<branch> <branch>`
-  (`.worktrees/` is git-ignored). Never develop on `main`/`master`/`trunk`.
-- **The root worktree is for review, merge, and release only.** No agent develops or commits in
-  the repository root.
+  own branch, in its own worktree — **created with Claude Code's own worktree tooling** (the
+  `/ce-worktree` skill or the built-in worktree feature), which places the worktree under
+  `.claude/worktrees/<branch>` (`.claude/` is git-ignored). Do not hand-create worktrees with raw
+  `git worktree add`. Never develop on the default/trunk branch — `main`/`master`/`trunk`, **or
+  whatever the repo's current default branch is**.
+- **The root checkout is for review, merge, and release only.** No agent develops or commits in
+  the repository root or on the default branch.
 - **Verify the branch before every commit.** Run `git branch --show-current` and confirm it
   equals your task branch before any `git commit`. On mismatch, stop and investigate — never
   commit to whatever branch happens to be checked out.
@@ -128,12 +130,3 @@ Multiple agents develop in parallel; isolation is mandatory and the repo root is
 - **Red-team the tests.** Both unit and system tests carry adversarial cases — privilege
   escalation, injection, guardrail bypass, cross-tenant leakage, dangerous tool calls, and
   failure injection — proving the system fails safe under malicious or abnormal input.
-
-## Imported skills (from superpowers)
-
-`.claude/skills/` holds four execution-discipline skills from
-[obra/superpowers](https://github.com/obra/superpowers): test-driven-development,
-writing-plans, verification-before-completion, systematic-debugging. Where they conflict
-with this file, **this file wins** — specifically: docs-first precedes the red-green cycle,
-external-service boundaries use fixtures (never live calls), and plans go in `docs/plans/`.
-Worktree-per-task isolation is adopted (see *Concurrent development*).
