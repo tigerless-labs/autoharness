@@ -5,16 +5,15 @@
 
 ## Key docs (read before changing the relevant area)
 
+- **[docs/](docs/index.md)** — documentation map; single entry point for the whole `docs/` tree.
 - **[docs/design/](docs/design/index.md)** — the architecture and the *why*. Start at the spine
   (`docs/design/workflow.md`: principle + pipeline + invariants), then the step you're touching.
   *(Create these as the design solidifies; keep the index current.)*
 - **[docs/TODO.md](docs/TODO.md)** — tracked follow-ups not yet on the roadmap.
   **Keep this current in real time** (see rule below).
 - **[docs/testing.md](docs/testing.md)** — test conventions and the per-file test map.
-- **[docs/plans/](docs/plans/)** — per-change implementation plans (working artifacts, exempt
-  from the design-doc style rules).
-- **[docs/solutions/](docs/solutions/)** — institutional learnings from past debugging and
-  execution, read back by future planning.
+- **[docs/plans/](docs/plans/)** — per-change implementation plans (working artifacts, exempt from the design-doc style rules).
+
 
 ## Invariants — do not break
 
