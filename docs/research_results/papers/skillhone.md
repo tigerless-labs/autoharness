@@ -1,6 +1,6 @@
-# SkillHone — a harness for continual evolution via decision history
+# [论文] SkillHone: A Harness for Continual Agent Skill Evolution Through Persistent Decision History
 
-**Li, Hu** — "SkillHone: A Harness for Continual Agent Skill Evolution Through Persistent Decision History" ([arXiv:2606.08671](https://arxiv.org/abs/2606.08671), 2026-06).
+**Zhiwei Li, Yong Hu (WeChat AI / Tencent Inc.; work done during intern at WeChat AI)** — "SkillHone: A Harness for Continual Agent Skill Evolution Through Persistent Decision History" ([arXiv:2606.08671](https://arxiv.org/abs/2606.08671), 2026-06). **No public code** — abstract/page carry no code-availability statement, no GitHub/project-page link found (as of 2026-06-22); joins HarnessFix / Self-Harness in the paper-but-no-code bucket.
 
 Problem: existing approaches improve skills only within bounded runs and "retain only the final artifact, discarding the decision history" — so future agents can't see earlier revisions, evaluations, or rejected options. SkillHone is a **harness** anchored in persistent decision history:
 - Couples skill revisions with evaluation-side evidence that supplies practice feedback.

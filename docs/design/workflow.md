@@ -76,7 +76,7 @@ gate.
 7. **Every change passes a gate; the gate prefers zero-oracle objective checks and scales with
    risk.** Deterministic migrations (hookify) need none; deletions need adherence + flaw-rate;
    additions need a held-out flaw-rate drop. *why:* regression discipline applied to harness
-   evolution is the benchmark-free quality definition (`research_results/benchmark-free-optimization.md`).
+   evolution is the benchmark-free quality definition (`research_results/synthesis/benchmark-free-validation.md`).
 8. **Keep an exploration budget.** Reserve capacity to probe symbols the loop would otherwise
    never revisit. *why:* outcome-driven loops collapse onto familiar routines (APEX).
 9. **Observe is read-only and fails safe.** Ingest never writes, never calls the network, and

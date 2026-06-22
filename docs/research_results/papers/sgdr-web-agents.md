@@ -1,4 +1,4 @@
-# SGDR — online skill learning for web agents via state-grounded retrieval
+# [论文] Online Skill Learning for Web Agents via State-Grounded Dynamic Retrieval (SGDR)
 
 **Li, Deng, Wang, Huang, Shi, Tan, Lu, Liu** — "Online Skill Learning for Web Agents via State-Grounded Dynamic Retrieval" ([arXiv:2606.04391](https://arxiv.org/abs/2606.04391), 2026-06, 17pp). Code: [plusnli/skill-dynamic-retrieval](https://github.com/plusnli/skill-dynamic-retrieval).
 

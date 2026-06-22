@@ -1,4 +1,4 @@
-# SkillWiki — living knowledge infrastructure for skills
+# [论文] SkillWiki: A Living Knowledge Infrastructure for Agent Skills
 
 **Huang, Ding, Liu, … Yu, Sui (11 authors)** — "SkillWiki: A Living Knowledge Infrastructure for Agent Skills" ([arXiv:2606.16523](https://arxiv.org/abs/2606.16523), 2026-06). Demo + code: [Huangdingcheng/SkillWiki](https://github.com/Huangdingcheng/SkillWiki).
 

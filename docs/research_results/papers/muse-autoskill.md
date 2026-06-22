@@ -1,8 +1,8 @@
-# MUSE-Autoskill — skill lifecycle management
+# [论文] MUSE-Autoskill: Self-Evolving Agents via Skill Creation, Memory, Management, and Evaluation
 
 **Lin, Li, Song, Jiang, Zhang** — "MUSE-Autoskill: Self-Evolving Agents via Skill Creation, Memory, Management, and Evaluation" ([arXiv:2605.27366](https://arxiv.org/abs/2605.27366), 2026-05, 30pp).
 
-> Already noted in the cluster file ([../skill-learning-papers.md](../skill-learning-papers.md)); this is the per-paper read.
+> Skill-lifecycle sibling in the [skill-as-state cluster](index.md).
 
 Problem: skill-creation methods treat skills as "isolated and static artifacts," limiting reuse, reliability, and long-term improvement. MUSE (Memory-Utilizing Skill Evolution) manages a unified skill lifecycle:
 - **Creation** — generate skills on demand.

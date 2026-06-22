@@ -1,25 +1,19 @@
-# Research results — autoharness landscape (as of 2026-06-10)
+# Research results — autoharness landscape
 
-Compressed findings from the 2026-06-10 research session. Each file = one point.
-These are research notes (citations + specifics are the value), not design docs —
-the `docs/design/` style rules do not apply here.
+Per-source reference library for the 2026 agent-harness / symbolic-learning landscape. **One source = one card**; each card's title tags it `[论文]` / `[GitHub]` / `[博客]`, names the work and its authors/org, links the source, and summarizes it with relevance to autoharness. Research notes (citations + specifics are the value) — the `docs/design/` style rules do not apply here.
 
-1. [autoharness-paper.md](autoharness-paper.md) — what the namesake paper actually is
-2. [symbolic-learning-framing.md](symbolic-learning-framing.md) — the "symbolic learning renaissance" thesis tying it together
-3. [benchmark-free-optimization.md](benchmark-free-optimization.md) — how to define harness quality without a benchmark
-4. [skill-learning-papers.md](skill-learning-papers.md) — the skill-as-trainable-state paper cluster
-5. [oss-memory-self-learning.md](oss-memory-self-learning.md) — what shipped in open-source agents (incl. bootstrap)
-6. [github-implementations.md](github-implementations.md) — which papers have code, and the name collision
-7. [ecosystem-heat.md](ecosystem-heat.md) — skill packs vs optimizers, and how things go viral
-8. [fuzzing-harness-adjacent.md](fuzzing-harness-adjacent.md) — the other "harness" (fuzz drivers), kept as reference
+## Layout
 
-Reference lists:
-- [paper-list.md](paper-list.md) — all referenced papers, grouped by theme, with arXiv links
-- [github-list.md](github-list.md) — all referenced repos, grouped, with star counts
+- **[papers/](papers/index.md)** — `[论文]` cards (44), grouped: core harness line · skill-as-state · retrieval/selection · self-evolving memory · surveys/infra · foundational · fuzzing-adjacent.
+- **[github/](github/index.md)** — `[GitHub]` cards for non-paper-code repos: OSS agents, skill packs, the three "AutoHarness" name-collisions, trending projects (+ official-implementation index).
+- **[blogs/](blogs/index.md)** — `[博客]` cards: the symbolic-learning thesis, Heuristic Learning, the Claude Code skills blog, the 1k-experiments log.
+- **[synthesis/](synthesis/index.md)** — the cross-source analysis no single card owns: the [benchmark-free validation spectrum](synthesis/benchmark-free-validation.md) and [ecosystem heat / positioning](synthesis/ecosystem-heat.md).
 
-Paper collections (per-paper deep reads, added later):
-- [papers/](papers/index.md) — agent skills, meta-skills & harness evolution (2026-06-22 batch, 13 sources)
+## Where to start
 
-**One-line takeaway for autoharness's positioning:** the contested, low-competition
-gap is *benchmark-free, trajectory-bootstrapped harness evolution with audit/gate/rollback* —
-distinct from governance frameworks, fuzz-harness generation, and benchmark-requiring optimizers.
+1. [AutoHarness (Lou et al.)](papers/autoharness-lou.md) — the namesake and its open gap.
+2. [Symbolic-Learning Renaissance](blogs/symbolic-learning-renaissance.md) — the thesis tying the corpus together.
+3. [Defining harness quality without a benchmark](synthesis/benchmark-free-validation.md) — how to gate edits with no oracle.
+4. [Ecosystem heat & positioning](synthesis/ecosystem-heat.md) — the name collision and the wedge.
+
+**One-line takeaway for autoharness's positioning:** the contested, low-competition gap is *benchmark-free, trajectory-bootstrapped harness evolution with audit/gate/rollback* — distinct from governance frameworks, fuzz-harness generation, and benchmark-requiring optimizers.

@@ -1,4 +1,4 @@
-# EmbodiSkill — skill-aware reflection for embodied agents
+# [论文] EmbodiSkill: Skill-Aware Reflection for Self-Evolving Embodied Agents
 
 **Ju, Wang, Ding, Yang, … Cao (15 authors)** — "EmbodiSkill: Skill-Aware Reflection for Self-Evolving Embodied Agents" ([arXiv:2605.10332](https://arxiv.org/abs/2605.10332), 2026-05).
 
