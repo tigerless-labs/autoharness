@@ -1,4 +1,4 @@
-# SkillEvolver — skill learning as a meta-skill, from failures
+# [论文] SkillEvolver: A Meta-Skill for Online Skill Learning from Failures in Agent Self-Evolution
 
 **Zhang, Zhu, Zhou, Jia, Wang** — "SkillEvolver: A Meta-Skill for Online Skill Learning from Failures in Agent Self-Evolution" ([arXiv:2605.10500](https://arxiv.org/abs/2605.10500), 2026-05).
 

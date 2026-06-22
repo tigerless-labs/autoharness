@@ -21,6 +21,7 @@ only points. Keep it current when files are added, moved, or removed.
 
 ## Research
 
-- [research_results/](research_results/index.md) — compressed landscape findings (research notes,
-  not design docs). Includes [research_results/papers/](research_results/papers/index.md) — the
-  per-paper collection on agent skills, meta-skills & harness evolution.
+- [research_results/](research_results/index.md) — per-source reference library for the agent-harness /
+  symbolic-learning landscape (research notes, not design docs). One source = one card, split into
+  [papers/](research_results/papers/index.md), [github/](research_results/github/index.md),
+  [blogs/](research_results/blogs/index.md), and [synthesis/](research_results/synthesis/index.md).

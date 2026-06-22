@@ -1,4 +1,4 @@
-# Socratic-SWE — self-evolving coding agents via trace-derived skills
+# [论文] Socratic-SWE: Self-Evolving Coding Agents via Trace-Derived Agent Skills
 
 **Xiao, Jiao, Wang, Wang, Zhao, Wei, Zhang, Qu** — "Socratic-SWE: Self-Evolving Coding Agents via Trace-Derived Agent Skills" ([arXiv:2606.07412](https://arxiv.org/abs/2606.07412), 2026-06).
 

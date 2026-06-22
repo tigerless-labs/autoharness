@@ -1,4 +1,4 @@
-# Skill-MAS — evolving a meta-skill for multi-agent systems
+# [论文] Skill-MAS: Evolving Meta-Skill for Automatic Multi-Agent Systems
 
 **Lin (HKUST-GZ), Yang (Ant Group), Qin (HKUST-GZ, corr.)** — "Skill-MAS: Evolving Meta-Skill for Automatic Multi-Agent Systems" ([arXiv:2606.18837](https://arxiv.org/abs/2606.18837), 2026-06). Code: [linhh29/Skill_MAS](https://github.com/linhh29/Skill_MAS).
 
@@ -10,4 +10,4 @@ Optimization loop:
 
 Results: 4 benchmarks (DeepResearchBench, HLE-Math, BrowseComp-Plus, VitaBench) × 4 LLMs; beats inference-time and training-time baselines by a large margin (one exception) at a better cost-performance point. Evolved Meta-Skills transfer across unseen tasks and across LLMs.
 
-**Relevance to autoharness:** lifts the skill-as-trainable-state paradigm from the sub-agent to the **meta-agent orchestration** level, with a held-out validation gate — same selection discipline as [SkillOpt](../skill-learning-papers.md). The orchestration layer is itself harness-shaped.
+**Relevance to autoharness:** lifts the skill-as-trainable-state paradigm from the sub-agent to the **meta-agent orchestration** level, with a held-out validation gate — same selection discipline as [SkillOpt](skillopt.md). The orchestration layer is itself harness-shaped.

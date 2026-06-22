@@ -1,4 +1,4 @@
-# Externalization in LLM Agents — a unified review
+# [论文] Externalization in LLM Agents: A Unified Review of Memory, Skills, Protocols and Harness Engineering
 
 **Zhou, Chai, Chen, … Lin, Zhang (21 authors)** — "Externalization in LLM Agents: A Unified Review of Memory, Skills, Protocols and Harness Engineering" ([arXiv:2604.08224](https://arxiv.org/abs/2604.08224), 2026-04, 54pp).
 

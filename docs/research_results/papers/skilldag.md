@@ -1,4 +1,4 @@
-# SkillDAG — self-evolving typed skill graphs for selection at scale
+# [论文] SkillDAG: Self-Evolving Typed Skill Graphs for LLM Skill Selection at Scale
 
 **Bai, Wan, Zhou, Yu, Zhao, You, Tsang** — "SkillDAG: Self-Evolving Typed Skill Graphs for LLM Skill Selection at Scale" ([arXiv:2606.03056](https://arxiv.org/abs/2606.03056), 2026-06, 19pp). Code: [Ericbai06/SkillDAG](https://github.com/Ericbai06/SkillDAG).
 
