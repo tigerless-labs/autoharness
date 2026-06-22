@@ -17,6 +17,9 @@ Reference lists:
 - [paper-list.md](paper-list.md) — all referenced papers, grouped by theme, with arXiv links
 - [github-list.md](github-list.md) — all referenced repos, grouped, with star counts
 
+Paper collections (per-paper deep reads, added later):
+- [papers/](papers/index.md) — agent skills, meta-skills & harness evolution (2026-06-22 batch, 13 sources)
+
 **One-line takeaway for autoharness's positioning:** the contested, low-competition
 gap is *benchmark-free, trajectory-bootstrapped harness evolution with audit/gate/rollback* —
 distinct from governance frameworks, fuzz-harness generation, and benchmark-requiring optimizers.
