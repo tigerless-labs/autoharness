@@ -22,4 +22,5 @@ only points. Keep it current when files are added, moved, or removed.
 ## Research
 
 - [research_results/](research_results/index.md) — compressed landscape findings (research notes,
-  not design docs).
+  not design docs). Includes [research_results/papers/](research_results/papers/index.md) — the
+  per-paper collection on agent skills, meta-skills & harness evolution.
