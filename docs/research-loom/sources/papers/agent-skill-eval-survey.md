@@ -10,4 +10,4 @@ Two taxonomies:
 
 Open direction: skill ecosystems that are generalizable, efficient, and *verifiably safe*.
 
-**Relevance to autoharness:** the evaluation half is the live question for any harness optimizer — how to measure skill/harness utility without overfitting a benchmark. Pairs with [synthesis/benchmark-free-validation.md](../synthesis/benchmark-free-validation.md). A companion reading list for cross-checking the cluster.
+**Relevance to autoharness:** the evaluation half is the live question for any harness optimizer — how to measure skill/harness utility without overfitting a benchmark. Pairs with [synthesis/benchmark-free-validation.md](../../synthesis/benchmark-free-validation.md). A companion reading list for cross-checking the cluster.

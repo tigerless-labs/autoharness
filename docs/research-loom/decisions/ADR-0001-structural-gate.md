@@ -11,7 +11,7 @@ supersedes:
 
 ## 背景
 
-held-out 门（[SkillOpt](../papers/skillopt.md)）需 benchmark、环境门（[AutoHarness](../papers/autoharness-lou.md)）需可判定合法性，本项目两者皆无，威胁"无需 oracle"这一驱动力。
+held-out 门（[SkillOpt](../sources/papers/skillopt.md)）需 benchmark、环境门（[AutoHarness](../sources/papers/autoharness-lou.md)）需可判定合法性，本项目两者皆无，威胁"无需 oracle"这一驱动力。
 
 ## 决定
 

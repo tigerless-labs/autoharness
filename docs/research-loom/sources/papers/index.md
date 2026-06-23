@@ -61,6 +61,6 @@ One card per paper (arXiv + official code link when it exists). Research notes �
 
 ## G. Adjacent: fuzz-driver / fuzzing-harness generation (reference only)
 
-A different "harness" (fuzz drivers); kept for the output-quality-validation lesson — see [synthesis/ecosystem-heat.md](../synthesis/ecosystem-heat.md).
+A different "harness" (fuzz drivers); kept for the output-quality-validation lesson — see [synthesis/ecosystem-heat.md](../../synthesis/ecosystem-heat.md).
 
 - [QuartetFuzz](quartetfuzz.md) · [Agentic Fuzzing](agentic-fuzzing.md) · [MASFuzzer](masfuzzer.md) · [Multi-Agent Java Harness](java-fuzz-harness.md) · [STITCH](stitch.md) · [HarnessAgent](harnessagent.md) · [FalseCrashReducer](falsecrashreducer.md) · [Scheduzz](scheduzz.md) · [Reliable LLM Fuzz Testing (vision)](reliable-fuzz-vision.md) · [SEC-bench Pro](sec-bench-pro.md)

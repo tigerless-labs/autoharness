@@ -12,8 +12,8 @@ type: direction
 
 | 来源 | 把关机制 | 需要 oracle | 适用反馈 | 我的评判 |
 |---|---|---|---|---|
-| [SkillOpt](../papers/skillopt.md) | held-out 验证分数严格改善 | 需（benchmark） | 有评分的稠密反馈 | 存疑（与 benchmark-free 冲突） |
-| [AutoHarness (Lou)](../papers/autoharness-lou.md) | 环境反馈迭代（非法动作清零） | 需（可判定合法性） | 规则清晰、即时反馈 | 存疑（TextArena 之外失效） |
+| [SkillOpt](../sources/papers/skillopt.md) | held-out 验证分数严格改善 | 需（benchmark） | 有评分的稠密反馈 | 存疑（与 benchmark-free 冲突） |
+| [AutoHarness (Lou)](../sources/papers/autoharness-lou.md) | 环境反馈迭代（非法动作清零） | 需（可判定合法性） | 规则清晰、即时反馈 | 存疑（TextArena 之外失效） |
 
 ## 小结
 
