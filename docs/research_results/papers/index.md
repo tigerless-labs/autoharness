@@ -12,6 +12,7 @@ One card per paper (arXiv + official code link when it exists). Research notes �
 - [MOSS](moss.md) — source-level rewriting; production failure-replay; health-probe rollback.
 - [What Makes a Harness a Harness](what-makes-a-harness.md) — operational definition + inclusion/exclusion test.
 - [SkillHone](skillhone.md) — harness that persists decision history incl. rejected options.
+- [HASP](hasp.md) — skills as **executable** Program Functions; runtime-control harness + policy-training + evolution; the auto-write/weight corner opposite to us.
 
 ## B. Skill-as-trainable-state & self-evolving skill methods
 
@@ -26,10 +27,13 @@ One card per paper (arXiv + official code link when it exists). Research notes �
 - [Socratic-SWE](socratic-swe.md) — trace-derived skills steer a self-evolving SWE curriculum.
 - [EmbodiSkill](embodiskill.md) — disambiguates flawed-skill vs. execution-lapse before revising.
 - [Skill-MAS](skill-mas.md) — orchestration as an evolvable meta-skill; held-out gate.
+- [SkillHarness](skillharness.md) — safe skills for computer-use agents; macro/micro split, risk-guard activation, evidence-gated sparse updates ("curate, not grow"); the name collision.
 
 ## C. Skill retrieval & selection at scale
 
 - [SkillDAG](skilldag.md) — typed, conflict-aware skill graph; queried + evolved at inference.
+- [Graph-of-Skills](graph-of-skills.md) — inference-time budgeted, dependency-aware retrieval (offline graph + reverse-aware PPR).
+- [SkillGraph](skillgraph.md) — typed skill graph co-evolved with the policy via RL (graph + GRPO); distinct from SkillDAG.
 - [SGDR](sgdr-web-agents.md) — stepwise, state-grounded retrieval for web agents.
 
 ## D. Self-evolving agents & memory
@@ -46,6 +50,7 @@ One card per paper (arXiv + official code link when it exists). Research notes �
 - [Externalization in LLM Agents](externalization-review.md) — the umbrella survey; harness = unification layer.
 - [Agent Skill Evaluation and Evolution](agent-skill-eval-survey.md) — four evolution paradigms; six benchmark categories.
 - [SkillWiki](skillwiki.md) — wiki-style infrastructure; provenance-aware evolution.
+- [Skill-Harnessing RA](skill-harnessing-ra.md) — 10 patterns + 4-layer reference architecture for skill-mediated agents; harnessing-vs-management split; most invariants map to a named pattern.
 
 ## F. Foundational context
 

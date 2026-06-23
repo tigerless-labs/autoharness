@@ -1,0 +1,7 @@
+# [论文] Graph-of-Skills (GoS): Dependency-Aware Structural Retrieval for Massive Agent Skills
+
+**Dawei Liu, Zongxia Li, Hongyang Du, Xiyang Wu, Shihang Gui, Yongbei Kuang, Lichao Sun (UPenn / Maryland / Brown / CMU / Lehigh)** — [arXiv:2604.05333](https://arxiv.org/abs/2604.05333), 2026-04 (v3 2026-05-27). code: [davidliuk/graph-of-skills](https://github.com/davidliuk/graph-of-skills).
+
+**Inference-time structural retrieval layer** for large local skill libraries (creation/organization are upstream — SkillNet/AgentSkillOS; GoS only retrieves). Problem: flat loading saturates context; vector top-k surfaces topically-similar skills but misses their prerequisite chain → "prerequisite gap" → retrieved bundle execution-incomplete. GoS builds an executable skill graph **offline** (typed edges `R={dep, wf, sem, alt}`), then at query time frames retrieval as a budgeted selection (max relevance + dependency-completeness s.t. token budget), approximated in three stages: hybrid semantic-lexical seed → reverse-aware Personalized PageRank diffusion → budgeted rerank + hydration. SkillsBench 1000-skill / GPT-5.2-Codex: **+25.55% reward, −56.72% tokens**; holds across 200→2000 skills.
+
+**Relevance to autoharness:** the **召回 (retrieve)** layer of the design — borrow the budgeted, dependency-aware retrieval. Static offline graph + PPR (vs SkillDAG's online execution-backed edges); **no conflict edge**.

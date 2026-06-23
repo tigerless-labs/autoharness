@@ -15,27 +15,6 @@
 - **[docs/plans/](docs/plans/)** — per-change implementation plans (working artifacts, exempt from the design-doc style rules).
 
 
-## Invariants — do not break
-
-Non-negotiable, added as discovered, never removed silently. The authoritative statements (rule +
-*why* + `evidence:`) live in [`docs/design/workflow.md`](docs/design/workflow.md); this is the
-index. Grounded in [`experiments/`](experiments/) E1–E3.
-
-1. **Never auto-write** — human adoption is structural grounding, not a toggle.
-2. **Maintain, not grow** — addition is last-resort behind the recurrence gate; default is maintenance.
-3. **Objective signal is the spine, user correction the overlay** — detection leads with structural
-   failure; phrase mining is rejected as primary; correction detection excludes interrogatives.
-   *evidence:* E1, E2.
-4. **Attribution emits a class that chooses the lever** — violation→enforce, scope-mismatch→
-   generalize, conflict→retire, gap→gated-add; a present-but-ignored rule is never answered with
-   more text. *evidence:* E2.
-5. **Adherence (执行率) is measured, not assumed.** *evidence:* E2.
-6. **Omission needs applicability; without it, output is a candidate, not a verdict** — v1 acts only
-   on objectively-observable behavior. *evidence:* E3.
-7. **Every change passes a gate; prefer zero-oracle objective checks; gate scales with risk.**
-8. **Keep an exploration budget** against routine collapse.
-9. **Observe is read-only and fails safe.**
-
 ## Task lifecycle — the fixed order for every non-trivial change
 
 Plan → sync → docs → tests → code → verify → commit → docs/index sweep → green CI.
@@ -127,6 +106,10 @@ Multiple agents develop in parallel; isolation is mandatory and the repo root is
   `docs/TODO.md` immediately (don't leave it only in chat). When you finish a TODO,
   remove or check it off. Roadmap-level items go in the design docs; smaller/uncommitted ones
   in `docs/TODO.md`.
+- **Research goes to `research_results/` in real time.** Every new paper or repo you cite or rely
+  on must be summarized into [`docs/research_results/`](docs/research_results/index.md) — one source,
+  one card (arXiv / date / authors + core logic + relevance to the project), filed in the right
+  subfolder and added to its index. Never leave a cited source only in chat.
 - **Verify empirical claims by experiment before asserting** — measurements live under
   `experiments/`, and the invariant or doc that rests on them links back as `evidence:`.
 
