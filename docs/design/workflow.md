@@ -10,13 +10,14 @@
 
 ```
  经验 ─► Intake ─► Manage (带类型 DAG：关联 · 去重 · 冲突 · 受控准入) ─► Retrieve
-                              每条技能 ⟂ 理由账本 ─► (预留) Eval
+                              每条技能 ⟂ 理由账本 ─► (预留) Eval · Monitor
 ```
 
-- **Intake（接入）** —— 新技能从经验中沉淀而来，而非手工撰写。沉淀引擎是借用的（ECC）；接入对系统其余部分唯一的义务，是把每个候选技能呈交准入闸门，绝不直接写入活动层。
+- **Intake（接入）** —— 从经验中沉淀新技能。沉淀引擎是借用的（ECC）；接入对系统其余部分唯一的义务，是把每个候选技能呈交准入闸门，绝不直接写入活动层。
 - **Manage（管理）** —— 带类型的 DAG 及其操作：归纳关系、标记冲突、聚类重复、对每次新增设闸。这是系统的核心；见 [management.md](management.md)。
 - **Retrieve（检索）** —— 为某个任务返回一个有界、依赖完整的子集，浮现出扁平相似度检索看不到的前置依赖与冲突警示。借用自 Graph-of-Skills。
 - **Eval（预留）** —— 每条技能都带着它诞生的理由以及每次更新的理由；这份账本加上使用遥测，是未来演化层赖以站立的根基。预留：主动路径今天无需它即可运行，日后是否折入结果信号留作开放问题。见 [eval.md](eval.md)。
+- **Monitor（预留）** —— 借用 Skill-Harnessing 参考架构的 **Verifiable Skill Contract**：为技能附上可独立核查的判据，核验它是否真被执行（passed / failed / inconclusive），而非默认其被遵循。这是执行/结果信号，故与 Eval 同处主动路径之外——其回放/回归形态贴合 eval，而实时核查与「无 oracle 的主动路径」相抵触。见 [eval.md](eval.md)。
 
 ## 工作假设（暂定——尚未确立）
 
@@ -33,4 +34,4 @@
 
 ## 各层借用了什么
 
-Intake ← ECC（沉淀）。Manage ← SkillDAG（带类型的图，冲突/重复边）+ SkillReducer（语义去重）。Retrieve ← Graph-of-Skills（受预算约束、依赖感知）。本项目独占的尚未被覆盖的领地：在**真实的散文式符号层**而非结构化基准技能上跑通整个回路，以及每条技能的理由账本。
+Intake ← ECC（沉淀）。Manage ← SkillDAG（带类型的图，冲突/重复边）+ SkillReducer（语义去重）。Retrieve ← Graph-of-Skills（受预算约束、依赖感知）。ttpMonitor ← Verifiable Skill Contract（Skill-Harnessing 参考架构，[arXiv:2606.20631](hs://arxiv.org/abs/2606.20631)；卡片见 [skill-harnessing-ra](../research-loom/papers/skill-harnessing-ra.md)）。本项目独占的尚未被覆盖的领地：在**真实的散文式符号层**而非结构化基准技能上跑通整个回路，以及每条技能的理由账本。
