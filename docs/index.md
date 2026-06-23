@@ -6,7 +6,6 @@ only points. Keep it current when files are added, moved, or removed.
 ## Foundations (the *what* and *why* of the project)
 
 - [DEFINITION.md](DEFINITION.md) — single authoritative project definition.
-- [DECISION.md](DECISION.md) — technical-selection decision record.
 
 ## Design — architecture and the *why*
 
