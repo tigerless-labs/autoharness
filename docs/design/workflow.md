@@ -34,4 +34,4 @@
 
 ## 各层借用了什么
 
-Intake ← ECC（沉淀）。Manage ← SkillDAG（带类型的图，冲突/重复边）+ SkillReducer（语义去重）。Retrieve ← Graph-of-Skills（受预算约束、依赖感知）。ttpMonitor ← Verifiable Skill Contract（Skill-Harnessing 参考架构，[arXiv:2606.20631](hs://arxiv.org/abs/2606.20631)；卡片见 [skill-harnessing-ra](../research_results/papers/skill-harnessing-ra.md)）。本项目独占的尚未被覆盖的领地：在**真实的散文式符号层**而非结构化基准技能上跑通整个回路，以及每条技能的理由账本。
+Intake ← ECC（沉淀）。Manage ← SkillDAG（带类型的图，冲突/重复边）+ SkillReducer（语义去重）。Retrieve ← Graph-of-Skills（受预算约束、依赖感知）。ttpMonitor ← Verifiable Skill Contract（Skill-Harnessing 参考架构，[arXiv:2606.20631](hs://arxiv.org/abs/2606.20631)；卡片见 [skill-harnessing-ra](../research-loom/papers/skill-harnessing-ra.md)）。本项目独占的尚未被覆盖的领地：在**真实的散文式符号层**而非结构化基准技能上跑通整个回路，以及每条技能的理由账本。
