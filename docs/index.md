@@ -20,7 +20,8 @@ only points. Keep it current when files are added, moved, or removed.
 
 ## Research
 
-- [research_results/](research_results/index.md) — per-source reference library for the agent-harness /
-  symbolic-learning landscape (research notes, not design docs). One source = one card, split into
-  [papers/](research_results/papers/index.md), [github/](research_results/github/index.md),
-  [blogs/](research_results/blogs/index.md), and [synthesis/](research_results/synthesis/index.md).
+- [research-loom/](research-loom/index.md) — 文献→设计 工作区：五阶段流水线（捕获→组织→蒸馏→装配⇄精炼）
+  的全部产物。来源库（① 捕获）为 [papers/](research-loom/papers/index.md)、[github/](research-loom/github/index.md)、
+  [blogs/](research-loom/blogs/index.md)；② 组织见 [synthesis/](research-loom/synthesis/index.md)；
+  ③④⑤ 见 [ideas/](research-loom/ideas/index.md)、[design/](research-loom/design/index.md)、[decisions/](research-loom/decisions/index.md)。
+  方法见 [design/research-loom.md](design/research-loom.md)。

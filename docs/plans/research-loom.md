@@ -16,22 +16,24 @@
 
 | 阶段 | 子目录 | 原子 | 视图 |
 |---|---|---|---|
-| ① 捕获 | `1-sources/` | 文献笔记（论点/方法/优缺点） | 卡列表 |
-| ② 组织 | `2-directions/` | 方向 MOC | 概念矩阵 + 我的评判列 |
-| ③ 蒸馏 | `3-ideas/` | 永久笔记（我的话+引用论文） | idea 看板 |
-| ④ 装配 | `4-design/` | 设计草稿 + provenance 链 | C4 脊柱 |
-| ⑤ 精炼 | `5-decisions/` | 决策工作表 → ADR | 选项×驱动力矩阵 |
+| ① 捕获 | `papers/` `github/` `blogs/` … | 文献笔记（论点/方法/优缺点） | 卡列表 |
+| ② 组织 | `synthesis/` | 方向 MOC | 概念矩阵 + 我的评判列 |
+| ③ 蒸馏 | `ideas/` | 永久笔记（我的话+引用论文） | idea 看板 |
+| ④ 装配 | `design/` | 设计草稿 + provenance 链 | C4 脊柱 |
+| ⑤ 精炼 | `decisions/` | 决策工作表 → ADR | 选项×驱动力矩阵 |
+
+均在 `docs/research-loom/` 下。源子目录按类型自动归类，开放集。
 
 - **三种卡分家**：文献笔记（论文说）≠ 永久笔记（我说）≠ 设计（组装）。
-- **provenance 链**：`4-design 的框 → 3-ideas → 1-sources`，任何设计选择可追回论文。
+- **provenance 链**：`design 的框 → ideas → 源卡`，任何设计选择可追回论文。
 - **④↔⑤ 是循环不是单向**：看图→争议点决策→改图→再看。⑤ 是回灌 ④ 的精炼引擎。
 - **append-only**：ADR 只增不删，旧决策标 `superseded-by`。
 
 ## 决定（已拍板）
 
-- **D1 = 全搬**：`research_results/{papers,github,blogs}→1-sources`、`synthesis→2-directions`，重写所有 index、全仓链接更新。
-- **D2**：`4-design/` = 将来唯一设计家；`docs/design/` 暂冻结为 legacy，过渡期以 `4-design/` 为准。
-- **载体**：纯 repo Markdown，Obsidian-ready（frontmatter 装结构化字段、链接用 `[[id]]`、视图与原子分家）。
+- **D1 = 全搬（B-lite 执行）**：`git mv docs/research_results docs/research-loom` 整体搬入单一子文件夹，**保留 `papers/github/blogs/synthesis` 类型结构**（→ 内部 67 条卡间链接零破坏、git 历史保留），再加 `ideas/design/decisions/` 三个新阶段目录。仅修 3 处外部引用（`docs/index.md`、`CLAUDE.md`、`explain-paper` skill）。
+- **D2**：`research-loom/design/` = 将来唯一设计家；`docs/design/` 暂冻结为 legacy，过渡期以前者为准。
+- **载体**：纯 repo Markdown，Obsidian-ready。**卡间用相对 Markdown 链接**（可校验、可反链）；`[[ ]]` 不作链接机制（与散文示意冲突）。frontmatter 装结构化字段、视图与原子分家。
 
 ## 单元（每单元：docs 先行 → 测试 → 代码）
 
@@ -40,15 +42,15 @@
 - 更新 `docs/design/index.md`。
 - 无代码，无测试（纯意图）。
 
-### U2 — 内容区迁移（D1）
-- **测试先行** `tests/test_research_loom_migration.py`：
-  - 卡数守恒：`count(1-sources) == 旧 count(papers+github+blogs)`；`count(2-directions) ≥ 旧 synthesis 卡数`。
-  - 无悬空链接：扫全仓 `[[id]]` 与相对链接，断言每个目标存在。
-  - 对抗：注入一条悬空链接 → 校验器必须报错（fail-safe）。
-- **代码**：建 `docs/research-loom/` 五层 + `index.md`；迁移文件；重写各 `index.md`；批量改链接。
+### U2 — 内容区迁移（D1）✅
+- **测试先行** `tools/check_doc_links.py`（独立可运行，跟随仓库 `experiments/` 脚本约定，无 pytest）：
+  - 扫全仓相对 `.md` 链接，断言每个目标存在；danglers 则 exit 1。
+  - 对抗自检 `--selftest`：外链跳过、锚点剥离、backtick/`[[ ]]` 非链接。
+- **代码**：`git mv research_results→research-loom` + 加 `ideas/design/decisions/` + 各 index 重写 + 3 处外部引用修正 + `explain-paper` patch（本地，git-ignored）。
+- **结果**：迁移零新增悬空；仅剩 3 条既有 `DEFINITION.md` 悬空（非本任务，记入 `docs/TODO.md`）。
 
 ### U3 — 模板（templates）
-- **测试先行**：`tests/test_research_loom_templates.py` 校验五种模板 frontmatter 合规（必填字段、`status` 枚举、`[[ ]]` 占位）。
+- **测试先行**：独立校验脚本核验五种模板 frontmatter 合规（必填字段、`status` 枚举、相对链接占位）。
 - **代码**：`.claude/skills/research-loom/templates/` 五卡：`direction-moc / idea-note / design-provenance / decision-worksheet / adr`。
 
 ### U4 — Skill 指南

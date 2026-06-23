@@ -85,10 +85,12 @@ out of order is *incomplete*.
   `docs/TODO.md` immediately (don't leave it only in chat). When you finish a TODO,
   remove or check it off. Roadmap-level items go in the design docs; smaller/uncommitted ones
   in `docs/TODO.md`.
-- **Research goes to `research_results/` in real time.** Every new paper or repo you cite or rely
-  on must be summarized into [`docs/research_results/`](docs/research_results/index.md) — one source,
+- **Research goes to `research-loom/` in real time.** Every new paper or repo you cite or rely
+  on must be summarized into [`docs/research-loom/`](docs/research-loom/index.md) — one source,
   one card (arXiv / date / authors + core logic + relevance to the project), filed in the right
-  subfolder and added to its index. Never leave a cited source only in chat.
+  source subfolder (`papers/`, `github/`, `blogs/`, …) and added to its index. Never leave a cited
+  source only in chat. This is stage ① of the research-loom pipeline; see
+  [`docs/design/research-loom.md`](docs/design/research-loom.md).
 - **Verify empirical claims by experiment before asserting** — measurements live under
   `experiments/`, and the invariant or doc that rests on them links back as `evidence:`.
 
