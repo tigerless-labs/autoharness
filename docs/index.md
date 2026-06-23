@@ -21,7 +21,7 @@ only points. Keep it current when files are added, moved, or removed.
 ## Research
 
 - [research-loom/](research-loom/index.md) — 文献→设计 工作区：五层结构（来源·方向·idea·设计·决策，非时序）
-  的全部产物。来源库（① 捕获）为 [papers/](research-loom/papers/index.md)、[github/](research-loom/github/index.md)、
-  [blogs/](research-loom/blogs/index.md)；② 组织见 [synthesis/](research-loom/synthesis/index.md)；
+  的全部产物。来源库（① 捕获）为 [papers/](research-loom/sources/papers/index.md)、[github/](research-loom/sources/github/index.md)、
+  [blogs/](research-loom/sources/blogs/index.md)；② 组织见 [synthesis/](research-loom/synthesis/index.md)；
   ③④⑤ 见 [ideas/](research-loom/ideas/index.md)、[design/](research-loom/design/index.md)、[decisions/](research-loom/decisions/index.md)。
   方法见 [design/research-loom.md](design/research-loom.md)。

@@ -16,7 +16,7 @@ affects: [G]
 
 ## 选项（set-based）
 
-- A 借 [SkillOpt](../papers/skillopt.md) held-out 门
+- A 借 [SkillOpt](../sources/papers/skillopt.md) held-out 门
 - B 纯结构门（去重/冲突/边界），见 [结构化把关](../ideas/structural-gate-no-oracle.md)
 - C 结构门 + 人工复核可疑合并
 
@@ -24,8 +24,8 @@ affects: [G]
 
 | | 无需oracle | 误拒 | 可审计 | 证据 |
 |---|---|---|---|---|
-| A | ✗需benchmark | 低 | 高 | [SkillOpt](../papers/skillopt.md) |
-| B | ✓ | 中（文本相似度难辨克隆/专才） | 高 | [AutoHarness](../papers/autoharness-lou.md) |
+| A | ✗需benchmark | 低 | 高 | [SkillOpt](../sources/papers/skillopt.md) |
+| B | ✓ | 中（文本相似度难辨克隆/专才） | 高 | [AutoHarness](../sources/papers/autoharness-lou.md) |
 | C | ✓ | 低 | 高 | — |
 
 敏感点：oracle 依赖对 A 致命。权衡点：自动化程度 ↔ 误拒。可逆性：单向门（活动层接入难退）→ 需证据。还缺：C 的人工复核成本实测。

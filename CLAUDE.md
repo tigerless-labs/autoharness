@@ -87,9 +87,9 @@ out of order is *incomplete*.
   in `docs/TODO.md`.
 - **Research goes to `research-loom/` in real time.** Every new paper or repo you cite or rely
   on must be summarized into [`docs/research-loom/`](docs/research-loom/index.md) — one source,
-  one card (arXiv / date / authors + core logic + relevance to the project), filed in the right
-  source subfolder (`papers/`, `github/`, `blogs/`, …) and added to its index. Never leave a cited
-  source only in chat. This is stage ① of the research-loom pipeline; see
+  one card (arXiv / date / authors + core logic + relevance to the project), filed under the
+  sources layer by type (`sources/papers/`, `sources/github/`, `sources/blogs/`, …) and added to
+  its index. Never leave a cited source only in chat. This is the 来源 layer of research-loom; see
   [`docs/design/research-loom.md`](docs/design/research-loom.md).
 - **Verify empirical claims by experiment before asserting** — measurements live under
   `experiments/`, and the invariant or doc that rests on them links back as `evidence:`.

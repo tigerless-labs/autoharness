@@ -8,25 +8,16 @@
 
 | 层 | 子目录 | 原子 |
 |---|---|---|
-| 来源（捕获） | `papers/` `github/` `blogs/` … | 文献笔记（一源一卡）。类型为开放集，按来源自动归类，无匹配则新建一类。 |
+| 来源（捕获） | [sources/](sources/index.md) | 文献笔记（一源一卡）。内分 `papers/` `github/` `blogs/` …；类型为开放集，按来源自动归类，无匹配则新建一类。 |
 | 方向（组织） | [synthesis/](synthesis/index.md) | 方向 MOC + 概念矩阵 + 我的评判 |
 | idea（蒸馏） | [ideas/](ideas/index.md) | 永久笔记（我的话，引用文献） |
 | 设计（装配） | [design/](design/index.md) | 设计草稿 + provenance 链 |
 | 决策（精炼） | [decisions/](decisions/index.md) | 决策工作表 → ADR |
 
-## 来源库（捕获层）
-
-**One source = one card**；标题标注 `[论文]` / `[GitHub]` / `[博客]`，命名作品与作者/机构，链接出处，并附与 autoharness 的相关性。研究笔记，`docs/design/` 风格规则不适用。
-
-- **[papers/](papers/index.md)** — `[论文]` cards (49), grouped: core harness line · skill-as-state · retrieval/selection · self-evolving memory · surveys/infra · foundational · fuzzing-adjacent.
-- **[github/](github/index.md)** — `[GitHub]` cards for non-paper-code repos: OSS agents, skill packs, the three "AutoHarness" name-collisions, trending projects (+ official-implementation index).
-- **[blogs/](blogs/index.md)** — `[博客]` cards: the symbolic-learning thesis, Heuristic Learning, the Claude Code skills blog, the 1k-experiments log.
-- **[synthesis/](synthesis/index.md)** — 组织层：the cross-source analysis no single card owns: the [benchmark-free validation spectrum](synthesis/benchmark-free-validation.md) and [ecosystem heat / positioning](synthesis/ecosystem-heat.md).
-
 ## Where to start
 
-1. [AutoHarness (Lou et al.)](papers/autoharness-lou.md) — the namesake and its open gap.
-2. [Symbolic-Learning Renaissance](blogs/symbolic-learning-renaissance.md) — the thesis tying the corpus together.
+1. [AutoHarness (Lou et al.)](sources/papers/autoharness-lou.md) — the namesake and its open gap.
+2. [Symbolic-Learning Renaissance](sources/blogs/symbolic-learning-renaissance.md) — the thesis tying the corpus together.
 3. [Defining harness quality without a benchmark](synthesis/benchmark-free-validation.md) — how to gate edits with no oracle.
 4. [Ecosystem heat & positioning](synthesis/ecosystem-heat.md) — the name collision and the wedge.
 

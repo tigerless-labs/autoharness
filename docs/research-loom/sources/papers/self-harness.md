@@ -6,4 +6,4 @@ Loop: **Weakness Mining** (model-specific failures from traces) → minimal harn
 
 **Most benchmark-bound of the bootstrap cluster — anchored at both ends:** instantiated on **Terminal-Bench-2.0** from a minimal initial harness; failure traces are produced on that benchmark; the Proposal-Validation gate accepts edits only via **held-out pass rates = benchmark ground-truth task success** (not self-eval like HarnessFix's flaw-rate or MOSS's batch-replay).
 
-**Relevance to autoharness:** only the *loop skeleton* (weakness-mine → minimal edit → regression gate) transfers; its failure-sourcing and gate do **not** — they need a benchmark autoharness doesn't have. Compare [rho.md](rho.md) (benchmark-free) at the opposite end of the [validation-signal spectrum](../synthesis/benchmark-free-validation.md).
+**Relevance to autoharness:** only the *loop skeleton* (weakness-mine → minimal edit → regression gate) transfers; its failure-sourcing and gate do **not** — they need a benchmark autoharness doesn't have. Compare [rho.md](rho.md) (benchmark-free) at the opposite end of the [validation-signal spectrum](../../synthesis/benchmark-free-validation.md).
