@@ -7,6 +7,7 @@ One card per repo that is **not** a paper's official code. Star counts ≈ 2026-
 - [NousResearch/Hermes-Agent](nousresearch-hermes-agent.md) — auto skill creation; `memory` tool; capacity-driven consolidation.
 - [openclaw/openclaw](openclaw.md) — MEMORY.md + Dreaming consolidation (recall-utility gate, not improvement).
 - [All-Hands-AI/OpenHands](all-hands-openhands.md) — skills dir + AGENTS.md; no learning loop (the baseline).
+- [tinyhumansai/OpenHuman](tinyhumansai-openhuman.md) — Karpathy LLM-wiki productized: Markdown Memory Tree (SQLite + Obsidian vault), file-based, no vectors.
 - [plastic-labs/honcho](plastic-labs-honcho.md) — dialectic user modeling (used by Hermes).
 - [microsoft/SkillOpt → SkillOpt-Sleep](microsoft-skillopt-sleep.md) — the bootstrap-validation engineering skeleton.
 

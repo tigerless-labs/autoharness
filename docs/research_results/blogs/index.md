@@ -6,3 +6,4 @@ One card per non-paper write-up (essays, practitioner blogs, position posts).
 - [Learning Beyond Gradients (Heuristic Learning)](learning-beyond-gradients.md) — Jiayi Weng. Move the RL loop from weight-space to software-space.
 - [Lessons from Building Claude Code: How We Use Skills](claude-code-skills.md) — Thariq Shihipar, Anthropic. Production skill practice; Gotchas as highest-signal.
 - [What 1k Harness Experiments Taught Me About Self-Improving Agents](henrypan-1k-harness-experiments.md) — Henry Pan. The closest large-N empirical write-up.
+- [llm-wiki (Karpathy)](karpathy-llm-wiki.md) — compile-once interlinked-markdown KB; graph not tree; index-explosion left unsolved (the gap our gated DAG fills).

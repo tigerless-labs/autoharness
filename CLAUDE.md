@@ -66,6 +66,9 @@ out of order is *incomplete*.
   already says. One fact lives in exactly one place; cross-link instead of repeating. If a
   sentence adds no distinct design fact, cut it. When you edit a doc, leave it shorter than
   you found it unless you added a genuinely new idea.
+- **`docs/design/` and `docs/plans/` are written in Chinese.** Every doc under those two trees
+  must be in Chinese prose. Keep proper nouns, code, identifiers, links, and command runbooks
+  as-is — only the prose is Chinese.
 - **Clear code, no comments.** Code must read clearly on its own — prefer explicit, unambiguous
   names with underscores, and carry intent through structure, naming, tests, and docs. Write no
   comments; if one feels necessary, rename or split until it isn't.

@@ -1,7 +1,5 @@
-# docs/plans — per-change implementation plans
+# docs/plans —— 每次变更的实现计划
 
-Working artifacts, one per non-trivial change. Exempt from the design-doc style rules. The plan's
-first unit updates the relevant `docs/design/` doc; every unit places tests before code.
+工作产物，每个非平凡变更对应一份。豁免于设计文档的风格规则。计划的第一个单元更新相关的 `docs/design/` 文档；每个单元都把测试置于代码之前。
 
-- [roadmap.md](roadmap.md) — program-level phased execution roadmap (Phase 0 walking skeleton →
-  v1 static slice → v2 attribution+applicability → v3 breadth), each phase gated, tied to E1–E3.
+- [roadmap.md](roadmap.md) —— 项目级的分阶段执行路线图（Phase 0 行走骨架 → v1 静态切片 → v2 归因+适用性 → v3 横向铺开），每个阶段设门禁，绑定 E1–E3。

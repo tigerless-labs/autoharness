@@ -1,65 +1,36 @@
-# workflow — the design spine
+# workflow —— 设计主线
 
-The governing principle, the four-layer pipeline, and the provisional working hypotheses behind them. Per-layer
-docs and [index.md](index.md) hang off this. See [`../DEFINITION.md`](../DEFINITION.md) for pain
-points and intent.
+统领性原则、四层流水线，以及其背后的暂定工作假设。各层文档与 [index.md](index.md) 都挂在这条主线上。痛点与意图见 [`../DEFINITION.md`](../DEFINITION.md)。
 
-## Principle
+## 原则
 
-**Manage the skill layer as a typed DAG, structurally.** A skill layer is not a flat pile; skills
-relate, overlap, and contradict. Treating it as a typed relation graph turns conflict, redundancy,
-and retrieval from judgement calls into structural operations computable from skill text alone — no
-oracle and, for now, no outcome signal on the active path, sidestepping self-evaluation bias. Outcome
-signals are reserved to the eval layer today; folding them into the active path later is left open,
-not ruled out.
+**以结构化方式，把技能层当作一张带类型的 DAG 来管理。** 技能层不是一堆扁平的东西；技能之间相互关联、重叠、彼此矛盾。把它当作一张带类型的关系图，就能把冲突、冗余与检索从依赖判断的主观抉择，变成仅凭技能文本即可计算的结构化操作——无需任何 oracle，且目前在主动路径上不引入结果信号，从而规避自评偏差。结果信号当下专归 eval 层；日后是否把它折入主动路径，留作开放问题，并未排除。
 
-## Pipeline
+## 流水线
 
 ```
- experience ─► Intake ─► Manage (typed DAG: relate · dedup · conflict · gated-add) ─► Retrieve
-                              every skill ⟂ rationale ledger ─► (reserved) Eval
+ 经验 ─► Intake ─► Manage (带类型 DAG：关联 · 去重 · 冲突 · 受控准入) ─► Retrieve
+                              每条技能 ⟂ 理由账本 ─► (预留) Eval
 ```
 
-- **Intake** — new skills settle out of experience rather than being hand-authored. The accumulation
-  engine is borrowed (ECC); intake's only obligation to the rest of the system is to present each
-  candidate to the admission gate, never to write into the live layer directly.
-- **Manage** — the typed DAG and its operations: induce relations, flag conflicts, cluster
-  duplicates, and gate every addition. The heart of the system; see [management.md](management.md).
-- **Retrieve** — return a bounded, dependency-complete subset for a task, surfacing prerequisites and
-  conflict warnings flat similarity search cannot. Borrowed (Graph-of-Skills).
-- **Eval (reserved)** — each skill carries the reason it was born and the reason for each update;
-  that ledger, plus usage telemetry, is the foundation a future evolution layer stands on. Reserved:
-  the active path runs without it today, and whether outcome signal is folded in later is left open.
-  See [eval.md](eval.md).
+- **Intake（接入）** —— 新技能从经验中沉淀而来，而非手工撰写。沉淀引擎是借用的（ECC）；接入对系统其余部分唯一的义务，是把每个候选技能呈交准入闸门，绝不直接写入活动层。
+- **Manage（管理）** —— 带类型的 DAG 及其操作：归纳关系、标记冲突、聚类重复、对每次新增设闸。这是系统的核心；见 [management.md](management.md)。
+- **Retrieve（检索）** —— 为某个任务返回一个有界、依赖完整的子集，浮现出扁平相似度检索看不到的前置依赖与冲突警示。借用自 Graph-of-Skills。
+- **Eval（预留）** —— 每条技能都带着它诞生的理由以及每次更新的理由；这份账本加上使用遥测，是未来演化层赖以站立的根基。预留：主动路径今天无需它即可运行，日后是否折入结果信号留作开放问题。见 [eval.md](eval.md)。
 
-## Working hypotheses (provisional — not yet ratified)
+## 工作假设（暂定——尚未确立）
 
-These are proposals, not settled invariants: the design is still being decided, and none carries
-evidence yet. Treat each as something to validate or revise, not a fixed constraint. They become
-invariants only once ratified and grounded.
+这些是提案，而非已定的不变量：设计仍在决策中，且尚无任何一条带有证据。把每一条都当作待验证或待修正的东西，而非固定约束。它们只有在被确立并有据支撑后，才成为不变量。
 
-1. **Skills are a typed DAG, not a flat pile.** Relations are first-class; everything downstream
-   reads them.
-2. **Structural-first (for now).** Relations, conflict, dedup, and retrieval are computed from skill
-   text with no oracle; outcome signal is reserved to eval rather than on the active path today — a
-   scoping choice, not a permanent exclusion.
-3. **Gated admission.** A candidate enters the graph only past a dedup check and a conflict check:
-   overlap routes to merge or generalize, contradiction routes to resolution, neither-and-non-
-   recurring routes to rejection.
-4. **Conflict on the active path means contradiction.** It detects textual/logical opposition
-   between skills; behavioural interference (co-use harm) needs outcomes and is reserved to eval.
-5. **Structural edits are proposed, not silent.** Merges of look-alikes and conflict resolutions are
-   reviewable proposals a human confirms — never an automatic rewrite, because text similarity alone
-   cannot tell a redundant clone from a legitimate parallel specialist.
-6. **Every skill carries its rationale ledger.** Birth and each update record their reason; this is
-   the reserved evolution foundation.
-7. **Retrieval returns a bounded, dependency-complete set**, not a flat top-k.
-8. **The eval layer is reserved (not excluded).** Intake → Manage → Retrieve run without it today;
-   whether outcome signal is later folded into the active path is left open, not ruled out.
+1. **技能是带类型的 DAG，而非一堆扁平的东西。** 关系是一等公民；下游一切都读取它。
+2. **结构优先（目前）。** 关系、冲突、去重与检索都仅凭技能文本计算，无需 oracle；结果信号今天预留给 eval，而不在主动路径上——这是一个范围选择，而非永久排除。
+3. **受控准入。** 候选技能只有通过去重检查与冲突检查后才进入图：重叠则导向合并或泛化，矛盾则导向消解，二者皆非且不再复现则导向拒绝。
+4. **主动路径上的冲突指的是矛盾。** 它检测技能之间文本/逻辑上的对立；行为干扰（共用即损害）需要结果信号，预留给 eval。
+5. **结构性编辑是被提议的，而非静默发生的。** 对疑似重复者的合并与冲突消解都是供人确认的可审阅提案——绝非自动改写，因为单凭文本相似度无法分辨冗余克隆与正当的并行专才。
+6. **每条技能都带着它的理由账本。** 诞生与每次更新都记录其理由；这是预留的演化根基。
+7. **检索返回一个有界、依赖完整的集合**，而非扁平的 top-k。
+8. **eval 层是预留的（而非排除的）。** Intake → Manage → Retrieve 今天无需它即可运行；日后是否把结果信号折入主动路径留作开放问题，并未排除。
 
-## What each layer borrows
+## 各层借用了什么
 
-Intake ← ECC (accumulation). Manage ← SkillDAG (typed graph, conflict/duplicate edges) + SkillReducer
-(semantic dedup). Retrieve ← Graph-of-Skills (budgeted, dependency-aware). The uncovered ground this
-project owns: running the whole loop over the **real prose symbol layer** rather than structured
-benchmark skills, and the per-skill rationale ledger.
+Intake ← ECC（沉淀）。Manage ← SkillDAG（带类型的图，冲突/重复边）+ SkillReducer（语义去重）。Retrieve ← Graph-of-Skills（受预算约束、依赖感知）。本项目独占的尚未被覆盖的领地：在**真实的散文式符号层**而非结构化基准技能上跑通整个回路，以及每条技能的理由账本。

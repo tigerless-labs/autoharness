@@ -1,49 +1,34 @@
-# management — the typed DAG
+# management —— 带类型的 DAG
 
-The heart of the system: organize skills as a typed relation graph and run the four operations that
-keep it healthy — relate, detect conflict, dedup, and gate additions. Spine: [workflow.md](workflow.md).
+系统的核心：把技能组织成一张带类型的关系图，并运行让它保持健康的四个操作——关联、检测冲突、去重、对新增设闸。主线：[workflow.md](workflow.md)。
 
-## The graph
+## 图
 
-Nodes are skills; edges are typed relations between them: dependency, specialization, duplication,
-and a flagged **conflict** relation. This graph is the single structure conflict, dedup, retrieval,
-and the admission gate all read.
+节点是技能；边是技能之间带类型的关系：依赖、专化、重复，以及一种被标记的**冲突**关系。这张图是冲突、去重、检索与准入闸门共同读取的唯一结构。
 
-## Relate
+## 关联
 
-Edges are induced from skill text, not declared by hand: a two-view representation — what a skill
-does, and what it requires — seeds candidate pairs, which a classifier types. This is the cold-start
-construction borrowed from SkillDAG, applied to prose skills rather than executable contracts.
+边是从技能文本中归纳出来的，而非手工声明：一种双视图表示——一条技能做什么、它需要什么——播下候选配对的种子，再由分类器为其定类型。这是借用自 SkillDAG 的冷启动构建，被施加在散文式技能上，而非可执行契约上。
 
-## Conflict
+## 冲突
 
-The active path detects **contradiction** — two skills whose instructions logically oppose — from
-text, with no execution. This is deliberately the static half of conflict. **Behavioural
-interference** — two individually-sound skills that degrade outcomes when used together — cannot be
-seen in text and is reserved to the eval layer ([eval.md](eval.md)), which carries the outcome signal
-it needs.
+主动路径从文本中检测**矛盾**——两条指令在逻辑上相互对立的技能——不做任何执行。这刻意只取冲突的静态那一半。**行为干扰**——两条各自健全、却在共用时损害结果的技能——在文本中看不见，预留给 eval 层（[eval.md](eval.md)），那里带着它所需的结果信号。
 
-## Dedup
+## 去重
 
-Semantic clustering surfaces duplicate and near-duplicate skills as merge candidates (borrowed:
-SkillReducer). A standing hazard governs the action: text similarity alone cannot separate a
-**redundant clone** from a **legitimate parallel specialist** — skills that read alike but cover
-distinct interfaces, or would grow unwieldy if merged. Merges are therefore proposals a human
-confirms, never an automatic collapse (hypothesis 5).
+语义聚类把重复与近重复的技能浮现为合并候选（借用：SkillReducer）。一个长存的隐患支配着随后的动作：单凭文本相似度无法把**冗余克隆**与**正当的并行专才**分开——后者读起来相似，却覆盖各异的接口，或合并后会变得臃肿。因此合并是供人确认的提案，绝非自动坍缩（假设 5）。
 
-## Gated admission — how a skill is added
+## 受控准入——一条技能如何被加入
 
-Addition is the one operation that grows the layer, so every candidate from intake passes a gate
-before entering the graph:
+新增是唯一让技能层增长的操作，所以来自接入的每个候选在进图之前都要过一道闸：
 
-- **overlaps an existing skill** → merge or generalize into it, do not add a sibling;
-- **contradicts an existing skill** → resolve the conflict first;
-- **neither, and recurring** → admit as a new node;
-- **neither, and one-off** → reject.
+- **与现有技能重叠** → 合并或泛化进去，不要新增一个同级兄弟；
+- **与现有技能矛盾** → 先消解冲突；
+- **二者皆非，且会复现** → 作为新节点准入；
+- **二者皆非，且仅一次性** → 拒绝。
 
-This gate is what separates the system from an accumulation engine that only grows.
+正是这道闸，把本系统与只会增长的沉淀引擎区分开来。
 
-## Output
+## 输出
 
-A maintained DAG plus reviewable change proposals — merges, conflict resolutions, admissions. The
-layer proposes structural change; a human adopts it.
+一张被维护的 DAG，外加可审阅的变更提案——合并、冲突消解、准入。该层提议结构性变更；由人来采纳。

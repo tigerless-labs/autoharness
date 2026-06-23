@@ -1,28 +1,15 @@
-# eval — the reserved evaluation layer
+# eval —— 预留的评估层
 
-Reserved. The active path (intake → manage → retrieve) runs without this layer; it accumulates the
-signal a future evolution layer will stand on. Spine: [workflow.md](workflow.md).
+预留。主动路径（intake → manage → retrieve）无需此层即可运行；它积累着未来演化层赖以站立的信号。主线：[workflow.md](workflow.md)。
 
-## Per-skill rationale ledger
+## 每条技能的理由账本
 
-Every skill carries, attached to it, the reason it was born and the reason for each later update.
-This ledger is the skill's own evaluation record — not a score, but the accumulated *why* behind its
-existence and its changes. It is the foundation of evolution: a future layer can only judge whether a
-skill still earns its place if the original and revised intent are on record. Its lightweight form
-borrows **SkillHone** (Tencent): persist the decision history — diagnoses, revisions, and **rejected
-options** — beside each skill, so history attaches as an audit trail without a heavy evaluation
-apparatus.
+每条技能都随身携带它诞生的理由以及之后每次更新的理由。这份账本是技能自身的评估记录——不是分数，而是其存在与变更背后累积的*为什么*。它是演化的根基：唯有当原始意图与修订意图都在案，未来的层才可能判断一条技能是否仍配得上它的位置。其轻量形态借用 **SkillHone**（腾讯）：把决策历史——诊断、修订，以及**被否决的选项**——持久化在每条技能旁，让历史作为审计轨迹附着其上，而无需一套沉重的评估装置。
 
-## Usage telemetry
+## 使用遥测
 
-The agent platform's skill-usage monitoring (e.g. Anthropic's) is a second, external data source —
-how often and where each skill actually fires. It informs future update and retire decisions without
-being part of the active structural path.
+智能体平台的技能使用监控（如 Anthropic 的）是第二个、外部的数据源——每条技能实际触发的频率与场景。它为未来的更新与退役决策提供信息，而不属于主动的结构路径。
 
-## Reservation constraint
+## 预留约束
 
-This layer is a seam: the static path is built to ship and run without it. Whether outcome signal —
-usage telemetry, conflict-as-interference (see [management.md](management.md)), outcome-driven retire
-or evolve — is later folded into the active path is left open, not ruled out; it switches on once the
-ledger and telemetry are rich enough to earn it. Reserving it first keeps the static manager shippable
-without foreclosing either evolution or pulling outcome signal forward.
+此层是一道接缝：静态路径被构建为无需它即可发布与运行。结果信号——使用遥测、作为干扰的冲突（见 [management.md](management.md)）、由结果驱动的退役或演化——日后是否折入主动路径，留作开放问题，并未排除；一旦账本与遥测丰富到足以匹配它，它便启用。先把它预留出来，既让静态管理器可发布，又不堵死演化、也不堵死把结果信号前移的可能。
