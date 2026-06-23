@@ -24,9 +24,14 @@ out of order is *incomplete*.
 1. **Plan.** Non-trivial changes start with a plan in `docs/plans/` (working artifacts,
    exempt from the design-doc style rules). The plan's first unit updates the relevant
    `docs/design/` doc; every unit places tests before code.
-2. **Sync the baseline.** `git fetch`, then rebase the task branch onto the latest `main`
-   before developing — always build on the current main baseline, never a stale one. Land
-   work via feature branch + PR; no direct pushes to `main`.
+2. **Branch, isolate, sync.** Bind each change to exactly one explicit task on its own branch,
+   developed in its own worktree — **created with Claude Code's own worktree tooling** (the
+   `/ce-worktree` skill or the built-in worktree feature), which places it under
+   `.claude/worktrees/<branch>` (`.claude/` is git-ignored); never hand-create one with raw
+   `git worktree add`, and never develop on the default/trunk branch (`main`/`master`/`trunk`,
+   or whatever the repo's current default branch is). Before developing, `git fetch` and rebase
+   that branch onto the latest `main` so you build on the current baseline, never a stale one.
+   Land the work via feature branch + PR; no direct pushes to `main`.
 3. **Docs first.** Read, then update, the relevant `docs/design/` doc(s) before any test or
    code — pin down behavior boundaries, interface contracts, and acceptance criteria. Never
    touch code first.
@@ -46,35 +51,6 @@ out of order is *incomplete*.
 9. **Drive CI green.** After opening the PR, watch CI and code-quality checks (CI runs, lint,
    static analysis, doc-automation checks). On any failure, locate, fix, and push immediately
    — repeat until every required check passes.
-
-## Concurrent development — parallel agents
-
-Multiple agents develop in parallel; isolation is mandatory and the repo root is sacred.
-
-- **One task, one branch, one worktree.** Each agent binds to exactly one explicit task, on its
-  own branch, in its own worktree — **created with Claude Code's own worktree tooling** (the
-  `/ce-worktree` skill or the built-in worktree feature), which places the worktree under
-  `.claude/worktrees/<branch>` (`.claude/` is git-ignored). Do not hand-create worktrees with raw
-  `git worktree add`. Never develop on the default/trunk branch — `main`/`master`/`trunk`, **or
-  whatever the repo's current default branch is**.
-- **The root checkout is for review, merge, and release only.** No agent develops or commits in
-  the repository root or on the default branch.
-- **Verify the branch before every commit.** Run `git branch --show-current` and confirm it
-  equals your task branch before any `git commit`. On mismatch, stop and investigate — never
-  commit to whatever branch happens to be checked out.
-- **Declare scope before starting.** State the task goal, the modules you own, the paths you may
-  modify, and the paths you must not touch.
-- **No shared-surface collisions.** By default, two agents must not concurrently modify the same
-  file, schema, public contract, shared config, or deploy entry.
-- **Single-writer for shared surfaces.** A schema, migration, public API contract, shared
-  config, deploy, or lock-file change has exactly one writing agent at a time.
-- **Contract before implementation.** For cross-module changes, merge the contract first, then
-  build the implementations that depend on it.
-- **Report on delivery.** Each agent hands off with: scope of changes, test results,
-  schema/config/deploy impact, and remaining risks.
-- **Merge gate.** A branch merges only after the relevant unit tests, system tests, and
-  doc-automation checks pass; changes touching a data module must additionally pass schema,
-  migration, and data-monitoring tests.
 
 ## Working rules
 
