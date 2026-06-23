@@ -9,8 +9,9 @@ points and intent.
 **Manage the skill layer as a typed DAG, structurally.** A skill layer is not a flat pile; skills
 relate, overlap, and contradict. Treating it as a typed relation graph turns conflict, redundancy,
 and retrieval from judgement calls into structural operations computable from skill text alone — no
-oracle, no outcome signal on the active path, no self-evaluation bias. Outcome signals are reserved
-to the eval layer, which founds a later evolution layer but never gates the active path.
+oracle and, for now, no outcome signal on the active path, sidestepping self-evaluation bias. Outcome
+signals are reserved to the eval layer today; folding them into the active path later is left open,
+not ruled out.
 
 ## Pipeline
 
@@ -28,7 +29,8 @@ to the eval layer, which founds a later evolution layer but never gates the acti
   conflict warnings flat similarity search cannot. Borrowed (Graph-of-Skills).
 - **Eval (reserved)** — each skill carries the reason it was born and the reason for each update;
   that ledger, plus usage telemetry, is the foundation a future evolution layer stands on. Reserved:
-  the active path must not depend on it. See [eval.md](eval.md).
+  the active path runs without it today, and whether outcome signal is folded in later is left open.
+  See [eval.md](eval.md).
 
 ## Working hypotheses (provisional — not yet ratified)
 
@@ -38,8 +40,9 @@ invariants only once ratified and grounded.
 
 1. **Skills are a typed DAG, not a flat pile.** Relations are first-class; everything downstream
    reads them.
-2. **Structural-first.** Relations, conflict, dedup, and retrieval are computed from skill text, with
-   no oracle and no outcome signal on the active path.
+2. **Structural-first (for now).** Relations, conflict, dedup, and retrieval are computed from skill
+   text with no oracle; outcome signal is reserved to eval rather than on the active path today — a
+   scoping choice, not a permanent exclusion.
 3. **Gated admission.** A candidate enters the graph only past a dedup check and a conflict check:
    overlap routes to merge or generalize, contradiction routes to resolution, neither-and-non-
    recurring routes to rejection.
@@ -51,8 +54,8 @@ invariants only once ratified and grounded.
 6. **Every skill carries its rationale ledger.** Birth and each update record their reason; this is
    the reserved evolution foundation.
 7. **Retrieval returns a bounded, dependency-complete set**, not a flat top-k.
-8. **The eval layer is reserved.** Intake → Manage → Retrieve must run without it; it accumulates now
-   and drives decisions only in a future evolution layer.
+8. **The eval layer is reserved (not excluded).** Intake → Manage → Retrieve run without it today;
+   whether outcome signal is later folded into the active path is left open, not ruled out.
 
 ## What each layer borrows
 

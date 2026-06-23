@@ -21,7 +21,8 @@ being part of the active structural path.
 
 ## Reservation constraint
 
-This layer is a seam, not a spine. The active path must never require it. Conflict-as-interference
-(see [management.md](management.md)) and any outcome-driven retire or evolve action belong here,
-switched on only once the ledger and telemetry are rich enough to drive them — so shipping the static
-manager first does not foreclose evolution later.
+This layer is a seam: the static path is built to ship and run without it. Whether outcome signal —
+usage telemetry, conflict-as-interference (see [management.md](management.md)), outcome-driven retire
+or evolve — is later folded into the active path is left open, not ruled out; it switches on once the
+ledger and telemetry are rich enough to earn it. Reserving it first keeps the static manager shippable
+without foreclosing either evolution or pulling outcome signal forward.
