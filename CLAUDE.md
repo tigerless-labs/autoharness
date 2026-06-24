@@ -9,6 +9,12 @@
 - **[docs/design/](docs/design/index.md)** — the architecture and the *why*. Start at the spine
   (`docs/design/workflow.md`: principle + pipeline + invariants), then the step you're touching.
   *(Create these as the design solidifies; keep the index current.)*
+- **[docs/research-loom/](docs/research-loom/index.md)** — the literature→design workspace: every
+  cited source, its synthesis into directions, distilled ideas, design assembly, and decisions, in
+  five provenance-linked layers (`sources/` `synthesis/` `ideas/` `design/` `decisions/`). Method and
+  invariants live in [`docs/design/research-loom.md`](docs/design/research-loom.md); the operating
+  procedure is carried by the **`research-loom` skill** ([`.claude/skills/research-loom/SKILL.md`](.claude/skills/research-loom/SKILL.md)) —
+  invoke it whenever you add a source, compare a direction, or push literature toward design.
 - **[docs/TODO.md](docs/TODO.md)** — tracked follow-ups not yet on the roadmap.
   **Keep this current in real time** (see rule below).
 - **[docs/testing.md](docs/testing.md)** — test conventions and the per-file test map.

@@ -13,6 +13,7 @@ One card per paper (arXiv + official code link when it exists). Research notes �
 - [What Makes a Harness a Harness](what-makes-a-harness.md) — operational definition + inclusion/exclusion test.
 - [SkillHone](skillhone.md) — harness that persists decision history incl. rejected options.
 - [HASP](hasp.md) — skills as **executable** Program Functions; runtime-control harness + policy-training + evolution; the auto-write/weight corner opposite to us.
+- [SKILL.md Mining](skillmd-mining.md) — diagnostic **negative result**: trajectory-mined skill files are readable but don't transfer; learned components lose to a frequency prior. Inspectability ≠ improvement.
 
 ## B. Skill-as-trainable-state & self-evolving skill methods
 
@@ -28,6 +29,7 @@ One card per paper (arXiv + official code link when it exists). Research notes �
 - [EmbodiSkill](embodiskill.md) — disambiguates flawed-skill vs. execution-lapse before revising.
 - [Skill-MAS](skill-mas.md) — orchestration as an evolvable meta-skill; held-out gate.
 - [SkillHarness](skillharness.md) — safe skills for computer-use agents; macro/micro split, risk-guard activation, evidence-gated sparse updates ("curate, not grow"); the name collision.
+- [OpenClaw-Skill](openclaw-skill.md) — Collective Skill Tree Search; multi-model judges score quality + **cross-model transferability**; CSRL selects multiple skills to avoid collapse.
 
 ## C. Skill retrieval & selection at scale
 
