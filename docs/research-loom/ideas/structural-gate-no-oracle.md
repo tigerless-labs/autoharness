@@ -15,4 +15,4 @@ status: 候选
 
 ## 关联
 
-装配进 [harness 编辑把关设计](../design/harness-edit-gate.md)；其落地选择见决策 [D-001](../decisions/D-001-edit-gating.md)。
+待装配进 harness 编辑把关设计（草稿 v1 已删，待重做）；其落地选择见决策 [D-001](../decisions/D-001-edit-gating.md)。
