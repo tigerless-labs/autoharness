@@ -27,6 +27,10 @@
   quartetfuzz). Decide where the ecosystem-heat / output-quality-validation content moved (likely a new
   synthesis note) and relink. `sources/papers/index.md` already repointed to `synthesis/index.md` as a
   stopgap.
+- [ ] **生命周期/去重的触发时机:适配非常驻宿主.** Hermes 的 curator 靠常驻 daemon(空闲 2h / 间隔 7d 自动醒);
+  Claude Code 等是临时进程,会话间无常驻、不会空闲自动醒,墙钟周期 sweep 无执行者。需定:失活走惰性判定
+  (SessionStart/注入时按时间戳现算)、去重走准入事件驱动;并决定失活刻度用墙钟天还是使用相对(几次会话未被用)。
+  见 [`research-loom/ideas/adherence-driven-curate.md`](research-loom/ideas/adherence-driven-curate.md) 的待解。
 - [ ] **Wire doc checkers into CI.** `tools/check_doc_links.py` + `tools/check_research_loom.py`
   (and their `--selftest`) should gate PRs once a `.github/workflows` exists. Blocked on the
   `DEFINITION.md` danglers above (link checker is non-zero until they're fixed).
