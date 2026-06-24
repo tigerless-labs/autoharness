@@ -18,7 +18,7 @@
 
 1. [AutoHarness (Lou et al.)](sources/papers/autoharness-lou.md) — the namesake and its open gap.
 2. [Symbolic-Learning Renaissance](sources/blogs/symbolic-learning-renaissance.md) — the thesis tying the corpus together.
-3. [Defining harness quality without a benchmark](synthesis/benchmark-free-validation.md) — how to gate edits with no oracle.
+3. [Validating harness edits by offline eval runs](synthesis/offline-validation.md) — external benchmark vs. self-bootstrapped replay.
 4. [Ecosystem heat & positioning](synthesis/ecosystem-heat.md) — the name collision and the wedge.
 
 **One-line takeaway for autoharness's positioning:** the contested, low-competition gap is *benchmark-free, trajectory-bootstrapped harness evolution with audit/gate/rollback* — distinct from governance frameworks, fuzz-harness generation, and benchmark-requiring optimizers.

@@ -11,7 +11,7 @@ status: 候选
 
 ## 论据 / 出处
 
-[SkillOpt](../sources/papers/skillopt.md) 的 held-out 门需 benchmark，[AutoHarness (Lou)](../sources/papers/autoharness-lou.md) 的环境门需可判定合法性——见方向 [edit-gating](../synthesis/edit-gating.md)。本项目两者皆无，故转向结构。与 [benchmark-free 验证谱系](../synthesis/benchmark-free-validation.md) 一致。
+[SkillOpt](../sources/papers/skillopt.md) 的 held-out 门需 benchmark，[AutoHarness (Lou)](../sources/papers/autoharness-lou.md) 的环境门需可判定合法性。本项目两者皆无，故转向结构——是 [离线评测验证](../synthesis/offline-validation.md) 的轻量替代（它跑实验验证，本卡只看结构）。
 
 ## 关联
 

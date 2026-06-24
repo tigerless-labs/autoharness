@@ -6,4 +6,4 @@
 
 The official repo optimizes CLAUDE.md / auto-memory / scripts — **autoharness's exact target**, and the only repo occupying the benchmark-free corner ([kayba](../github/kayba-ai-autoharness.md) requires a benchmark command).
 
-**Relevance to autoharness:** the lightest-dependency point on the [validation-signal spectrum](../../synthesis/benchmark-free-validation.md) (pure self-preference). Most general but most exposed to self-eval bias (cf. [SkillLens](skilllens.md) 46.4%). Keep an explicit exploration budget against the collapse [APEX](apex.md) warns of.
+**Relevance to autoharness:** the lightest-dependency point on the [validation-signal spectrum](../../synthesis/offline-validation.md) (pure self-preference). Most general but most exposed to self-eval bias (cf. [SkillLens](skilllens.md) 46.4%). Keep an explicit exploration budget against the collapse [APEX](apex.md) warns of.
