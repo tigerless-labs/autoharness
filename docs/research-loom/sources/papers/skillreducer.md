@@ -1,0 +1,7 @@
+# [论文] SkillReducer: Optimizing LLM Agent Skills for Token Efficiency
+
+**Yudong Gao, Zongjie Li, … Pingchuan Ma, Shuai Wang** — [arXiv:2603.29919](https://arxiv.org/abs/2603.29919) · 2026-03 · cs.SE.
+
+Token-efficiency optimizer for skills, built on a **large empirical study of 55,315 public skills**: **26.4% have no routing description at all**, and **>60% of body content is non-actionable**. Two stages: (1) **routing layer** — compress over-long descriptions and synthesize missing ones via "adversarial delta debugging"; (2) **body** — taxonomy-driven split of core actionable rules from on-demand supplements (**progressive disclosure**), with faithfulness checks + self-correcting loop. Results: 48% description / 39% body compression, **+2.8% functional quality**, cross-model transfer retention **0.965**.
+
+**Relevance to autoharness:** the **routing description IS the trigger burden** — and a quarter of real skills ship without one, structurally guaranteeing they can't be recalled. Quantifies, at corpus scale, the description-hygiene lever behind skill recall, and validates the two-stage (index vs body) load model. The compression/dedup angle pairs with [Agent-Skills-data](agent-skills-data.md). (Abstract headlines compression, not a trigger-recall number; a practitioner write-up attributes a CLI-based binary trigger detector to its eval — **unverified from the abstract**, do not cite as a recall metric.) Feeds [synthesis/skill-recall-execution](../../synthesis/skill-recall-execution.md).

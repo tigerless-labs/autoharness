@@ -21,6 +21,12 @@
   was removed in commit `bdfd3c3` and never recreated. `tools/check_doc_links.py` flags 3 dangling
   links. Decide: recreate `DEFINITION.md` or drop the references. Pre-existing, out of scope for
   research-loom.
+- [ ] **Fix dangling `synthesis/ecosystem-heat.md` references.** The file was deleted but is still
+  linked from `research-loom/index.md` and 8 source cards (mattpocock-skills, aiming-lab-autoharness,
+  anthropics-skills, tinyhumansai-openhuman, karpathy-llm-wiki, kayba-ai-autoharness, obra-superpowers,
+  quartetfuzz). Decide where the ecosystem-heat / output-quality-validation content moved (likely a new
+  synthesis note) and relink. `sources/papers/index.md` already repointed to `synthesis/index.md` as a
+  stopgap.
 - [ ] **Wire doc checkers into CI.** `tools/check_doc_links.py` + `tools/check_research_loom.py`
   (and their `--selftest`) should gate PRs once a `.github/workflows` exists. Blocked on the
   `DEFINITION.md` danglers above (link checker is non-zero until they're fixed).
