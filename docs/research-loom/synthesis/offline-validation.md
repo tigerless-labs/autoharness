@@ -55,3 +55,5 @@ type: direction
 **代价（整族命门）**：都重——SkillOpt/EvoSkill/Self-Harness 跑 held-out、RHO 每候选 re-solve G×、MOSS 重放失败批、SkillGen 每实例 2× 跑。实验预算极易爆，故 [探索坍缩](../sources/papers/apex.md) / [非单调遗忘](../sources/papers/self-evolving-forget.md) 的回滚 + 预算封顶在此是一等公民；与轻量结构门组合是压成本的关键。
 
 **wedge**：autoharness 取**子类②**的自举 replay，但移植**子类①**的循环骨架（weakness-mine→minimal edit→regression-gate）——把回归测试纪律套到 harness 演化：每次编辑在自有历史（尤其失败）建的 replay 集上**可验证地净改善**、且**最小/可审计/可回滚**，同时给实验预算封顶。
+
+> **重开提示**：[动态验证生命周期](../ideas/dynamic-validation-lifecycle.md) 主张验证随交互**就地发生**、历史 eval 因**环境漂移**失效，据此把本方向从「裁决轴」降为「兜底」（只在高风险、或结构 + 动态都拿不准时动用）。该卡重开此处地位，待开决策工作表。
