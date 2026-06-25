@@ -34,4 +34,4 @@ type: direction
 
 **空白 / wedge**：在 benchmark-free 的硬约束下，几乎所有系统都把**沉淀**与**准入裁决**混为一谈或省掉了门，且都从 tool 执行反推意图。autoharness 的切口是把 trace 当**候选来料而非裁决**，并把抓取口从执行上移到对话回合。[SKILL.md Mining](../sources/papers/skillmd-mining.md) 的反证压住底线：沉淀产物必须 gate on **净改善**，不能 gate on 可读性、更不能靠 offline proxy reward。
 
-**已蒸馏的 idea**：本方向直接喂养 [从历史 trace 提模式](../ideas/trace-based-pattern-extraction.md)（候选来料）、[直接读用户输入与 agent 输出](../ideas/read-prompt-not-just-trace.md)（上移抓取口）、[滚动 curate](../ideas/adherence-driven-curate.md)（沉淀后的存活信号）。
+**已蒸馏的 idea**：本方向直接喂养 [从对话回合捕获候选](../ideas/trace-based-pattern-extraction.md)（候选来料 + 抓取口上移）、[滚动 curate](../ideas/adherence-driven-curate.md)（沉淀后的存活信号）。
