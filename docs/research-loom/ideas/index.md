@@ -11,4 +11,6 @@
 - [默认只有机器自学经验进生命周期；其他来源可 opt-in 自动沉降](lifecycle-by-provenance.md) — `候选`（user 提出：按 provenance 划生命周期成员，待复核）
 - [skill 召回率本就不高，且随 skill 数量增长而恶化](skill-recall-low-degrades-with-n.md) — `候选`（user 提出：读取率不高、越多越差，待复核）
 - [直接读用户输入与 agent 输出，而非从 tool 执行反推](read-prompt-not-just-trace.md) — `候选`（user 对 ECC 抓取口的修正，待复核）
-- [经验沉淀后存哪一层：独立 instinct 层 vs 新增 skill](precipitate-storage-layer.md) — `存疑`（开放问题，待证据收窄后开决策）
+- [创建/更新/使用场景随符号留痕——为高频符号自举 per-symbol eval 预存素材](record-scenarios-for-eval.md) — `候选`（user 提出：造/改 skill 时记下凭据，参考 SkillHone；暂只记录不验证，待复核）
+- [维护可脱离自积累单独成立——只维护已有 skill 不自动生成](maintenance-without-self-accumulation.md) — `候选`（user 提出：服务只想自动维护、不想自积累的用户，待复核）
+- [经验沉淀后存哪一层：倾向 B 新增为 skill（参考 Hermes）、独立 instinct 层作苗圃](precipitate-storage-layer.md) — `候选`（user 取向 B：skill 可传播；正式 ADR 待开）
