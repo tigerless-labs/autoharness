@@ -13,6 +13,8 @@ status: 候选
 
 划线的轴必须是**系统内生的所有权标记(机器自产 vs 外来)**,而非外部清单或文件位置——见下文对照。
 
+**权限 = 所有权标记,且默认动作保守。** 「区分生成 vs 非生成」正是这条线的**权限钥匙**:只有带「机器自产」内生标记的符号默认进自动维护。且即便入池,**默认只做失活 / 归类(可逆归档)这类退役动作,不默认改写 / 合并**;更强动作须显式 opt-in。这是 fail-safe、deny-by-default,与 [维护层只能叠加](additive-over-native-skill.md) 同源。即便沉淀物按 [precipitate-storage-layer](precipitate-storage-layer.md) 取向 B 进了 skill 层,这枚 provenance 标记仍是让「自产」与「外来」在同一 skill 格式下**逻辑分池、分策略**的钥匙。
+
 ## 论据 / 出处
 
 [Hermes](../sources/github/nousresearch-hermes-agent.md) 的代码实证给了正反两面:它**也**只对 `skill_manage create` 的自产物跑失活(30/90 天),其余默认豁免——方向对。但它的保护轴是**外部渠道清单(bundled/hub)+ 手动逐个 `pin`**,且"认不认管理"还要靠 `.usage.json` 记录、明说「manually authored skills are not inferred from filesystem location」。两个教训:(1) 默认按 provenance 分池是对的;(2) 但**所有权不能只靠外部清单/人手 pin**——那对"用户即兴 `/learn`、手动 clone"有识别盲区。autoharness 据此把成员资格做成**系统内生标记 + 显式 opt-in 加入**,而不是 Hermes 那种"默认豁免、手动 pin 退出"。
@@ -20,8 +22,8 @@ status: 候选
 ## 待解 / 边界
 
 - opt-in 的**粒度与可逆性**:逐符号 / 按目录 / 按来源类别?纳入后能否退出(对称 opt-out)?
-- 纳入后的人意符号,自动沉降到底是"归档可恢复"还是"降权不删"——退役动作的强度需与 provenance 挂钩(外来的更保守)。
-- 与 [经验沉淀存哪一层](precipitate-storage-layer.md) 耦合:若机器经验独立成层,opt-in 是"把外来 skill 复制进经验层"还是"给原层打生命周期标记"?待那条决策收窄。
+- 默认退役动作已定为**失活 / 归类(可逆)**;仍待定的是更强动作(改写 / 合并)对外来符号要不要进一步收紧、阈值挂钩到哪。
+- 外来符号的 opt-in 维护放**独立池子**(按标记隔离,不与自产混池),其改动可回滚 + 用户验证窗口——整块作**保留窗口**,先不展开,见 [维护脱离自积累](maintenance-without-self-accumulation.md)。
 
 ## 关联
 
