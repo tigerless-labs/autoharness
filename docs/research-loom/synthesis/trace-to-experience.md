@@ -4,7 +4,7 @@ type: direction
 ---
 # 方向：从 trace 沉淀经验（intake / 入料口）
 
-一次运行留下的 trace（工具 I/O、对话、运行轨迹）如何被蒸馏、固化成可复用的经验（instinct / skill / memory）？把"以运行痕迹为底料、自动长出符号"的来源卡聚到一起对比。这是 autoharness 的**入料口**轴，与下游的[编辑把关](../ideas/structural-gate-no-oracle.md)（准入）、[离线评测验证](offline-validation.md)（裁决）正交：本方向只问**料从哪来、怎么沉淀**——trace 在此是**候选来料**（挖复现模式→候选符号，决定「提出什么」），而非[裁决轴](offline-validation.md)里把 trace 当**验证集/真值**（决定「接不接受」）。同一条 trace 不能既生成某候选又验证它（=训练集当测试集），故二者取的痕迹须物理隔离。
+一次运行留下的 trace（工具 I/O、对话、运行轨迹）如何被蒸馏、固化成可复用的经验（instinct / skill / memory）？把"以运行痕迹为底料、自动长出符号"的来源卡聚到一起对比。这是 autoharness 的**入料口**轴，与下游的编辑把关（准入）、[离线评测验证](offline-validation.md)（裁决）正交：本方向只问**料从哪来、怎么沉淀**——trace 在此是**候选来料**（挖复现模式→候选符号，决定「提出什么」），而非[裁决轴](offline-validation.md)里把 trace 当**验证集/真值**（决定「接不接受」）。同一条 trace 不能既生成某候选又验证它（=训练集当测试集），故二者取的痕迹须物理隔离。
 
 **硬边界（定义）**：本方向特指**不需要任何已标注 benchmark、只基于历史 trace 的经验沉淀**。料口是真实运行留下的痕迹（工具 I/O、用户对话、运行轨迹），靠频次 / 复现 / 召回 / 容量这类**无标注信号**沉淀——不预设带 ground-truth 标签的成功/失败轨迹，也不靠可判定 oracle 打分。凡是以"已标注 benchmark / 可判定 oracle"为前提才跑得动的蒸馏，不属于本方向。
 
@@ -34,4 +34,4 @@ type: direction
 
 **空白 / wedge**：在 benchmark-free 的硬约束下，几乎所有系统都把**沉淀**与**准入裁决**混为一谈或省掉了门，且都从 tool 执行反推意图。autoharness 的切口是把 trace 当**候选来料而非裁决**，并把抓取口从执行上移到对话回合。[SKILL.md Mining](../sources/papers/skillmd-mining.md) 的反证压住底线：沉淀产物必须 gate on **净改善**，不能 gate on 可读性、更不能靠 offline proxy reward。
 
-**已蒸馏的 idea**：本方向直接喂养 [从历史 trace 提模式](../ideas/trace-based-pattern-extraction.md)（候选来料）、[直接读用户输入与 agent 输出](../ideas/read-prompt-not-just-trace.md)（上移抓取口）、[滚动 curate](../ideas/adherence-driven-curate.md)（沉淀后的存活信号）；准入裁决归 [结构化把关](../ideas/structural-gate-no-oracle.md)。
+**已蒸馏的 idea**：本方向直接喂养 [从历史 trace 提模式](../ideas/trace-based-pattern-extraction.md)（候选来料）、[直接读用户输入与 agent 输出](../ideas/read-prompt-not-just-trace.md)（上移抓取口）、[滚动 curate](../ideas/adherence-driven-curate.md)（沉淀后的存活信号）。

@@ -3,7 +3,6 @@
 我认可的思路与自己的新念头，每条一卡：**用自己的话、原子化、引用所凭的来源卡**。永久笔记不是论文摘要，是你的主张。方法见 [`../../design/research-loom.md`](../../design/research-loom.md)。
 
 - 🧭 **[核心理念：在动态工作中积累并验证经验，而非定期收集 eval 跑进化](dynamic-validation-lifecycle.md)** — `候选`（user 倡导为核心理念；把离线 replay 从裁决轴降为兜底，重开决策，待复核）
-- [结构化把关，不要 held-out 分数](structural-gate-no-oracle.md) — `候选`（走通样例，待复核）
 - [要可靠生效的规则，走 hook 强制注入](hook-forced-injection.md) — `候选`（源于 ECC 实测，待复核）
 - [维护层只能叠加，不得改写原生 skill 体验](additive-over-native-skill.md) — `候选`（user 提出的产品边界，待复核）
 - [从历史 trace 里提模式：候选符号的无标注来源](trace-based-pattern-extraction.md) — `候选`（借鉴 ECC 抓取前端，待复核）

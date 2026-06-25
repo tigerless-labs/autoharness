@@ -15,4 +15,4 @@ status: 候选
 
 ## 关联
 
-是 [hook 强制注入](hook-forced-injection.md) 的采纳前提（非功能约束）。与 [结构化把关，不要 held-out 分数](structural-gate-no-oracle.md) 同属「维护层主张」。
+是 [hook 强制注入](hook-forced-injection.md) 的采纳前提（非功能约束）。

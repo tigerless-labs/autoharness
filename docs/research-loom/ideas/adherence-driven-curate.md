@@ -17,7 +17,7 @@ status: 候选
 - 被矛盾 / 被无视 → 下沉;复现 / 被遵守 → 上浮;跨项目复现 → scope 升 global;跌破阈值 → 事实性退役。
 - **诚实**:这要可靠地测"符号 vs 实际行为是否一致",ECC 设计了却从未实现,**autoharness 也不一定好做**;所以它是骨架之上的**升级方向**,不是第一版前提。先有 Hermes 式时间/使用状态机能跑,再朝遵守度加权演进。
 
-关键约束:这里的「矛盾」是**符号 vs 实际行为**(说一套做一套),**不是符号之间的矛盾**。后者(结构化冲突/重复/包含)属另一条轴,归 [结构化把关](structural-gate-no-oracle.md);本卡只管「用得好不好」的存活轴。两轴正交:结构门管**能不能进**,生命周期管**进来后活多久**。
+关键约束:这里的「矛盾」是**符号 vs 实际行为**(说一套做一套),**不是符号之间的矛盾**。后者(结构化冲突/重复/包含)属另一条**准入轴**,本卡只管「用得好不好」的存活轴。两轴正交:准入管**能不能进**,生命周期管**进来后活多久**。
 
 ## 论据 / 出处
 
@@ -32,4 +32,4 @@ status: 候选
 
 ## 关联
 
-成员资格规则见 [按 provenance 划生命周期](lifecycle-by-provenance.md)。与 [结构化把关](structural-gate-no-oracle.md) 正交互补(准入 vs 存活)。「遵守度」信号若要实现,需 [直接读用户输入与 agent 输出](read-prompt-not-just-trace.md) / [历史 trace 提模式](trace-based-pattern-extraction.md) 供料。「退役 = 不再注入」依赖 [hook 强制注入](hook-forced-injection.md) 的注入闸。装配进 [design/](../design/index.md) 的 Manage 段。
+成员资格规则见 [按 provenance 划生命周期](lifecycle-by-provenance.md)。与准入轴正交互补(准入 vs 存活)。「遵守度」信号若要实现,需 [直接读用户输入与 agent 输出](read-prompt-not-just-trace.md) / [历史 trace 提模式](trace-based-pattern-extraction.md) 供料。「退役 = 不再注入」依赖 [hook 强制注入](hook-forced-injection.md) 的注入闸。装配进 [design/](../design/index.md) 的 Manage 段。

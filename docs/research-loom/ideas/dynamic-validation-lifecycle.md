@@ -13,7 +13,7 @@ status: 候选
 
 把「接不接受 / 活不活」拆三道，**动态验证升为主裁决**：
 
-- **准入（即时·便宜）**：[结构门](structural-gate-no-oracle.md)——去重 / 冲突 / 边界，放行候选。
+- **准入（即时·便宜）**：结构性检查——去重 / 冲突 / 边界，放行候选。
 - **存活（持续·主）**：**动态验证**——在真实交互里持续被遵守 / 奏效才活，被矛盾 / 失效则下沉退役。即把 [滚动 curate](adherence-driven-curate.md) 里 ECC 的「遵守度」理念从「升级轴」提为**核心机制**。
 - **兜底（重·偶尔）**：[离线 replay](../synthesis/offline-validation.md) 降为**高风险、或结构 + 动态都拿不准时**才动用，不再是常规裁决轴。
 
@@ -29,4 +29,4 @@ status: 候选
 
 ## 关联
 
-重排 [离线评测验证](../synthesis/offline-validation.md) 的地位（裁决轴 → 兜底）；把 [滚动 curate](adherence-driven-curate.md) 的遵守度理念提为核心；与 [结构门](structural-gate-no-oracle.md) 组成三道闸；给 [record-scenarios-for-eval](record-scenarios-for-eval.md) 的记录赋予「滚动过期」语义。是 DEFINITION 级理念，装配进 [design/](../design/index.md) 脊柱与定位。
+重排 [离线评测验证](../synthesis/offline-validation.md) 的地位（裁决轴 → 兜底）；把 [滚动 curate](adherence-driven-curate.md) 的遵守度理念提为核心；与结构性准入组成三道闸；给 [record-scenarios-for-eval](record-scenarios-for-eval.md) 的记录赋予「滚动过期」语义。是 DEFINITION 级理念，装配进 [design/](../design/index.md) 脊柱与定位。
