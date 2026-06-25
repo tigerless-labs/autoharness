@@ -17,4 +17,4 @@ status: 候选
 
 ## 关联
 
-采纳前提是 [维护层只能叠加，不得改写原生 skill 体验](additive-over-native-skill.md)——hook 通道必须在原生之外另开，零侵入 skill 的新增与读取。与 [结构化把关，不要 held-out 分数](structural-gate-no-oracle.md) 同属「维护层主张」。尚未装配进设计（候选去向：维护层的「载体选择 / vehicle-fit 检查」设计元素）。其上层延伸——在 hook 里跑 SkillDAG 式图召回、force-inject 依赖完整 bundle，让「边」在运行时变现而非仅供维护——为另一条待提 idea。
+采纳前提是 [维护层只能叠加，不得改写原生 skill 体验](additive-over-native-skill.md)——hook 通道必须在原生之外另开，零侵入 skill 的新增与读取。尚未装配进设计（候选去向：维护层的「载体选择 / vehicle-fit 检查」设计元素）。其上层延伸——在 hook 里跑 SkillDAG 式图召回、force-inject 依赖完整 bundle，让「边」在运行时变现而非仅供维护——为另一条待提 idea。

@@ -3,25 +3,39 @@ id: record-scenarios-for-eval
 type: idea
 status: 候选
 ---
-# 创建/更新/使用场景随符号留痕——为高频符号日后自举 per-symbol eval 预存素材（现阶段只记录、不验证）
+# 符号随附记录：v1 只做决策账本，使用·监控·验证留后
 
-> user 提出：造 skill 时连同凭据一起记下来，日后可成 eval 集。status 候选，待复核。
+> user 逐步收口。status 候选，待复核。
 
-**主张**：符号（skill / 经验）在三个时刻都把**场景证据**作为随附数据持续记录——① **创建**时记下触发它的那组重复场景（凭什么造它）；② **每次更新**时记下本次改动的证据与场景（凭什么改）；③ **运行**时记下实际命中的使用场景（被召回时真实长什么样）。这些留痕本身**不裁决、不验证**，只是日后给**高频符号自举 per-symbol eval 集**的料。本卡范围严格限定在**捕获/记录**；replay/打分留到证据足够再开，是一道刻意的延迟。
+**主张**：符号（skill / 经验）的生平**随符号就地记录**，既作审计与回滚轨，也作日后 eval 的料。但 **v1 只做决策账本**；一切要"判好坏"的环节（使用日志、遵守度监控、验证）一律留后。
+
+## 决策账本（v1 唯一要做的）
+
+每个符号一本 append-only 账本，**创建 / 更新 / 退役**都是其上一条事件，同一套要素：**发生时刻、事件类型、为什么（触发或诊断）、改动了什么、证据**。
+
+- **证据两件套**：一份**脱敏蒸馏切片**（durable 但残）+ 一个**指向宿主 log 的指针**（全但易断）。
+- **创建证据当场物化**：创建低频且必须 durable，故立即把切片脱敏落盘、不靠指针（宿主 log 会轮转）；并标「不可自验」——生成某符号的 trace 不得验证它自己。
+- **v1 无裁决**：没有"判收不收"这一步，反思提出一条即记一条，故账本不含 gate / outcome 要素。
+
+## 存储与来料（已定）
+
+- **trace 不自存**：完整上下文读宿主 log（如 Claude logs）按引用；留存不归我们管，要紧的就立刻物化脱敏。
+- **账本随符号、不进 skill 体**：放符号旁 sidecar（按符号 id），不混入被注入的 skill 正文（护召回）；可随 skill 打包传播。
+- **SkillHone 只借结构、不涉场景**：借其「诊断→改动→证据→结果」决策史骨架；其证据系 eval probe（我们延后）、且**根本不记场景**——创建 / 调用场景是 autoharness 自有，源出 ECC 抓取 / [直接读 prompt](read-prompt-not-just-trace.md) / [离线评测验证](../synthesis/offline-validation.md) 子类②。
+
+## 留后（只留窗口，现在不做）
+
+- **使用日志**：每次调用的场景 + 指针 + 遵守度代理。
+- **遵守度监控 / 动态验证**：见 [dynamic-validation-lifecycle](dynamic-validation-lifecycle.md)。
+- **验证（replay / 打分）**，及「只记录 → 开始验证」的触发阈值。
+- **裁决要素（gate / outcome）**：将来若恢复准入再加。
 
 ## 论据 / 出处
 
-- [SkillHone](../sources/papers/skillhone.md) 是直接范式：它把 skill revision 与 evaluation-side evidence 耦合，持久记录 diagnoses / revisions / evidence / outcomes，并论证「只留最终 artifact、丢掉决策史」是硬伤。本卡把这种「更新留痕」从它的专门机制，降为**每次 create/update/use 都顺手攒的常规副产物**——含被否决的备选，正是 autoharness 回滚故事要的审计轨。
-- 下游对接 [离线评测验证](../synthesis/offline-validation.md) 的子类②（自有 trace 自举 eval）：本卡是其**上游备料**——把「日后要当验证集的料」在当场就攒好；并须守住该方向红线「生成某候选的 trace 不得验证它」，故创建/更新所凭场景与日后验证集**必须分账**。
-- 创建所凭的「重复场景」即 [从 trace 提模式](trace-based-pattern-extraction.md) 的 3+ 复现，天然是该符号的**正例种子**；每次留痕发生在 [episode 边界](episode-boundary-reflection.md) 上，场景证据 = 该 episode 的 replay 切片。
-- 与 [结构化把关，不要 held-out 分数](structural-gate-no-oracle.md) / [ADR-0001](../decisions/ADR-0001-structural-gate.md) **不冲突**：本卡不引入裁决，只预存素材，因此不破坏「无 oracle 准入」；反而把「要不要自举 oracle」那道悬置问题，从「现在裁决」降级为「先把料攒着」。
-
-## 待解 / 边界
-
-- **脱敏前置**：使用场景含用户原话，PII/密钥风险高于 tool I/O（见 [直接读 prompt](read-prompt-not-just-trace.md)）——留痕入库前必须过红线过滤（CLAUDE.md 安全条款）。
-- **配额与去重**：高频符号会堆大量使用场景，需采样/配额，免得留痕本身膨胀；每条须标 provenance（哪个 session/episode）以便日后 split。
-- **何时从「只记录」转「开始验证」**：触发阈值（符号频次 / 场景累积量）待定，不在本卡内定。
+- [SkillHone](../sources/papers/skillhone.md)：决策史骨架的范式（持久记 diagnoses / revisions / evidence / outcomes + rejected）；但其证据系 eval probe、且**不记场景**，故只借结构。
+- [从 trace 提模式](trace-based-pattern-extraction.md)：创建所凭的「复现场景」即正例种子。
+- 留后的使用 / 验证须守 [离线评测验证](../synthesis/offline-validation.md) 子类② 的红线：生成某候选的 trace 不得验证它。
 
 ## 关联
 
-上游承 [从 trace 提模式](trace-based-pattern-extraction.md)、[episode 边界反思](episode-boundary-reflection.md)；下游喂 [离线评测验证](../synthesis/offline-validation.md) 子类②；成员资格随 [按 provenance 划生命周期](lifecycle-by-provenance.md)；使用场景同时供 [滚动 curate](adherence-driven-curate.md) 的「被遵守/被矛盾」判定。与 [结构化把关](structural-gate-no-oracle.md) 正交（只存料、不裁决）。将装配进 [design/](../design/index.md) 的 Intake/Manage 段。
+上游承 [从 trace 提模式](trace-based-pattern-extraction.md)、[episode 边界反思](episode-boundary-reflection.md)；成员资格随 [按 provenance 划生命周期](lifecycle-by-provenance.md)；留后部分接 [dynamic-validation-lifecycle](dynamic-validation-lifecycle.md) 与 [滚动 curate](adherence-driven-curate.md) 的遵守度判定。将装配进 [design/](../design/index.md) 的 Intake/Manage 段。

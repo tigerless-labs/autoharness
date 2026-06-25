@@ -13,7 +13,7 @@ status: 候选
 
 所以「skill 多多益善」是错觉:**加一个边际 skill,既摊薄注入预算、又往候选池里多塞一个会被混淆的对象,把存量 skill 的召回也一起拖低**。召回不是随 N 持平,而是随 N 退化。
 
-**对 autoharness 的意义。** 维护层的价值不在「攒得多」,而在**压低 N 的同时治理 N**:① 描述卫生设为准入前置闸(无描述/同质描述不予收),② 结构化去重与消歧是召回刚需而非可选优化(见 [结构化把关](structural-gate-no-oracle.md))。「少而精」对召回是正收益,「多而全」是负收益——这给 [滚动 curate](adherence-driven-curate.md) 的「定生死」提供了方向:删冗余 skill 不只是省空间,是直接抬升存量召回。
+**对 autoharness 的意义。** 维护层的价值不在「攒得多」,而在**压低 N 的同时治理 N**:① 描述卫生设为准入前置闸(无描述/同质描述不予收),② 结构化去重与消歧是召回刚需而非可选优化。「少而精」对召回是正收益,「多而全」是负收益——这给 [滚动 curate](adherence-driven-curate.md) 的「定生死」提供了方向:删冗余 skill 不只是省空间,是直接抬升存量召回。
 
 ## 论据 / 出处
 
@@ -26,4 +26,4 @@ status: 候选
 
 ## 关联
 
-蒸馏自 [skill 的召回率与执行率](../synthesis/skill-recall-execution.md);为 [结构化把关](structural-gate-no-oracle.md)(去重/消歧=召回杠杆)与 [滚动 curate](adherence-driven-curate.md)(删冗余=抬召回)提供动机轴;与 [hook 强制注入](hook-forced-injection.md)(对 must-always 规则绕开 ② 的另一条路)互补。将装配进 [design/](../design/index.md) 的 Admission/Curate 段。
+蒸馏自 [skill 的召回率与执行率](../synthesis/skill-recall-execution.md);为结构化去重/消歧(=召回杠杆)与 [滚动 curate](adherence-driven-curate.md)(删冗余=抬召回)提供动机轴;与 [hook 强制注入](hook-forced-injection.md)(对 must-always 规则绕开 ② 的另一条路)互补。将装配进 [design/](../design/index.md) 的 Admission/Curate 段。

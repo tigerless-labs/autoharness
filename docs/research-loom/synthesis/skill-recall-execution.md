@@ -31,5 +31,5 @@ type: direction
 ## 小结:空白与对 autoharness 的意义
 
 - **直接量「Claude Code skill 触发召回率」的同行评审工作≈没有。** 学术只量代理(labeled benchmark 上的 tool selection),生态工作量的是冗余/描述质量(② 的上界与退化成因),唯一直接数来自实践 eval。**这本身是个实验机会**——`experiments/` 里自测 description 触发率,才能把 ECC 的传说变成可引证据。
-- **召回是宿主原生的,我们不拥有 ② 的开关**;但**决定 ② 的东西我们能塑造**:描述卫生(SkillReducer)+ 结构化去重/消歧(Agent-Skills-data)。所以 [结构化把关](../ideas/structural-gate-no-oracle.md) 的去重/冲突闸**就是召回杠杆**——N 一大、同质描述相撞,不治理就路由崩。
+- **召回是宿主原生的,我们不拥有 ② 的开关**;但**决定 ② 的东西我们能塑造**:描述卫生(SkillReducer)+ 结构化去重/消歧(Agent-Skills-data)。所以结构化去重/冲突闸**就是召回杠杆**——N 一大、同质描述相撞,不治理就路由崩。
 - **③ 执行率几乎是研究空白**,而它正是 [滚动 curate](../ideas/adherence-driven-curate.md) 要的「被遵守/被矛盾」信号轴——触发了却没照做,等于一次「矛盾」。
