@@ -16,21 +16,18 @@
 - [ ] **Decouple E1–E3 phrase lists into config.** The correction/theme phrase sets are inline in
   the experiment scripts; when the detector becomes product code it must move to config
   (`CLAUDE.md` "config holds every knob").
-- [ ] **Fix dangling `DEFINITION.md` references.** `docs/index.md`, `docs/design/index.md`,
-  `docs/design/workflow.md` (and the `explain-paper` skill) link to `DEFINITION.md`, but the file
-  was removed in commit `bdfd3c3` and never recreated. `tools/check_doc_links.py` flags 3 dangling
-  links. Decide: recreate `DEFINITION.md` or drop the references. Pre-existing, out of scope for
-  research-loom.
-- [ ] **Fix dangling `synthesis/ecosystem-heat.md` references.** The file was deleted but is still
-  linked from `research-loom/index.md` and 8 source cards (mattpocock-skills, aiming-lab-autoharness,
-  anthropics-skills, tinyhumansai-openhuman, karpathy-llm-wiki, kayba-ai-autoharness, obra-superpowers,
-  quartetfuzz). Decide where the ecosystem-heat / output-quality-validation content moved (likely a new
-  synthesis note) and relink. `sources/papers/index.md` already repointed to `synthesis/index.md` as a
-  stopgap.
+- [ ] **Recreate `DEFINITION.md`.** Removed in commit `bdfd3c3`, never recreated. The dangling link
+  from `docs/index.md` is now neutralized to plain text (link checker green), but the authoritative
+  project definition still needs writing — the spine 决策 (zero-intrusion / trace-as-candidate /
+  must-always-via-hook) is its draft seed (`research-loom/design/spine.md`).
+- [ ] **Relocate the `ecosystem-heat` content.** The deleted `synthesis/ecosystem-heat.md` is no
+  longer linked — the 8 source cards + `research-loom/index.md` now point at `synthesis/index.md` as a
+  stopgap (matching `sources/papers/index.md`; link checker green). Still open: fold the
+  ecosystem-heat / positioning / output-quality content into a real synthesis note and relink the cards.
 - [ ] **生命周期/去重的触发时机:适配非常驻宿主.** Hermes 的 curator 靠常驻 daemon(空闲 2h / 间隔 7d 自动醒);
   Claude Code 等是临时进程,会话间无常驻、不会空闲自动醒,墙钟周期 sweep 无执行者。需定:失活走惰性判定
   (SessionStart/注入时按时间戳现算)、去重走准入事件驱动;并决定失活刻度用墙钟天还是使用相对(几次会话未被用)。
   见 [`research-loom/ideas/adherence-driven-curate.md`](research-loom/ideas/adherence-driven-curate.md) 的待解。
 - [ ] **Wire doc checkers into CI.** `tools/check_doc_links.py` + `tools/check_research_loom.py`
-  (and their `--selftest`) should gate PRs once a `.github/workflows` exists. Blocked on the
-  `DEFINITION.md` danglers above (link checker is non-zero until they're fixed).
+  (and their `--selftest`) should gate PRs once a `.github/workflows` exists. Now unblocked — both
+  checkers pass clean (no dangling links).

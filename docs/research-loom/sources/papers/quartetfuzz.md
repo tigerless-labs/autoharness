@@ -6,4 +6,4 @@
 
 Four-principles correctness (Logic / API-protocol / Security-boundary / Entry-point) in a generate-check-fix loop before fuzzing. 42 reports, 29 fixed/confirmed (3 CVEs), 4.8% FP; P1/P2 checks intercepted 58 harness-induced false crashes.
 
-**Relevance to autoharness:** the most on-point fuzzing analogue — automatic pre-emission quality checks to avoid flooding the recipient with noise, mirroring the gate-before-commit discipline. See [synthesis/ecosystem-heat.md](../../synthesis/ecosystem-heat.md) for the shared "triage is mandatory" lesson.
+**Relevance to autoharness:** the most on-point fuzzing analogue — automatic pre-emission quality checks to avoid flooding the recipient with noise, mirroring the gate-before-commit discipline. See [synthesis/](../../synthesis/index.md) for the shared "triage is mandatory" lesson.

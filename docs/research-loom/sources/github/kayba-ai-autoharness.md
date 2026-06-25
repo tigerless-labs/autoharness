@@ -4,4 +4,4 @@
 
 An autonomous harness optimizer **product** that **requires a benchmark command** (Kayba sells managed optimization).
 
-**Relevance to autoharness:** the most important collision — same name, adjacent goal, but benchmark-*required*. autoharness's differentiator is the corner kayba doesn't cover: **benchmark-free, production-trajectory-bootstrapped** harness evolution (only the 14★ [retro-harness](../papers/rho.md) currently occupies it). See [synthesis/ecosystem-heat.md](../../synthesis/ecosystem-heat.md).
+**Relevance to autoharness:** the most important collision — same name, adjacent goal, but benchmark-*required*. autoharness's differentiator is the corner kayba doesn't cover: **benchmark-free, production-trajectory-bootstrapped** harness evolution (only the 14★ [retro-harness](../papers/rho.md) currently occupies it). See [synthesis/](../../synthesis/index.md).
