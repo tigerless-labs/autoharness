@@ -5,12 +5,13 @@ only points. Keep it current when files are added, moved, or removed.
 
 ## Foundations (the *what* and *why* of the project)
 
-- [DEFINITION.md](DEFINITION.md) — single authoritative project definition.
+- `DEFINITION.md` — single authoritative project definition (removed in `bdfd3c3`, not yet recreated).
 
 ## Design — architecture and the *why*
 
-- [design/](design/index.md) — design-doc index. Start at the spine
-  ([design/workflow.md](design/workflow.md): principle + pipeline + invariants).
+- `design/` — design-doc tree (not yet built): the spine (principle + pipeline + invariants) plus
+  one doc per step. During the transition, design lives under
+  [research-loom/design/](research-loom/design/index.md) ([spine](research-loom/design/spine.md)).
 
 ## Working artifacts
 
@@ -24,4 +25,4 @@ only points. Keep it current when files are added, moved, or removed.
   的全部产物。来源库（① 捕获）为 [papers/](research-loom/sources/papers/index.md)、[github/](research-loom/sources/github/index.md)、
   [blogs/](research-loom/sources/blogs/index.md)；② 组织见 [synthesis/](research-loom/synthesis/index.md)；
   ③④⑤ 见 [ideas/](research-loom/ideas/index.md)、[design/](research-loom/design/index.md)、[decisions/](research-loom/decisions/index.md)。
-  方法见 [design/research-loom.md](design/research-loom.md)。
+  方法由 research-loom skill 承载。

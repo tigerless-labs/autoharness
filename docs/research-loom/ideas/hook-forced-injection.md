@@ -7,7 +7,7 @@ status: 候选
 
 > 源于 ECC 实测机制，status 候选，待 user 升 `采纳` 或改 `否决`。
 
-**主张**：规则的「载体」是决定其执行可靠度的一等变量。当一条规则**必须每次生效**时，应做成 **hook 强制注入**（`SessionStart` / `UserPromptSubmit`，其 stdout 即被当作注入上下文，确定性 **100%**），而非依赖 skill 的 **description 概率触发**（由模型判断相关性，约 **50–80%**）。由此维护层多出一维职责：按「要求的可靠度」为每条规则**选/修载体**（hook 强制注入 / 常驻上下文 / description-skill），并标出「本该常驻却被写成概率 skill」的载体错配。
+**主张**：规则的「载体」是决定其执行可靠度的一等变量。当一条规则**必须每次生效**时，应做成 **hook 强制注入**（`SessionStart` / `UserPromptSubmit`，其 stdout 即被当作注入上下文，确定性 **100%**），而非依赖 skill 的 **description 概率触发**（由模型判断相关性，约 **50–80%**）。由此autoharness多出一维职责：按「要求的可靠度」为每条规则**选/修载体**（hook 强制注入 / 常驻上下文 / description-skill），并标出「本该常驻却被写成概率 skill」的载体错配。
 
 ## 论据 / 出处
 
@@ -17,4 +17,4 @@ status: 候选
 
 ## 关联
 
-采纳前提是 [维护层只能叠加，不得改写原生 skill 体验](additive-over-native-skill.md)——hook 通道必须在原生之外另开，零侵入 skill 的新增与读取。尚未装配进设计（候选去向：维护层的「载体选择 / vehicle-fit 检查」设计元素）。其上层延伸——在 hook 里跑 SkillDAG 式图召回、force-inject 依赖完整 bundle，让「边」在运行时变现而非仅供维护——为另一条待提 idea。
+采纳前提是 [不影响原生 skill 功能](additive-over-native-skill.md)——hook 通道必须在原生之外另开，零侵入 skill 的新增与读取。尚未装配进设计（候选去向：autoharness的「载体选择 / vehicle-fit 检查」设计元素）。其上层延伸——在 hook 里跑 SkillDAG 式图召回、force-inject 依赖完整 bundle，让「边」在运行时变现而非仅供维护——为另一条待提 idea。

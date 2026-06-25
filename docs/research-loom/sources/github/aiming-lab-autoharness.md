@@ -4,4 +4,4 @@
 
 An agent **governance** framework (Parse → Risk Classify → Permission → Sanitize → Audit). Carries a dubious disclaimer about Claude Code source leaked via npm 2026-03-31 — **treat cautiously**.
 
-**Relevance to autoharness:** the first of three ~300★ repos named "AutoHarness", all different things. This project's name collides head-on; the wedge must distinguish from governance frameworks in one sentence. See [synthesis/ecosystem-heat.md](../../synthesis/ecosystem-heat.md) and the other collisions ([parikhakshat](parikhakshat-autoharness.md), [kayba](kayba-ai-autoharness.md)).
+**Relevance to autoharness:** the first of three ~300★ repos named "AutoHarness", all different things. This project's name collides head-on; the wedge must distinguish from governance frameworks in one sentence. See [synthesis/](../../synthesis/index.md) and the other collisions ([parikhakshat](parikhakshat-autoharness.md), [kayba](kayba-ai-autoharness.md)).

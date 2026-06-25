@@ -4,4 +4,4 @@
 
 Anthropic's first-party Agent Skills collection.
 
-**Relevance to autoharness:** the canonical reference for skill structure/format autoharness reads and writes; the official-marketplace shelf that drives distribution (see [synthesis/ecosystem-heat.md](../../synthesis/ecosystem-heat.md)). Pairs with the [Claude Code skills blog](../blogs/claude-code-skills.md) on what a maintained skill looks like.
+**Relevance to autoharness:** the canonical reference for skill structure/format autoharness reads and writes; the official-marketplace shelf that drives distribution (see [synthesis/](../../synthesis/index.md)). Pairs with the [Claude Code skills blog](../blogs/claude-code-skills.md) on what a maintained skill looks like.

@@ -21,7 +21,7 @@ status: 候选
 
 - **trace 不自存**：完整上下文读宿主 log（如 Claude logs）按引用；留存不归我们管，要紧的就立刻物化脱敏。
 - **账本随符号、不进 skill 体**：放符号旁 sidecar（按符号 id），不混入被注入的 skill 正文（护召回）；可随 skill 打包传播。
-- **SkillHone 只借结构、不涉场景**：借其「诊断→改动→证据→结果」决策史骨架；其证据系 eval probe（我们延后）、且**根本不记场景**——创建 / 调用场景是 autoharness 自有，源出 ECC 抓取 / [直接读 prompt](read-prompt-not-just-trace.md) / [离线评测验证](../synthesis/offline-validation.md) 子类②。
+- **SkillHone 只借结构、不涉场景**：借其「诊断→改动→证据→结果」决策史骨架；其证据系 eval probe（我们延后）、且**根本不记场景**——创建 / 调用场景是 autoharness 自有，源出 ECC 抓取 / [从对话回合捕获](trace-based-pattern-extraction.md) / [离线评测验证](../synthesis/offline-validation.md) 子类②。
 
 ## 留后（只留窗口，现在不做）
 
