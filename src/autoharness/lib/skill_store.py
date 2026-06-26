@@ -65,6 +65,18 @@ def archive(lyr, name, root=None):
     return dest
 
 
+def restore(lyr, name, root=None):
+    src = layer.archive_dir(lyr, root) / name
+    if not src.exists():
+        return None
+    dest = layer.symbol_dir(lyr, name, root)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        shutil.rmtree(dest)
+    os.replace(src, dest)
+    return dest
+
+
 def sweep_orphans(lyr, root=None):
     skills = layer.skills_dir(lyr, root)
     if not skills.exists():

@@ -39,6 +39,19 @@ def test_remove(tmp_path):
     assert not skill_store.exists("project", "foo", tmp_path)
 
 
+def test_archive_restore_roundtrip_preserves_sidecar(tmp_path):
+    from autoharness.lib import sidecar
+    skill_store.write_body("project", "foo", "real", tmp_path)
+    sidecar.create("project", "foo", anchor=3, root=tmp_path)
+    skill_store.archive("project", "foo", tmp_path)
+    assert not skill_store.exists("project", "foo", tmp_path)         # out of live tree
+    assert (layer.archive_dir("project", tmp_path) / "foo").exists()  # parked in archive
+    skill_store.restore("project", "foo", tmp_path)
+    assert skill_store.read_body("project", "foo", tmp_path) == "real"    # reversible
+    assert sidecar.read("project", "foo", tmp_path)["anchor"] == 3        # sidecar rode along
+    assert not (layer.archive_dir("project", tmp_path) / "foo").exists()  # archive slot cleared
+
+
 def test_sweep_orphans_removes_tmp_keeps_live(tmp_path):
     sdir = layer.symbol_dir("project", "foo", tmp_path)
     sdir.mkdir(parents=True)
