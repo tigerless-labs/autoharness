@@ -29,6 +29,10 @@
   正当散文）。frontmatter 是最小 `key: value` 解析（非全 YAML）。
 - [ ] **intent_queue durable 格式定稿**（与 [validate-store](research-loom/design/validate-store.md)「intent 队列是否持久」待解同）：
   v1 = repo state 区 per-run `*.jsonl`，read 不删 / land 后 clear（at-least-once）；最终格式 / 粒度待定。
+- [ ] **stage_skill MCP 进程绑定接 Phase 7**：Phase 3 只交付确定性处理器（`stage_skill/server.py` 的
+  `TOOL_SCHEMA` + `stage()`，schema 强制 + 即时反馈 + 只 append）；stdio JSON-RPC `serve()` 外壳 + 顶层
+  `.mcp.json` 注册随打包落地——零依赖禁 `mcp` SDK，wire 形态依 Phase 0 MCP-scope spike 结论。`run_id`/`root`
+  由 spawn（Phase 5）经环境注入，现作入参。见 [stage-skill](research-loom/design/stage-skill.md) 待解。
 - [ ] **promoter LED watermark + create anchor 接 CAP**（Phase 4）：v1 LED 条目 = `{action, reason, evidence}`、
   无 watermark；create 的 sidecar `anchor` 由调用方入参、缺省 0。CAP（per-turn 计数）建好后供真值。
 - [ ] **promoter 逐条幂等 watermark**（与 intent_queue 粒度定稿同）：v1 整 run `clear`，崩溃极窗（land 与

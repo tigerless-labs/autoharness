@@ -56,6 +56,10 @@ def _structure(body, base_dir):
     return findings
 
 
+def structure(body):
+    return _structure(body, None)
+
+
 def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None):
     findings = []
 
