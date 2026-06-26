@@ -29,20 +29,23 @@ symbols are judged by **invocation rate**, not elapsed time.
 
 A learning pipeline runs beside the host and keeps all of itself off the host's recall path.
 
-```
-              recall (native, untouched)
-   ┌──────────────────────────────────────────────┐
-   │            host agent session                 │
-   └───────────────────────┬──────────────────────┘
-                           │  hooks observe each turn
-                           ▼
-   CAP capture ──▶ REF reflect ──▶ promoter · validate & store
-   dumb pipe       compare-first    lint in memory; atomic write on pass
-   redact at exit  proposes intent              │ pass only
-                                                ▼
-   MNG archives weakest ──▶  .claude/skills (live symbols)
-                                                │
-                                                └──▶ LED ledger (per-symbol sidecar)
+```mermaid
+flowchart TB
+    host["host agent session"]
+    cap["CAP capture<br/>dumb pipe · redact at exit"]
+    ref["REF reflect<br/>compare-first · proposes intent"]
+    prom["promoter · validate &amp; store<br/>lint in memory · atomic write on pass"]
+    skills[(".claude/skills<br/>live symbols")]
+    mng["MNG · archives weakest"]
+    led[("LED ledger<br/>per-symbol sidecar")]
+
+    host -->|hooks observe each turn| cap
+    cap --> ref
+    ref --> prom
+    prom -->|pass only| skills
+    mng --> skills
+    skills --> led
+    skills -->|recall: native, untouched| host
 ```
 
 - **Author and validator are separate.** REF only proposes an intent; it has no write tools. The
