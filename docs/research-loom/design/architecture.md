@@ -41,6 +41,7 @@ autoharness/                         # plugin 根（装到 ~/.claude/plugins/cac
         ├── validate.py              #   确定性 linter 六类（含自产标签）
         ├── skills_guard.py          #   安全正则扫描
         ├── redact.py                #   egress 红线集消费者
+        ├── redaction_rules.toml     #   secret/PII 规则集数据：CAP egress 与 LED 共用单一来源（config 指向、redact 消费）
         └── format_spec.md           #   authoring / lint 单一契约（REF 按它写、linter 按它验）
 ```
 
