@@ -43,6 +43,12 @@
 - [ ] **promoter 跨进程单写者锁**（与 sidecar/ledger 并发锁、mng 待解合一）：v1 单进程同步即「串行」，
   两 run 并发同改一 skill 的锁粒度（last-writer）待定。
 - [ ] **delete 归档 = 移进 `.archive`（Phase 2 落）**；最终「交 MNG 归档」的退役编排（保留期 / GC）属 Phase 6 lifecycle。
+- [ ] **Phase 5 reflector 正文借 Hermes skill-create review-fork prompt**：`agents/reflector.md` 的 compare-first
+  review + authoring 正文以 Hermes 后台 fork 的创建/复盘 prompt 为蓝本（`_spawn_background_review` 的
+  `_SKILL_REVIEW_PROMPT` / `build_learn_prompt`，见 [hermes 源卡](research-loom/sources/github/nousresearch-hermes-agent.md)），
+  在 Phase 5 补；改写要点：去掉 Hermes 进程内 fork / 直接写盘假设（我方 reflector 只发 intent、碰不到盘），
+  接我方 compare-first 偏好序 + 单一来源 `format_spec`。设计已记「仿 `_SKILL_REVIEW_PROMPT`」于
+  [reflector-subagent](research-loom/design/reflector-subagent.md)。
 - [x] **Wire doc checkers into CI.** Done: `.github/workflows/ci.yml` runs both checkers +
   `--selftest` + `pytest -m "not live"` (tolerates empty collection until product tests land).
   Test strategy & execution order in `docs/plans/roadmap.md`.
