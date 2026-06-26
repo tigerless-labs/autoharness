@@ -1,0 +1,138 @@
+from pathlib import Path
+
+import pytest
+
+from autoharness import config
+from autoharness.hook import dispatch
+from autoharness.lib import counters, layer, sidecar, skill_store
+
+
+@pytest.fixture(autouse=True)
+def _unguard(monkeypatch):
+    monkeypatch.delenv(config.CHILD_SESSION_ENV, raising=False)  # ambient may set it
+
+
+def _roots(tmp_path):
+    return {layer.GLOBAL: tmp_path / "g", layer.PROJECT: tmp_path / "p"}
+
+
+def test_routes_each_event_to_its_handler(tmp_path, monkeypatch):
+    seen = {}
+
+    def spy(key, ret):
+        def fake(e, **k):
+            seen[key] = (e, k)
+            return ret
+        return fake
+
+    monkeypatch.setattr(dispatch.on_session_start, "on_session_start", spy("start", {"archived": {}}))
+    monkeypatch.setattr(dispatch.on_skill_call, "on_skill_call", spy("skill", {"counted": False}))
+    monkeypatch.setattr(dispatch.on_stop, "on_stop", spy("stop", {"triggered": False}))
+    monkeypatch.setattr(dispatch.on_session_end, "on_session_end", spy("end", {"triggered": False}))
+    roots = _roots(tmp_path)
+
+    dispatch.dispatch({"hook_event_name": "SessionStart"}, roots=roots)
+    dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Skill"}, roots=roots)
+    dispatch.dispatch({"hook_event_name": "Stop"}, roots=roots)
+    dispatch.dispatch({"hook_event_name": "SessionEnd"}, roots=roots)
+
+    assert set(seen) == {"start", "skill", "stop", "end"}
+    assert seen["stop"][1]["root"] == roots[layer.PROJECT]
+    assert seen["skill"][1]["roots"] == roots
+
+
+def test_unknown_event_is_ignored_safely(tmp_path):
+    assert dispatch.dispatch({"hook_event_name": "Nope"}, roots=_roots(tmp_path))["ignored"] is True
+
+
+def test_missing_event_name_is_ignored(tmp_path):
+    assert dispatch.dispatch({}, roots=_roots(tmp_path))["ignored"] is True
+
+
+def test_subagent_stop_is_ignored(tmp_path):
+    # reflector completion is SubagentStop (E6 S4): never a turn, never counted
+    assert dispatch.dispatch({"hook_event_name": "SubagentStop"}, roots=_roots(tmp_path))["ignored"] is True
+
+
+def test_stop_bumps_both_layer_denominators(tmp_path):
+    roots = _roots(tmp_path)
+    dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"},
+                      roots=roots, reflect=lambda *a: None)
+    assert counters.request_count(layer.PROJECT, roots[layer.PROJECT]) == 1
+    assert counters.request_count(layer.GLOBAL, roots[layer.GLOBAL]) == 1  # global denominator too
+
+
+def test_triggered_stop_fires_reflect(tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatch.on_stop, "on_stop",
+                        lambda e, **k: {"triggered": True, "session_id": "s1", "count": 10, "window_n": 10})
+    calls = []
+    dispatch.dispatch({"hook_event_name": "Stop", "transcript_path": "/t.jsonl"},
+                      roots=_roots(tmp_path), reflect=lambda ev, res, roots: calls.append(res))
+    assert calls and calls[0]["session_id"] == "s1"
+
+
+def test_real_onstop_triggers_at_cadence(tmp_path):
+    roots = _roots(tmp_path)
+    for _ in range(config.REFLECT_EVERY_N - 1):
+        counters.bump_session("s1", roots[layer.PROJECT])
+    seen = []
+    dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1", "transcript_path": "/t.jsonl"},
+                      roots=roots, reflect=lambda ev, res, roots: seen.append(res))
+    assert len(seen) == 1 and seen[0]["window_n"] == config.REFLECT_EVERY_N
+
+
+def test_untriggered_stop_does_not_reflect(tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatch.on_stop, "on_stop", lambda e, **k: {"triggered": False, "count": 1})
+    calls = []
+    dispatch.dispatch({"hook_event_name": "Stop"}, roots=_roots(tmp_path),
+                      reflect=lambda ev, res, roots: calls.append(res))
+    assert calls == []
+
+
+def test_pretooluse_skill_counts_numerator(tmp_path):
+    roots = _roots(tmp_path)
+    root = roots[layer.PROJECT]
+    skill_store.write_body("project", "foo", "b", root)
+    sidecar.create("project", "foo", anchor=0, root=root)
+    out = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Skill",
+                             "tool_input": {"name": "foo"}}, roots=roots)
+    assert out["result"]["counted"]
+    assert sidecar.read("project", "foo", root)["calls"] == 1
+
+
+def test_reflector_write_is_denied(tmp_path):
+    out = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Write",
+                             "agent_type": "autoharness:reflector"}, roots=_roots(tmp_path))
+    assert out["deny"] is True
+
+
+def test_non_reflector_write_is_ignored(tmp_path):
+    out = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Write",
+                             "agent_type": "main"}, roots=_roots(tmp_path))
+    assert out["ignored"] is True
+
+
+def test_handler_exception_is_failsafe(tmp_path, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(dispatch.counters, "bump_request", boom)
+    out = dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"}, roots=_roots(tmp_path))
+    assert "error" in out  # never propagates to crash the host hook
+
+
+def test_reflect_builds_run_id_and_skips_without_transcript(tmp_path):
+    launched = []
+    result = {"session_id": "abc", "count": 7, "window_n": 7}
+    dispatch._reflect({"transcript_path": "/t.jsonl"}, result, _roots(tmp_path),
+                      launch=lambda tp, n, run_id, roots: launched.append((tp, n, run_id)))
+    assert launched == [("/t.jsonl", 7, "abc-7")]
+
+    launched.clear()
+    dispatch._reflect({}, result, _roots(tmp_path), launch=lambda *a: launched.append(a))
+    assert launched == []  # no transcript → nothing to reflect on
+
+
+def test_default_roots_resolve_both_layers():
+    roots = dispatch._roots(None)
+    assert set(roots) == set(layer.LAYERS)
+    assert all(isinstance(p, Path) for p in roots.values())

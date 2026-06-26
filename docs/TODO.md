@@ -18,10 +18,9 @@
   调用率判据,非墙钟刻度,见 [`research-loom/design/mng.md`](research-loom/design/mng.md));剩**去重走准入事件驱动**
   待落。见 [`research-loom/ideas/adherence-driven-curate.md`](research-loom/ideas/adherence-driven-curate.md) 的待解。
 - [ ] **建 plugin 官方结构源卡**（`sources/`）：`plugin.json` / `hooks/hooks.json`（`${CLAUDE_PLUGIN_ROOT}` + `{"hooks":{...}}` 包裹）/ `agents/` / `.mcp.json` / marketplace —— `architecture.md` 的 provenance 现挂"待建"。
-- [ ] **吸收 Phase 0 决策进设计文档**（建 Phase 3/5/6 时，决策现住 E5/E6 证据卡）：mng 率分母锁
-  per-turn/per-Stop、分子取命名空间 skill id；reflector backstop=plugin 顶层 `hooks.json` 按 `agent_type`
-  匹配；stage_skill 走 plugin `.mcp.json`；cap 只数主 `Stop`（reflector 完成是 `SubagentStop`）。见
-  [`docs/plans/phase0-platform-spikes.md`](plans/phase0-platform-spikes.md)。
+- [x] **吸收 Phase 0（S1–S6）决策进设计文档（Phase 7 落）**：`reflector-subagent.md` backstop 改顶层
+  `hooks.json` 按 `agent_type` deny；`architecture.md` 记 stage_skill 退顶层 `.mcp.json`、每回合分母在
+  `Stop` 经 dispatch +1、SubagentStop 不计。落地于 `hook/dispatch.py` + `hooks/hooks.json` + `.mcp.json`。
 - [ ] **Phase 5 行为型 live**（非 Phase 0）：reflector compare-first 真改优于建、最小权限不越界；顶层
   PreToolUse backstop 运行时真 deny 一次 `Write`。归 `experiments/` + 手测 runbook。
 - [ ] **validate #416 子查补全**（Phase 2/3）：v1 结构查 = frontmatter + name/description +「被引且存在的
@@ -29,10 +28,9 @@
   正当散文）。frontmatter 是最小 `key: value` 解析（非全 YAML）。
 - [ ] **intent_queue durable 格式定稿**（与 [validate-store](research-loom/design/validate-store.md)「intent 队列是否持久」待解同）：
   v1 = repo state 区 per-run `*.jsonl`，read 不删 / land 后 clear（at-least-once）；最终格式 / 粒度待定。
-- [ ] **stage_skill MCP 进程绑定接 Phase 7**：Phase 3 只交付确定性处理器（`stage_skill/server.py` 的
-  `TOOL_SCHEMA` + `stage()`，schema 强制 + 即时反馈 + 只 append）；stdio JSON-RPC `serve()` 外壳 + 顶层
-  `.mcp.json` 注册随打包落地——零依赖禁 `mcp` SDK，wire 形态依 Phase 0 MCP-scope spike 结论。`run_id`/`root`
-  由 spawn（Phase 5）经环境注入，现作入参。见 [stage-skill](research-loom/design/stage-skill.md) 待解。
+- [x] **stage_skill MCP 进程绑定（Phase 7 落）**：手写零依赖 stdio JSON-RPC `handle()`/`serve()`（initialize/
+  tools.list/tools.call → `stage`）+ 顶层 `.mcp.json` 注册落地；`run_id`/`root` 经环境注入。MCP-scope（能否
+  限 reflector 可见）仍依 Phase 0 spike，现取顶层注册 + 运行时 scope 的安全退路（architecture.md line 95）。
 - [ ] **promoter LED watermark + create anchor 接 CAP**（Phase 4）：v1 LED 条目 = `{action, reason, evidence}`、
   无 watermark；create 的 sidecar `anchor` 由调用方入参、缺省 0。CAP（per-turn 计数）建好后供真值。
 - [ ] **promoter 逐条幂等 watermark**（与 intent_queue 粒度定稿同）：v1 整 run `clear`，崩溃极窗（land 与
@@ -52,9 +50,14 @@
 - [x] **CAP 触发裁决 → 真 spawn 接 Phase 5**：`hook/spawn.py` 落地——确定性拼三件套（脱敏窗 + 两层描述索引 +
   注入式 `format_spec`）→ 子会话 spawn（递归 guard + run_id/root 环境注入）→ 接 `promoter.drain`；跨进程闭环由
   fake-reflector system 测覆盖。
-- [ ] **spawn 的 host-detach + transcript 上界接 Phase 7**：`run()` 现是同步作业体（spawn→wait→drain）；
-  「不堵宿主 `Stop`」的顶层后台启动归 Phase 7 dispatch。触发→读取 race 的 transcript 上界仍 v0 容忍
-  （随 spawn 带上界，cap.md 待解）。
+- [x] **spawn 的 host-detach（Phase 7 落）**：dispatch 触发后经 `subprocess.Popen(start_new_session=True)`
+  detached 起 `python -m autoharness.hook.spawn`，宿主 `Stop` 立即返回不堵。仍待:触发→读取 race 的
+  transcript 上界精确化仍 v0 容忍（随 spawn 带上界，cap.md 待解）；真宿主 detach + Python 环境一致性见 E7。
+- [ ] **marketplace 单仓自托管 vs 独立 repo**：现取单仓（`.claude-plugin/marketplace.json` 指本仓根 plugin，
+  `/plugin marketplace add tigerless-labs/autoharness` 即装），偏离 architecture.md「独立 marketplace repo」。
+  独立 repo 仅在要和代码仓解耦发布时才需；现单仓够用，留作发布期决策。
+- [ ] **plugin 无 pyproject、靠 `PYTHONPATH=${CLAUDE_PLUGIN_ROOT}/src` + 宿主 `python3`**：依赖宿主 Python
+  可跑本包（零三方依赖故仅需 stdlib）。宿主 Python 缺失/版本不符的兜底（自带解释器 / 装包）留 E7 实测后定。
 - [ ] **公开发布的语言切换（发布期，非现在）.** 现在中文做工作语言；公开时需英文。**不要常驻双分支**
   （dev 中文藏 + public 英文活 → 永久手动同步，违反「一个事实一个权威源」）。两条可选：① 一次性切换——
   发布日做一次中→英全量翻译，之后工作语言换英文（中文留 git 历史）；② 翻译当发布步骤——继续用中文，

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "stage_skill": {
+      "command": "python3",
+      "args": ["-m", "autoharness.stage_skill.server"],
+      "env": { "PYTHONPATH": "${CLAUDE_PLUGIN_ROOT}/src" }
+    }
+  }
+}

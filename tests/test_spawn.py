@@ -2,7 +2,7 @@ from pathlib import Path
 
 from autoharness import config
 from autoharness.hook import spawn
-from autoharness.lib import ledger, sidecar, skill_store
+from autoharness.lib import layer, ledger, sidecar, skill_store
 
 _SRC = str(Path(__file__).resolve().parents[1] / "src")
 
@@ -11,6 +11,18 @@ GOOD = "---\nname: {n}\ndescription: {d}\n---\n# {n}\nbody\n"
 
 def _roots(tmp_path):
     return {"global": tmp_path / "g", "project": tmp_path / "p"}
+
+
+def test_main_parses_argv_and_runs(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.capture, "window", lambda tp, n, **k: f"WIN[{tp}|{n}]")
+    seen = {}
+    monkeypatch.setattr(spawn, "run",
+                        lambda w, rid, **k: seen.update(w=w, rid=rid, roots=k["roots"]))
+    spawn.main(["/t.jsonl", "5", "run-9", str(tmp_path / "p"), str(tmp_path / "g")])
+    assert seen["w"] == "WIN[/t.jsonl|5]"
+    assert seen["rid"] == "run-9"
+    assert seen["roots"][layer.PROJECT] == tmp_path / "p"
+    assert seen["roots"][layer.GLOBAL] == tmp_path / "g"
 
 
 # --- U3 deterministic assembly ---

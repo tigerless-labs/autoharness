@@ -31,7 +31,7 @@ type: design
 reflector **不写任何 skill 树**，禁碰 live（两层 `~/.claude/skills` + `./.claude/skills`）与非自产符号。纵深：
 
 1. **主（结构）**：reflector **没有通用 Write/Edit**，唯一写工具 [stage_skill](stage-skill.md) **只 append intent 队列、不碰 skill 树**——"动到 live / 用户 skill"在此**结构上不可能**；连 staging 文件都不写（成型 / 落盘全在 promoter）。
-2. **backstop（防御纵深）**：reflector **自带的 PreToolUse hook**（subagent frontmatter 的 `hooks` 字段）兜底校验写路径，**越出 intent 队列即 deny**——防 tool 有 bug 或意外写路径。把 [lifecycle-by-provenance](../ideas/lifecycle-by-provenance.md)（只动自产）+ [additive-over-native-skill](../ideas/additive-over-native-skill.md)（不碰原生 / 用户 skill）+ 安全铁律落在**写入 chokepoint**。
+2. **backstop（防御纵深）**：**plugin 顶层 `hooks/hooks.json` 的 PreToolUse hook**按 reflector 的 `agent_type` 匹配，对其 `Write`/`Edit` 调用 deny（exit 2 / stdout JSON `permissionDecision`）——防 tool 有 bug 或意外写路径。**不放 agent frontmatter**：plugin-shipped agent 的 `hooks`/`mcpServers` 字段被宿主出于安全忽略（[E6](../../../experiments/E6_platform_contracts/results.md) S1），故 backstop 退到顶层、按 `agent_type` 精确匹配（S3 确认子代理自身工具调用触发 PreToolUse 且 payload 带 `agent_type`）。把 [lifecycle-by-provenance](../ideas/lifecycle-by-provenance.md)（只动自产）+ [additive-over-native-skill](../ideas/additive-over-native-skill.md)（不碰原生 / 用户 skill）+ 安全铁律落在**写入 chokepoint**。
 
 > 分工：reflector 只发 intent、进不了 live；live 的写由 [validate-store](validate-store.md) 的 promoter 独占（admission：内存校验 → 原子落盘），按 `created_by:agent` 收口。
 
@@ -40,11 +40,13 @@ reflector **不写任何 skill 树**，禁碰 live（两层 `~/.claude/skills` +
 - **触发**：主会话 hook（episode 边界，如 Stop）在 **detached 后台作业**里 spawn reflector（仿 ECC `nohup` daemon，不堵关键路径），spawn 返回后接 [validate-store](validate-store.md) 的 promoter。
 - **递归 guard**：spawn 出的子会话会再触发 hooks；用 `CLAUDE_CODE_CHILD_SESSION`（Claude Code 自设、子会话才有）在反思触发 hook 里现判——有值即 exit，防"反思套反思"。
 
-## 待解 / 动手前实测
+## 平台契约（[E6](../../../experiments/E6_platform_contracts/results.md) 已闭）
 
-- **`--agent` 省略 `tools` 是否全继承**：docs 含糊；我们反正显式写最小 `tools`，影响小，但值得一测。
-- **subagent 自带 hook 是否对它自身的工具调用生效**（而非只主会话）：实测确认，这是写范围精闸成立的前提。
-- **PreToolUse deny 的确切协议**（exit code vs JSON decision）：实测确认能真挡住 Write。
-- **安装位 = plugin 内组件**：随 plugin 作为 `<plugin>/agents/reflector.md` 分发（Claude Code 从 plugin 处发现），**不拷进用户 `~/.claude/agents/`**（那是第二份源、脱离 plugin 版本、污染用户命名空间）。待实测：`claude -p --agent` 从 plugin 的 hook spawn 时能否解析 plugin 内（命名空间化 `plugin:reflector`）的 agent；与 [`architecture.md`](architecture.md) 的「单 plugin」落位一致。
+- **S1**：plugin-shipped agent 的 `hooks`/`mcpServers` frontmatter 被忽略 → backstop 退顶层 `hooks.json`、stage_skill 退顶层 `.mcp.json`。
+- **S3**：子代理自身工具调用触发 PreToolUse，payload 带 `agent_id`/`agent_type`；deny = exit 2（stderr）或 exit 0 + stdout JSON `permissionDecision: deny`。
+- **S4**：省略 `tools` 全继承（故仍显式写最小集）；plugin agent 解析为 `plugin:reflector`；**SubagentStop 与 Stop 分立**——reflector 自身 Stop 自动转 SubagentStop，故 CAP 只数主 Stop、reflector 完成不灌计数（与 `CLAUDE_CODE_CHILD_SESSION` 递归 guard 双保险）。
+- **安装位**：`agents/reflector.md` 作 plugin 内组件随装就位，**不拷进用户 `~/.claude/agents/`**。
+
+残留留 live spike（行为质量，非平台能力）：reflector compare-first 真改优于建、最小权限不越界、backstop 运行时真 deny 一次 `Write`（归 `experiments/`、Phase 5 live）。
 
 provenance：[additive-over-native-skill](../ideas/additive-over-native-skill.md)（零侵入 + 最小权限）、[lifecycle-by-provenance](../ideas/lifecycle-by-provenance.md)（只动自产）、[episode-boundary-reflection](../ideas/episode-boundary-reflection.md)（REF 内容）；运行形态对照 [Hermes](../sources/github/nousresearch-hermes-agent.md)（进程内 fork）、[ECC](../sources/github/affaan-m-ecc.md)（spawn `claude -p` haiku 自写 + daemon 触发）。

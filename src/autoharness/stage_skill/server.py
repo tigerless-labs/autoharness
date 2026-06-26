@@ -15,11 +15,17 @@ wire 形态又依 Phase 0 MCP-scope spike 结论。本模块现交付确定性�
 + stage（强制权威，条件式 body|delta 结构在此、非 JSON Schema 能净表达）。run_id/root 由
 spawn（Phase 5）经环境注入，此处收作入参。
 """
+import json
+import os
+import sys
+
 from autoharness import config
 from autoharness.lib import intent_queue, layer, validate
 
 _ACTIONS = ("create", "update", "patch", "delete")
 _BODY_ACTIONS = ("create", "update")
+TOOL_NAME = "stage_skill"
+_PROTOCOL_VERSION = "2024-11-05"
 
 TOOL_SCHEMA = {
     "type": "object",
@@ -113,3 +119,55 @@ def stage(params, *, run_id, root=None):
     except ValueError as exc:
         return {"ok": False, "errors": [("queue", str(exc))], "intent": None}
     return {"ok": True, "errors": [], "intent": intent}
+
+
+def _ok(req_id, result):
+    return {"jsonrpc": "2.0", "id": req_id, "result": result}
+
+
+def _err(req_id, code, message):
+    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+
+
+def handle(request, *, run_id, root=None):
+    method = request.get("method")
+    req_id = request.get("id")
+    if method == "initialize":
+        return _ok(req_id, {"protocolVersion": _PROTOCOL_VERSION,
+                            "capabilities": {"tools": {}},
+                            "serverInfo": {"name": TOOL_NAME, "version": "0.1.0"}})
+    if method == "tools/list":
+        return _ok(req_id, {"tools": [{"name": TOOL_NAME,
+                                       "description": "reflector 唯一写入面：emit-intent，只 append "
+                                                      "per-run intent 队列、不碰 skill 树",
+                                       "inputSchema": TOOL_SCHEMA}]})
+    if method == "tools/call":
+        params = request.get("params") or {}
+        if params.get("name") != TOOL_NAME:
+            return _err(req_id, -32602, f"unknown tool: {params.get('name')}")
+        out = stage(params.get("arguments") or {}, run_id=run_id, root=root)
+        return _ok(req_id, {"content": [{"type": "text",
+                                         "text": json.dumps(out, ensure_ascii=False, default=list)}],
+                            "isError": not out["ok"]})
+    if req_id is None:
+        return None
+    return _err(req_id, -32601, f"method not found: {method}")
+
+
+def serve(stdin=None, stdout=None):
+    stdin = stdin or sys.stdin
+    stdout = stdout or sys.stdout
+    run_id = os.environ.get(config.RUN_ID_ENV, "")
+    root = os.environ.get(config.PROJECT_ROOT_ENV) or None
+    for line in stdin:
+        line = line.strip()
+        if not line:
+            continue
+        response = handle(json.loads(line), run_id=run_id, root=root)
+        if response is not None:
+            stdout.write(json.dumps(response) + "\n")
+            stdout.flush()
+
+
+if __name__ == "__main__":
+    serve()
