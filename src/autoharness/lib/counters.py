@@ -50,3 +50,9 @@ def bump_session(session_id, root=None):
 
 def reset_session(session_id, root=None):
     atomic.write_text(_session_path(session_id, root), "0")
+
+
+def clear_session(session_id, root=None):
+    p = _session_path(session_id, root)
+    if p.exists():
+        p.unlink()

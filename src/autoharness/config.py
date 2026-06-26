@@ -16,3 +16,5 @@ CAPACITY = {layer.GLOBAL: 20, layer.PROJECT: 50}  # ponytail: 占位，待标定
 _LIB = Path(__file__).parent / "lib"
 REDACTION_RULES = _LIB / "redaction_rules.toml"  # secret/PII 规则集，CAP egress + LED 单一来源
 FORMAT_SPEC = _LIB / "format_spec.md"            # #416 authoring + lint 单一来源
+
+CHILD_SESSION_ENV = "CLAUDE_CODE_CHILD_SESSION"  # 平台递归 guard 信号：spawn 置、CAP hook 读（单一来源）
