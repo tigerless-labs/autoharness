@@ -4,7 +4,7 @@ type: design
 ---
 # 模块设计：stage_skill（reflector 的提案工具，emit-intent）
 
-[reflector](reflector-subagent.md) 的**唯一写入面**——一个 **subagent-scoped 的 MCP 工具**。但它**不写 skill 树、不碰 live、也不写 staging**：只把一次 skill 改动**结构化地发成 intent**、append 进 per-run intent 队列。成型 / 校验 / 落盘全在确定性 [promoter](validate-store.md)（admission 模型）。读用宿主内建 `Read` / `Grep`；改动只此一途、**去掉通用 Write/Edit**。
+[reflector](reflector-subagent.md) 的**唯一写入面**——一个 **subagent-scoped 的 MCP 工具**。但它**不写 skill 树、不碰 live、也不写 staging**：只把一次 skill 改动**结构化地发成 intent**、append 进 per-run intent 队列。成型 / 校验 / 落盘全在确定性 [promoter](validate-store.md)（admission 模型）。读用宿主内建 `Read` / `Grep` / `Glob`；改动只此一途、**去掉通用 Write/Edit**。
 
 ## 为什么是 tool，不是通用 Write/Edit
 

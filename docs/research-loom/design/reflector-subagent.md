@@ -15,7 +15,7 @@ type: design
 ## 定义要点
 
 - **便宜模型**（如 haiku）：reflection 不需主模型。
-- **最小权限工具**：**读**用内建 `Read` / `Grep`（读 episode / 现有 skill）；**改动**只走自产的 **[stage_skill](stage-skill.md)**（发 intent、append per-run 队列、**不碰任何 skill 树**），**去掉通用 Write/Edit**，**不给 Bash / 网络**。subagent 默认继承宿主全部工具，故必须**显式收窄**（deny-by-default、least privilege，[additive-over-native-skill](../ideas/additive-over-native-skill.md)）。执行类（跑命令验证）留到 dry-run 阶段再按需加。
+- **最小权限工具**：**读**用内建 `Read` / `Grep` / `Glob`（`Read` 读已知路径、`Grep` 搜内容、`Glob` 枚举两层 skill 树 / 候选 `references/`——compare-first 细看现有 skill 用；episode 与描述索引靠注入、不靠工具取）；**改动**只走自产的 **[stage_skill](stage-skill.md)**（发 intent、append per-run 队列、**不碰任何 skill 树**），**去掉通用 Write/Edit**，**不给 Bash / 网络**。subagent 默认继承宿主全部工具，故必须**显式收窄**（deny-by-default、least privilege，[additive-over-native-skill](../ideas/additive-over-native-skill.md)）。执行类（跑命令验证）留到 dry-run 阶段再按需加。
 - **正文** = compare-first 的 review + authoring 提示（仿 Hermes `_SKILL_REVIEW_PROMPT`；compare-first 偏好序见 [ref](ref.md)）。**格式与创建要求 = 一份单独维护的权威 spec**（必填 frontmatter / 命名 / 结构 / references 约定 / 放哪层 / 不可捕获项），**不靠"读现有 skill 当样例"推断**——冷启动可能没有、现有（含 native）格式可能不合本 spec。这份 spec **同时喂本正文（REF 按它写）与 [validate-store](validate-store.md) 的 #416 linter（按它验）**，是同一契约的两面、单一来源（config 一类）、保持同步。现有 skill 只供 compare-first（去重 / 放哪层），**不当格式源**。
 
 ## 文件编辑范围限制（钉死写范围）
@@ -37,6 +37,6 @@ reflector **不写任何 skill 树**，禁碰 live（两层 `~/.claude/skills` +
 - **`--agent` 省略 `tools` 是否全继承**：docs 含糊；我们反正显式写最小 `tools`，影响小，但值得一测。
 - **subagent 自带 hook 是否对它自身的工具调用生效**（而非只主会话）：实测确认，这是写范围精闸成立的前提。
 - **PreToolUse deny 的确切协议**（exit code vs JSON decision）：实测确认能真挡住 Write。
-- **安装位**：`.claude/agents/` 团队可版本化、但本仓 `.claude/` 可能 git-ignore；产品负责装到用户 `.claude/agents/`。
+- **安装位 = plugin 内组件**：随 plugin 作为 `<plugin>/agents/reflector.md` 分发（Claude Code 从 plugin 处发现），**不拷进用户 `~/.claude/agents/`**（那是第二份源、脱离 plugin 版本、污染用户命名空间）。待实测：`claude -p --agent` 从 plugin 的 hook spawn 时能否解析 plugin 内（命名空间化 `plugin:reflector`）的 agent；与 [`architecture.md`](architecture.md) 的「单 plugin」落位一致。
 
 provenance：[additive-over-native-skill](../ideas/additive-over-native-skill.md)（零侵入 + 最小权限）、[lifecycle-by-provenance](../ideas/lifecycle-by-provenance.md)（只动自产）、[episode-boundary-reflection](../ideas/episode-boundary-reflection.md)（REF 内容）；运行形态对照 [Hermes](../sources/github/nousresearch-hermes-agent.md)（进程内 fork）、[ECC](../sources/github/affaan-m-ecc.md)（spawn `claude -p` haiku 自写 + daemon 触发）。
