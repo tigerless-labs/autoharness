@@ -29,21 +29,9 @@ symbols are judged by **invocation rate**, not elapsed time.
 
 A learning pipeline runs beside the host and keeps all of itself off the host's recall path.
 
-```mermaid
-flowchart LR
-    host["host agent"]
-    cap["CAP<br/>capture"]
-    ref["REF<br/>reflect"]
-    prom["promoter<br/>validate &amp; store"]
-    skills[(".claude/skills")]
-    mng["MNG"]
-    led[("LED")]
+<p align="center"><img src="docs/assets/pipeline.svg" alt="autoharness pipeline: host → CAP → REF → promoter → .claude/skills → host, with MNG and LED beside" width="760" /></p>
 
-    host -->|hooks| cap --> ref -->|intent| prom -->|pass| skills
-    skills -->|recall| host
-    mng --> skills
-    prom -.append.-> led
-```
+<sub>Diagram source: [`docs/assets/pipeline.mmd`](docs/assets/pipeline.mmd) — re-render to `pipeline.svg` after editing.</sub>
 
 - **Author and validator are separate.** REF only proposes an intent; it has no write tools. The
   promoter is the sole writer and gates every intent through a deterministic linter.
