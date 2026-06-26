@@ -1,6 +1,6 @@
 # testing — conventions and the per-file test map
 
-仓库目前无 pytest；Python 以 `experiments/` 下独立可运行脚本为约定。文档完整性由 `tools/` 下独立校验器守护：每个 `python3` 直接可跑、带 `--selftest` 对抗自检，断言**不变量**（链接可解析、frontmatter 合规），而非硬编码值。
+产品代码（`src/autoharness/`）以 pytest 测，每模块一份 `tests/test_<module>.py`、用 `tmp_path` fixture 不连外部服务、断言**关系/不变量**（reject 零落盘、原子 rename 无半态、率序）+ 红队用例（投毒挡、越权 reject、注入挡）；`experiments/` 下另有独立可运行脚本约定。文档完整性由 `tools/` 下独立校验器守护：每个 `python3` 直接可跑、带 `--selftest` 对抗自检，断言**不变量**（链接可解析、frontmatter 合规），而非硬编码值。
 
 ## Checkers（提交前运行）
 
@@ -14,5 +14,6 @@
 |---|---|
 | `docs/**` 链接完整性 | `tools/check_doc_links.py` |
 | `docs/research-loom/**` frontmatter 契约 | `tools/check_research_loom.py` |
+| `src/autoharness/<module>.py` | `tests/test_<module>.py`（pytest，`pytest -m "not live"`，`pythonpath = src`） |
 
-> **TODO**: 产品代码落地后补 `tests/test_<module>.py` 与（若引入）pytest 约定：fixtures over live services、断言关系/不变量、对抗用例。
+> 活宿主依赖（LLM 反思质量、hook/MCP 真生效、Skill 真触发）走 `@pytest.mark.live`，CI 排除、靠 fake reflector 在 CI 里测管道接缝（见 [`docs/plans/roadmap.md`](plans/roadmap.md) 三层测试策略）。

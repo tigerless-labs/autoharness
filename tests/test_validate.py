@@ -50,6 +50,18 @@ def test_create_exempt_from_self_produced():
     assert "self_produced" not in _families(validate.validate(GOOD_INTENT, GOOD_BODY))
 
 
+def test_delete_skips_body_checks_keeps_self_produced():
+    intent = {"action": "delete", "name": "foo", "reason": "r", "evidence": "e"}
+    assert "self_produced" in _families(validate.validate(intent, None, target_is_agent_created=False))
+    v = validate.validate(intent, None, target_is_agent_created=True)
+    assert v["ok"], v["findings"]
+
+
+def test_delete_missing_led_rejected():
+    intent = {"action": "delete", "name": "foo", "reason": "", "evidence": ""}
+    assert "led" in _families(validate.validate(intent, None, target_is_agent_created=True))
+
+
 def test_referenced_py_syntax_error_rejected(tmp_path):
     (tmp_path / "helper.py").write_text("def f(:\n")  # 语法错
     body = "---\nname: foo\ndescription: d\n---\nSee `helper.py` for details.\n"
