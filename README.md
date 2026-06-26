@@ -42,7 +42,7 @@ flowchart LR
     host -->|hooks| cap --> ref -->|intent| prom -->|pass| skills
     skills -->|recall| host
     mng --> skills
-    skills -.-> led
+    prom -.append.-> led
 ```
 
 - **Author and validator are separate.** REF only proposes an intent; it has no write tools. The
