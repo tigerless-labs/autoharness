@@ -1,67 +1,125 @@
-# autoharness
+<h1 align="center">autoharness</h1>
 
-**A per-symbol maintenance optimizer for an agent's skill layer — it learns skills from real
-runs and lets them earn their keep by being *adhered to in use*, not by an offline eval score.**
+<p align="center"><strong>A per-symbol maintenance optimizer for an agent's skill layer — it learns skills from real runs and lets them earn their keep by being adhered to in use, not by an offline eval score.</strong></p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/status-design--stage-orange.svg" alt="status" />
+  <img src="https://img.shields.io/badge/lifecycle-zero--daemon-blue.svg" alt="zero daemon" />
+  <img src="https://img.shields.io/badge/form-Claude%20Code%20plugin-brightgreen.svg" alt="plugin" />
+  <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" />
+</p>
+
+Agents accumulate skills, and the skill layer needs maintaining. Most approaches either grow it
+unbounded or age skills out on a wall-clock timer behind a resident daemon — punishing a skill for
+sitting unused even when the host never had a chance to use it.
 
 autoharness watches a host agent's own sessions, distills each episode into a skill, and lands it
 into the native skill directory (`.claude/skills`) where the host recalls it normally. Skills that
-keep getting invoked survive; ones that go unused or get contradicted are archived. It runs as a
-**pure-additive, zero-daemon Claude Code plugin** — it never touches the host's skill load/recall
-path, only observes via hooks and writes to disk.
+keep getting invoked survive; ones that go unused or get contradicted are archived. It runs
+**beside** the host — never touching the skill load or recall path, only observing through hooks and
+writing to disk. There is **no daemon**: the lifecycle recomputes lazily at session start, and
+symbols are judged by **invocation rate**, not elapsed time.
 
-Closest neighbor is [Hermes-Agent](https://github.com/NousResearch/Hermes-Agent); the wedge:
-Hermes ages skills out on a wall-clock timer behind a resident daemon. autoharness has **no daemon**
-(lazy `SessionStart` recompute) and judges symbols by **invocation rate**, not elapsed time — so on
-ephemeral hosts a skill is never punished for "never had the chance to be used."
-
-> **Status: design-stage.** The architecture is settled and documented; the plugin is not built yet.
-> No install path exists today — see [docs/](docs/index.md) for the design, [docs/plans/roadmap.md](docs/plans/roadmap.md) for the build order.
-
----
+> [!NOTE]
+> **Design-stage.** The architecture is settled and documented; the plugin is not built yet, so
+> there is no install path today. See [docs/](docs/index.md) for the design and
+> [docs/plans/roadmap.md](docs/plans/roadmap.md) for the build order.
 
 ## How it works
 
-A learning pipeline runs *beside* the host. The host's native skill recall is untouched.
+A learning pipeline runs beside the host and keeps all of itself off the host's recall path.
+
+```
+              recall (native, untouched)
+   ┌──────────────────────────────────────────────┐
+   │            host agent session                 │
+   └───────────────────────┬──────────────────────┘
+                           │  hooks observe each turn
+                           ▼
+   CAP capture ──▶ REF reflect ──▶ promoter · validate & store
+   dumb pipe       compare-first    lint in memory; atomic write on pass
+   redact at exit  proposes intent              │ pass only
+                                                ▼
+   MNG archives weakest ──▶  .claude/skills (live symbols)
+                                                │
+                                                └──▶ LED ledger (per-symbol sidecar)
+```
+
+- **Author and validator are separate.** REF only proposes an intent; it has no write tools. The
+  promoter is the sole writer and gates every intent through a deterministic linter.
+- **Nothing lands until it passes.** The promoter shapes and lints the intent in memory and only
+  then does an atomic rename into the live skill directory — no half-written skills on disk.
+- **The host is never modified.** Symbols are plain native skills; the host recalls them by its own
+  name-and-description mechanism, exactly as if a human had written them.
 
 | Component | Role |
 |---|---|
-| **CAP** capture | Hook-driven dumb pipe: grabs each turn (user input + agent output + tool I/O), redacts at egress, points back at the host log instead of copying it. |
-| **REF** reflect | At an episode boundary, **compare-first**: reads the existing skill index, decides add / merge / patch / delete, and emits an *intent* (body or delta + reason/evidence). It can only propose — it has no write tools. |
-| **promoter** validate·store | The only writer. Shapes the intent in memory, runs a deterministic linter (safety, structure, ledger, completeness, self-authored-only), and **only on pass** does an atomic rename into the live skill dir. **Validate-before-any-write** — nothing hits disk until it's clean. |
-| **MNG** lifecycle | Deterministic, daemon-free. Ranks symbols by invocation rate per provenance layer; protects new ones (probation), archives the weakest when a mature pool is over capacity. Archives, never deletes. |
-| **LED** ledger | Per-symbol append-only sidecar: why each symbol was born/changed, with evidence and a reflection watermark. Kept out of the skill body so recall stays clean. |
+| **CAP** · capture | Hook-driven dumb pipe: grabs each turn (user input, agent output, tool I/O), redacts at egress, points back at the host log instead of copying it. |
+| **REF** · reflect | At an episode boundary, compare-first: reads the existing skill index, decides add / merge / patch / delete, and emits an intent (body or delta, plus reason and evidence). Proposes only. |
+| **promoter** · validate·store | The only writer. Shapes the intent in memory, runs a deterministic linter (safety, structure, ledger, completeness, self-authored-only), and on pass does an atomic rename into the live skill directory. |
+| **MNG** · lifecycle | Deterministic and daemon-free. Ranks symbols by invocation rate per layer, shields new ones during probation, archives the weakest when a mature pool is over capacity. Archives, never deletes. |
+| **LED** · ledger | Per-symbol append-only sidecar recording why each symbol was born or changed, with evidence and a reflection watermark. Kept out of the skill body so recall stays clean. |
 
-```
-┌─── host agent (host-agnostic) — autoharness is pure-additive, zero-intrusion ───┐
-│   session runs   ·   native skill recall (.claude/skills; name+desc → recall)   │
-└──┬───────────────────────────────────────────────────────────────────▲─────────┘
-   │ CAP: hooks observe                              symbols = native skills, host recalls them
-   ▼                                                                     │
- CAP capture ──► REF reflect (compare-first, ──► promoter (admission: validate in memory,
- (hooks)         emits intent, no write tools)    atomic write on pass) ─┘
-   │ trace pointer                                      │ append LED
-   ▼                                          MNG lifecycle      LED ledger (sidecar)
- [host log]
-```
+## Design
 
-**Invariants:** pure-additive / zero-intrusion · author ≠ validator (REF proposes, a deterministic
-linter gates) · precise & safe → deterministic, judgment → LLM · validate-before-any-write ·
-model only proposes, landing is the promoter's alone.
+### Adherence over eval
 
-The final shape is a **single Claude Code plugin**: one copy of the code, execution only from the
-plugin's hook layer, and only data/state split global vs repo. See [docs/research-loom/design/architecture.md](docs/research-loom/design/architecture.md).
+A skill earns survival by being followed and working across later interactions, not by a one-shot
+offline score. There is no oracle and no held-out benchmark on the active path; the signal is the
+host's own usage.
+
+### Zero-daemon lifecycle
+
+No background process. The lifecycle recomputes at session start and ranks symbols by invocation
+rate (calls since creation, per layer) rather than wall-clock age — so on ephemeral hosts a symbol
+is never punished for never having had the chance to be used.
+
+### Pure-additive, zero-intrusion
+
+Enhancement happens only through a single plugin hook dispatcher plus writes to the skill
+directory. Hooks observe and lazily curate; they never alter the host's skill registration or
+recall path.
+
+### Validate-before-any-write
+
+Precise and safe concerns (safety scan, commit, name collisions) are deterministic; judgment calls
+(duplication, correctness, value) are the LLM's. The model only proposes — landing is the
+deterministic promoter's alone, and nothing reaches disk before it passes.
+
+### One plugin, data split by layer
+
+The final form is a single Claude Code plugin: one copy of the code, execution only from the hook
+layer, and only data and state split global versus repo. See
+[architecture](docs/research-loom/design/architecture.md).
+
+## Why not just let skills accumulate, or age them out on a timer?
+
+Unbounded growth degrades recall — the more near-duplicate descriptions compete, the worse the host
+picks. Timer-based archival assumes a resident process and a host that runs continuously; on
+ephemeral, per-invocation hosts, elapsed time wrongly condemns symbols that simply had no turn to be
+used. autoharness keeps the layer bounded by adherence instead.
+
+| | Grow unbounded | Timer + daemon (e.g. [Hermes-Agent](https://github.com/NousResearch/Hermes-Agent)) | autoharness |
+| --- | --- | --- | --- |
+| Bounds the skill layer | No | Yes | Yes |
+| Needs a resident daemon | No | Yes | No |
+| Survival signal | None | Wall-clock inactivity | Invocation rate in use |
+| Fair on ephemeral hosts | n/a | No | Yes |
+| Author separated from validator | n/a | No | Yes |
 
 ## Documentation
 
 | | |
 |---|---|
 | [docs/](docs/index.md) | Documentation map — single entry point. |
-| [design spine](docs/research-loom/design/spine.md) | Principle + pipeline + global invariants + architecture diagram. |
-| [architecture](docs/research-loom/design/architecture.md) | Code structure / file tree of the plugin. |
-| [research-loom](docs/research-loom/index.md) | The literature→design workspace: every cited source, synthesized into the design across five provenance-linked layers. |
+| [design spine](docs/research-loom/design/spine.md) | Principle, pipeline, global invariants, architecture diagram. |
+| [architecture](docs/research-loom/design/architecture.md) | Code structure and file tree of the plugin. |
+| [research-loom](docs/research-loom/index.md) | The literature-to-design workspace: every cited source synthesized into the design across five provenance-linked layers. |
 | [roadmap](docs/plans/roadmap.md) | Implementation roadmap, test strategy, CI gates. |
 | [TODO](docs/TODO.md) | Tracked follow-ups. |
 
+Built by Tigerless Labs.
+
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE)
