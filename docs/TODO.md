@@ -39,15 +39,18 @@
   clear 之间）补处理会重 append 同一 LED 条目（SKILL.md 写幂等、LED 非幂等）。逐 intent watermark 待队列粒度定。
 - [ ] **promoter 跨进程单写者锁**（与 sidecar/ledger 并发锁、mng 待解合一）：v1 单进程同步即「串行」，
   两 run 并发同改一 skill 的锁粒度（last-writer）待定。
-- [ ] **delete 归档 = 移进 `.archive`（Phase 2 落）**；最终「交 MNG 归档」的退役编排（保留期 / GC）属 Phase 6 lifecycle。
+- [x] **delete 归档 + MNG 退役编排（Phase 6 落）**：`lib/lifecycle.py`（率 + 缓刑 + 容量竞争判定）+
+  `hook/on_session_start.py`（惰性现算 → 逐个 `skill_store.archive`）+ `skill_store.restore`（可逆复活）落地。
+  设计「只归档不删除」故无 `.archive` 保留期 / GC——archived 永久可 restore，非待 GC。
 - [ ] **Phase 5 reflector 正文借 Hermes skill-create review-fork prompt**：`agents/reflector.md` 的 compare-first
   review + authoring 正文以 Hermes 后台 fork 的创建/复盘 prompt 为蓝本（`_spawn_background_review` 的
   `_SKILL_REVIEW_PROMPT` / `build_learn_prompt`，见 [hermes 源卡](research-loom/sources/github/nousresearch-hermes-agent.md)），
   在 Phase 5 补；改写要点：去掉 Hermes 进程内 fork / 直接写盘假设（我方 reflector 只发 intent、碰不到盘），
   接我方 compare-first 偏好序 + 单一来源 `format_spec`。设计已记「仿 `_SKILL_REVIEW_PROMPT`」于
   [reflector-subagent](research-loom/design/reflector-subagent.md)。
-- [ ] **CAP 孤儿会话计数 GC 接 Phase 6**：崩溃 session 的 `session-<id>` 计数器残留，走 `on_session_start`
-  惰性扫删——该文件在 Phase 6（MNG）建，CAP 出 `clear_session` 原语先备。见 [cap](research-loom/design/cap.md) 待解。
+- [ ] **CAP 孤儿会话计数 GC（policy 仍缺存活信号）**：`on_session_start` 已建（Phase 6），但「哪个
+  `session-<id>` 是孤儿」需会话存活信号——朴素扫删会误删并发会话的活计数，故 GC 暂不接进 `on_session_start`。
+  `clear_session` 原语已备（Phase 4），等存活信号再落。见 [cap](research-loom/design/cap.md) 待解。
 - [ ] **CAP 触发裁决 → 真 spawn 接 Phase 5**：Phase 4 `on_stop`/`on_session_end` 只出「是否触发 + 窗口 N」、
   `capture.materialize` 备好脱敏窗物化；detached 后台 spawn reflector 由 Phase 5 `hook/spawn.py` 接（触发→读取
   race 的 transcript 上界也随 spawn 带，cap.md 待解）。
