@@ -5,9 +5,6 @@
 
 - [ ] **Measure interrogative-filter precision at scale** (Phase 2 entry). E2 sampled precision
   by hand (~5% → ~50%); needs a labelled measurement across projects under `experiments/`.
-- [ ] **Applicability-estimator calibration** (Phase 2 entry). The omission denominator
-  (`docs/design/attribute.md`) is unvalidated — calibrate against held-out adherence the user
-  confirms before any prose-rule omission verdict ships.
 - [ ] **Locate the commit-signature instruction symbol.** E3's conflict case needs its source
   symbol identified (system prompt / settings / output-style) so Phase 0 can target the override.
 - [ ] **Resolve the live signature conflict for this repo.** The harness instruction to add

@@ -30,15 +30,16 @@
 - subagent 自带 `PreToolUse` hook 是否对其自身工具调用生效；deny 的确切协议（exit code vs JSON）（[reflector-subagent](../research-loom/design/reflector-subagent.md)）。
 - `--agent` 省略 `tools` 是否全继承；plugin 内 `plugin:reflector` 能否被 hook spawn 解析（[reflector-subagent](../research-loom/design/reflector-subagent.md)）。
 - learned skill 被用是否走 `Skill` 工具、触发 `PreToolUse(Skill)`，payload 是否带解析后符号身份（[mng](../research-loom/design/mng.md)，率分子前提）。
+- `Stop` 触发与 API 请求是否一一对应——定清「一次请求」（一个 turn 多次模型调用 / 重试各算几次），锁定 MNG 分母粒度（[mng](../research-loom/design/mng.md)，率分母前提）。
 - session-id→transcript 发现充分；compaction 下 tail-N 取到原始轮次（[cap](../research-loom/design/cap.md)）。
 
 **测试方法**：手点 / 脚本 harness 在真 Claude Code 上跑，每项落 `experiments/` 一条 evidence；**不进 CI**。**退出条件**：每个 spike 有 yes/no + 投递决策。
 
 ## Phase 1 — config + `lib/` write-once 原语（地基）
 
-`config.py` 单点（节奏 / 成熟阈值 / 上限分层 / 红线集 + format_spec 指针）+ `layer` / `skill_store` / `sidecar` / `ledger` / `counters` / `redact` / `validate` / `skills_guard`。最底层、全管道复用、纯确定性。
+`config.py` 单点（节奏 / 成熟阈值 / 上限分层 / 红线集 + format_spec 指针）+ `layer` / `skill_store` / `sidecar` / `ledger` / `counters` / `redact` / `validate` / `skills_guard` / `intent_queue`。最底层、全管道复用、纯确定性。**契约数据本身也是本 Phase 交付物、非只建消费者**：`format_spec`（必填结构 spec，REF 写 + #416 验同源）、`redaction_rules`（secret/PII 规则集，CAP egress + LED 同源）。
 
-**测试（unit）**：`layer` 由入参解析两层落盘位；`skill_store` 原子写 + 两层 `find` + 应用 delta；`sidecar` 单实现读写 created_by/计数/verification；`ledger` append-only（只增不改）；`counters` 按层分子分母、O(1) 读改写；`redact` 红线消费（窗口切片 / LED 证据出口）；`validate` 六类 linter 跑在内存成型结果上；`skills_guard` 六族正则（exfiltration/injection/destructive/persistence/network/obfuscation）。**红队**：`skills_guard` 挡投毒 / 指令型注入；`redact` 不漏 PII / secret；global 含 repo-local 标识被 `validate` 降级或 reject。
+**测试（unit）**：`layer` 由入参解析两层落盘位；`skill_store` 原子写 + 两层 `find`（同名跨两层→报错消歧）+ 应用 delta；`sidecar` 单实现读写 created_by/计数/verification；`ledger` append-only（只增不改）；`intent_queue` append / drain / 启动 sweep 孤儿（writer=stage_skill、reader=promoter 同源一份）；`counters` 按层分子分母、O(1) 读改写；`redact` 红线消费（窗口切片 / LED 证据出口）；`validate` 六类 linter 跑在内存成型结果上；`skills_guard` 六族正则（exfiltration/injection/destructive/persistence/network/obfuscation）。**红队**：`skills_guard` 挡投毒 / 指令型注入；`redact` 不漏 PII / secret；global 含 repo-local 标识被 `validate` 降级或 reject。
 
 ## Phase 2 — promoter 校验·存储（admission 闸 + 原子落盘）★安全 chokepoint
 
@@ -98,3 +99,4 @@
 - Phase 0 的 spike 结论门禁 Phase 3/5/6 的 live 部分与投递形态；其确定性部分（schema、拼装、率算）不等 spike、可先建先测。
 - CI 只跑确定性 + 管道（unit+system），live 全排除——**确定性侧零外部依赖即可全绿**，是合并门禁的实际内容。
 - config 标定值（成熟阈值 / 上限 / `reflect_every_n`）经验标定走 `experiments/`，测试断言关系不断绝对值。
+- **范围声明**：遵守度（adherence，[spine](../research-loom/design/spine.md) 的未建核心论点）**不在 Phase 0–7**、留后；本 roadmap 只覆盖 v1 的捕获 / 反思 / 准入 / 生命周期闭环。
