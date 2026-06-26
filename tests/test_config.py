@@ -16,3 +16,10 @@ def test_contract_data_pointers_named_in_lib():
     assert config.REDACTION_RULES.name == "redaction_rules.toml"
     assert config.FORMAT_SPEC.name == "format_spec.md"
     assert config.REDACTION_RULES.parent == config.FORMAT_SPEC.parent
+
+
+def test_spawn_pointers_present_and_distinct():
+    assert config.REFLECTOR_AGENT and isinstance(config.REFLECTOR_AGENT, str)
+    assert config.CLAUDE_BIN and isinstance(config.CLAUDE_BIN, str)
+    envs = {config.RUN_ID_ENV, config.PROJECT_ROOT_ENV, config.CHILD_SESSION_ENV}
+    assert len(envs) == 3 and all(e and isinstance(e, str) for e in envs)

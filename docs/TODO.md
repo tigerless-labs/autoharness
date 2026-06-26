@@ -42,18 +42,19 @@
 - [x] **delete 归档 + MNG 退役编排（Phase 6 落）**：`lib/lifecycle.py`（率 + 缓刑 + 容量竞争判定）+
   `hook/on_session_start.py`（惰性现算 → 逐个 `skill_store.archive`）+ `skill_store.restore`（可逆复活）落地。
   设计「只归档不删除」故无 `.archive` 保留期 / GC——archived 永久可 restore，非待 GC。
-- [ ] **Phase 5 reflector 正文借 Hermes skill-create review-fork prompt**：`agents/reflector.md` 的 compare-first
-  review + authoring 正文以 Hermes 后台 fork 的创建/复盘 prompt 为蓝本（`_spawn_background_review` 的
-  `_SKILL_REVIEW_PROMPT` / `build_learn_prompt`，见 [hermes 源卡](research-loom/sources/github/nousresearch-hermes-agent.md)），
-  在 Phase 5 补；改写要点：去掉 Hermes 进程内 fork / 直接写盘假设（我方 reflector 只发 intent、碰不到盘），
-  接我方 compare-first 偏好序 + 单一来源 `format_spec`。设计已记「仿 `_SKILL_REVIEW_PROMPT`」于
-  [reflector-subagent](research-loom/design/reflector-subagent.md)。
+- [x] **Phase 5 reflector 正文借 Hermes skill-create review-fork prompt**：`agents/reflector.md` 落地——
+  compare-first review + authoring 正文仿 Hermes `_SKILL_REVIEW_PROMPT`，去其进程内 fork / 直接写盘假设
+  （我方 reflector 只发 intent、碰不到盘），接 compare-first 偏好序 + 运行时注入的单一来源 `format_spec`；
+  最小权限工具集（无 Write/Edit/Bash）由 `tests/test_reflector_agent.py` 守。
 - [ ] **CAP 孤儿会话计数 GC（policy 仍缺存活信号）**：`on_session_start` 已建（Phase 6），但「哪个
   `session-<id>` 是孤儿」需会话存活信号——朴素扫删会误删并发会话的活计数，故 GC 暂不接进 `on_session_start`。
   `clear_session` 原语已备（Phase 4），等存活信号再落。见 [cap](research-loom/design/cap.md) 待解。
-- [ ] **CAP 触发裁决 → 真 spawn 接 Phase 5**：Phase 4 `on_stop`/`on_session_end` 只出「是否触发 + 窗口 N」、
-  `capture.materialize` 备好脱敏窗物化；detached 后台 spawn reflector 由 Phase 5 `hook/spawn.py` 接（触发→读取
-  race 的 transcript 上界也随 spawn 带，cap.md 待解）。
+- [x] **CAP 触发裁决 → 真 spawn 接 Phase 5**：`hook/spawn.py` 落地——确定性拼三件套（脱敏窗 + 两层描述索引 +
+  注入式 `format_spec`）→ 子会话 spawn（递归 guard + run_id/root 环境注入）→ 接 `promoter.drain`；跨进程闭环由
+  fake-reflector system 测覆盖。
+- [ ] **spawn 的 host-detach + transcript 上界接 Phase 7**：`run()` 现是同步作业体（spawn→wait→drain）；
+  「不堵宿主 `Stop`」的顶层后台启动归 Phase 7 dispatch。触发→读取 race 的 transcript 上界仍 v0 容忍
+  （随 spawn 带上界，cap.md 待解）。
 - [ ] **公开发布的语言切换（发布期，非现在）.** 现在中文做工作语言；公开时需英文。**不要常驻双分支**
   （dev 中文藏 + public 英文活 → 永久手动同步，违反「一个事实一个权威源」）。两条可选：① 一次性切换——
   发布日做一次中→英全量翻译，之后工作语言换英文（中文留 git 历史）；② 翻译当发布步骤——继续用中文，

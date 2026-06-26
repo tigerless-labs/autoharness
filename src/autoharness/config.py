@@ -20,3 +20,8 @@ REDACTION_RULES = _LIB / "redaction_rules.toml"  # secret/PII 规则集，CAP eg
 FORMAT_SPEC = _LIB / "format_spec.md"            # #416 authoring + lint 单一来源
 
 CHILD_SESSION_ENV = "CLAUDE_CODE_CHILD_SESSION"  # 平台递归 guard 信号：spawn 置、CAP hook 读（单一来源）
+
+REFLECTOR_AGENT = "autoharness:reflector"  # spawn 的 --agent 引用（plugin 命名空间，Phase 0 解析待实测）
+CLAUDE_BIN = "claude"                       # spawn 的子会话可执行；PATH 解析，测试可覆盖
+RUN_ID_ENV = "AUTOHARNESS_RUN_ID"           # spawn 经环境把 intent 队列 run_id 注入子会话（stage_skill 读）
+PROJECT_ROOT_ENV = "AUTOHARNESS_PROJECT_ROOT"  # 同上：repo 根（队列落盘位）
