@@ -4,7 +4,7 @@ type: design
 ---
 # 模块设计：CAP 捕获（哑管 + 脱敏出口 + 触发）
 
-spine 的 CAP 格，也是**唯一用 hook 的一步**。它不采集内容、不裁决，只做三件事：把宿主 log 当采集源**按指针引用**、在 egress 过**脱敏红线**、在 episode 边界**触发 REF**。裁决（抽模式 / 去重 / 改建删）全是 [ref](ref.md) 的。
+spine 的 CAP 格，**学习管道经 hook 观察的捕获入口**（MNG 的计数 / curation handler 另挂同一 dispatcher，非另起注册）。它不采集内容、不裁决，只做三件事：把宿主 log 当采集源**按指针引用**、在 egress 过**脱敏红线**、在 episode 边界**触发 REF**。裁决（抽模式 / 去重 / 改建删）全是 [ref](ref.md) 的。
 
 ## 不自存：宿主 log 即采集源
 

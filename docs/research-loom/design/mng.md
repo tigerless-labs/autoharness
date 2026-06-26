@@ -14,7 +14,7 @@ spine 的 MNG 格。决定每个**自产符号**活多久。**确定性**,惰性
 
 存活依据是**调用率** `rate = 被调次数 / 请求数`，不是墙钟。Claude Code 非常驻：墙钟在 agent 关着时照走、会冤枉「没机会被用」的符号；请求数只在真有交互时增长，是**机会相对**的度量、对临时宿主免疫。这正接 [dynamic-validation-lifecycle](../ideas/dynamic-validation-lifecycle.md) 的随用随验（时间是弱代理，率直接量有用度）。三层强度中 v1 吃到率，遵守度仍留后。
 
-- **分子 = 被调次数**：由 **CAP 的逐回合捕获供给**（CAP 本就抓 tool I/O、含 Skill 调用），计入被调符号自己的 sidecar、**不分层**（符号身份即决定其 sidecar 落哪层）。**MNG 不另注册 hook**——零侵入下不拥有宿主 loader、抄不了 Hermes 的 callsite 计数，改用 CAP 已观察到的 Skill 调用；纯观察、不拦截、不改召回链路（守 spine「hooks 仅 CAP」不变量）。
+- **分子 = 被调次数**：在 **`PreToolUse(Skill)` handler** 那刻 +1（该 handler 与 CAP 的 handler 同挂 plugin 单一 dispatcher、**不另起 hook 注册**），计入被调符号自己的 sidecar、**不分层**（符号身份即决定其 sidecar 落哪层）。零侵入下不拥有宿主 loader、抄不了 Hermes 的 callsite 计数，改在 hook 面埋点；纯观察、不拦截、不改召回链路。
 - **分母 = 创建以来的 API 请求数**（每个 turn 一次，**非人类对话次数**）：**repo 符号**用本 repo 的请求数，**global 符号**用全局所有请求数（它处处加载、机会即全部请求）。CAP 每回合给对应层的请求计数器 +1；符号 sidecar 记**创建锚**（创建时的层请求计数），分母 = 当前层计数 − 锚。
 
 计数随 sidecar 走层，promote / archive 的 `mv <符号目录>` 把分子原子带走（不抄 Hermes 单一共享计数文件：单文件每次 mv 还得另改它，而成员封顶后逐符号读 sidecar 排序的代价可忽略）。**与 LED 分工**：LED（append-only）记增删改的理由 / 证据，计数（可变）只记数。
@@ -36,7 +36,7 @@ spine 的 MNG 格。决定每个**自产符号**活多久。**确定性**,惰性
 
 ## 触发：全骑 session hook，零 daemon
 
-**MNG 自身不注册 hook**——全挂 CAP 已有的 hook（守 spine「hooks 仅 CAP」不变量），它只是 CAP 下游的逻辑（如 CAP 现已 dispatch 给 REF→promoter）。非常驻宿主无后台 sweep，故全部骑 session 生命周期：计数由 CAP 的逐回合捕获供给（分子 = CAP 抓到的 Skill 调用、分母 = CAP 每回合给对应层请求计数器 +1）；**重算率 + 淘汰**由 **CAP 的会话边界 hook dispatch 给 MNG** 惰性现算（`SessionEnd` flush 或下个 `SessionStart`，跑在召回之前，对「到上次会话结束为止」的全部账现算）。**每会话一次、不节流**：判定是确定性便宜活（读 ≤N 个 sidecar 比一下），无须 Hermes LLM curator 那套 idle / 间隔节流。**dormancy 不积压**：关机不动分母，回来不会突然清一批。
+**MNG 不另起 hook 注册**——它的 handler 与 CAP 的同挂 plugin 单一 dispatcher（守 spine 零侵入不变量）。非常驻宿主无后台 sweep，故全部骑 session 生命周期：分子在 **`PreToolUse(Skill)` handler** +1、分母由**每回合** handler 给对应层请求计数器 +1；**重算率 + 淘汰**在 **`SessionStart` handler** 惰性现算（跑在本会话召回之前，对「到上次会话结束为止」的全部账现算）。**每会话一次、不节流**：判定是确定性便宜活（读 ≤N 个 sidecar 比一下），无须 Hermes LLM curator 那套 idle / 间隔节流。**dormancy 不积压**：关机不动分母，回来不会突然清一批。
 
 ## 两层差异
 
@@ -52,17 +52,18 @@ spine 的 MNG 格。决定每个**自产符号**活多久。**确定性**,惰性
 - 分子 = hook 埋点的被调次数，存被调符号 sidecar、层无关；分母 = 创建以来 API 请求数（repo 本层 / global 全局），sidecar 记创建锚。
 - 缓刑护新：分母未过成熟阈值则 live 但不淘汰、不占上限；过阈值毕业、率≈0 当场归档。
 - 退役 = 成熟池内超上限按率竞争归档最低者；无固定 θ、自调；状态 probation→active→archived，archived 靠移目录出召回。
-- **MNG 不注册自有 hook**，全骑 CAP 已有 hook（守「hooks 仅 CAP」）：计数由 CAP 逐回合捕获供给、curation 由 CAP 会话边界 dispatch；零 daemon、每会话一次不节流、dormancy 不积压。
+- **MNG 不另起 hook 注册**：handler（`PreToolUse(Skill)` 计分子、`SessionStart` 重算淘汰）挂 plugin 单一 dispatcher、与 CAP 的 handler 并列；零 daemon、每会话一次不节流、dormancy 不积压。
 - 成熟阈值与容量上限均 config、两旋钮独立、分层各设、不写死。
 
 ## 待解 / 动手前实测
 
-- **调用捕获实测**（率分子成立的前提）：① learned skill（描述召回的）被用是否走 `Skill` 工具、能在 CAP 抓的 tool I/O 里现身；② 捕获项是否带解析后的符号身份（对得上符号）。点一个 learned skill、看 CAP 捕获即可验。
+- **调用捕获实测**（率分子成立的前提）：① learned skill（描述召回的）被用是否走 `Skill` 工具、触发 `PreToolUse(Skill)` handler；② 事件 payload 是否带解析后的符号身份（对得上符号）。点一个 learned skill、看 hook payload 即可验。
 - **API 请求计数口径**：分母锚在「每 turn 一次的 API 请求」——确认 CAP 的 per-turn 触发与 API 请求一一对应（一个 turn 多次模型调用 / 重试是否各算一次），定义清「一次请求」。
 - **global 率的「在场≫相关」偏置**：global 符号处处加载但只在部分 repo 相关（Python skill 在 Rust repo 永不被调），全局分母含无关请求会压低其率。v1 接受宽分母（global 量少、上限竞争兜底）；「分母只算曾用过它的 repo」留后。
 - **global 并发写锁**：全局请求计数器 + global sidecar 被多 repo 的 hook 跨进程并发写；多 repo 的 `SessionStart` 并发归档同一 global 符号 → per-symbol + 全局计数器跨进程锁（与 [validate-store](validate-store.md) Commit 的 live 单写者锁合一把）。
 - **global 覆盖盲区**：分子分母都只数装了 autoharness hook 的 repo；没装的 repo 调了 / 跑了都不计——per-repo 安装的固有 gap（Hermes 无，因它本身即 agent、永远在场）。
 - **累计 vs 滚动窗口**：累计（自创建）最省；环境漂移下「曾有用、近来没用」需滚动窗口（近若干请求内的率）才能下沉，留后。
+- **绝对底线规则（留后，先不实现）**：除「毕业审率≈0」外，可加一条**独立于容量**的硬底线——分母过 X **且**分子 < Y（均 config、分层）即归档，逮「给够机会仍基本没用、但还没触发容量竞争」者。是现有毕业审的推广（把率≈0 的隐含 Y=0 放成可调 Y）；落点同在 `lifecycle` + `config`，无需新埋点 / 新状态——为它专搭规则引擎属过度设计，不做。
 - **成熟阈值 / 上限标定**：config 默认值待经验标定（`experiments/`）。
 
 provenance：[adherence-driven-curate](../ideas/adherence-driven-curate.md)（生命周期骨架 + 容量 consolidation + 遵守度留后）、[lifecycle-by-provenance](../ideas/lifecycle-by-provenance.md)（自产圈成员）、[skill-recall-low-degrades-with-n](../ideas/skill-recall-low-degrades-with-n.md)（容量封顶护召回）、[record-scenarios-for-eval](../ideas/record-scenarios-for-eval.md)（sidecar 计数 / LED 分工）、[dynamic-validation-lifecycle](../ideas/dynamic-validation-lifecycle.md)（率取代时间的随用随验、遵守度留后）；机制对照 [Hermes](../sources/github/nousresearch-hermes-agent.md)（`active→stale→archived` 时间状态机 + last_used 计数 + capacity consolidation；我们以率 + 缓刑 + 容量竞争取代其墙钟判据，时间冤枉非常驻宿主）。

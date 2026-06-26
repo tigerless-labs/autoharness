@@ -9,7 +9,7 @@ type: design
 ## 为什么 subagent + spawn
 
 - 我们是外挂层、不占宿主 agent loop，**只能 spawn**。`claude -p --agent <name>` 直接**以该 subagent 身份**跑：subagent 的正文**整个替换**默认 system prompt（同 `--system-prompt`），带它的工具限制 + 模型，**无主 agent 那一跳**。
-- subagent 是 `.claude/agents/` 下可版本化的一等产物——干净、native、可随产品安装到用户机。
+- subagent 是**可版本化的一等产物**（随 plugin 作 `<plugin>/agents/` 组件分发，见 [architecture](architecture.md)）——干净、native、装一次到位。
 - 对比裸 `claude -p "<prompt>"`：subagent 把 review/authoring 提示 + 工具限制 + 模型**注册一次**，比每次拼 flag 干净；也比让主模型在 turn 内调 Agent 工具更可控（那是概率触发、且在关键路径上）。
 
 ## 定义要点

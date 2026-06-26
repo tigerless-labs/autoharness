@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+
+      - name: doc checkers + selftests
+        run: |
+          python3 tools/check_doc_links.py docs
+          python3 tools/check_doc_links.py --selftest
+          python3 tools/check_research_loom.py docs/research-loom
+          python3 tools/check_research_loom.py --selftest
+
+      - name: tests (exclude live-host, tolerate empty collection)
+        run: |
+          python3 -m pytest -m "not live" -q || [ $? -eq 5 ]
