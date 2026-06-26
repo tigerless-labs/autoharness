@@ -24,6 +24,14 @@ def test_session_counter_bump_and_reset(tmp_path):
     assert counters.session_count(sid, tmp_path) == 0
 
 
+def test_clear_session_deletes_and_idempotent(tmp_path):
+    counters.bump_session("abc-123", tmp_path)
+    assert counters._session_path("abc-123", tmp_path).exists()
+    counters.clear_session("abc-123", tmp_path)
+    assert counters.session_count("abc-123", tmp_path) == 0
+    counters.clear_session("abc-123", tmp_path)  # 缺失幂等、不抛
+
+
 def test_unknown_layer_rejected(tmp_path):
     with pytest.raises(ValueError):
         counters.bump_request("staging", tmp_path)
