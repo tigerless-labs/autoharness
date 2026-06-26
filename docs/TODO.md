@@ -17,11 +17,19 @@
   Claude Code 等是临时进程,会话间无常驻、墙钟周期 sweep 无执行者。**失活已定**(MNG 走惰性 `SessionStart` 现算 +
   调用率判据,非墙钟刻度,见 [`research-loom/design/mng.md`](research-loom/design/mng.md));剩**去重走准入事件驱动**
   待落。见 [`research-loom/ideas/adherence-driven-curate.md`](research-loom/ideas/adherence-driven-curate.md) 的待解。
-- [ ] **实测 MNG 的调用捕获**（[`research-loom/design/mng.md`](research-loom/design/mng.md) 率分子成立的前提；MNG 不自注册 hook，靠 CAP 逐回合捕获）：
-  ① learned skill（描述召回的）被用时是否走 `Skill` 工具、能在 CAP 抓的 tool I/O 里现身；
-  ② 捕获项是否带解析后的符号身份（对得上符号）。点一个 learned skill、看 CAP 捕获即可验。
-- [ ] **实测 plugin-shipped agent 是否支持 `hooks` / `mcpServers` frontmatter**（[`research-loom/design/architecture.md`](research-loom/design/architecture.md) 待解）。有资料称出于安全不支持；若属实，[`reflector-subagent.md`](research-loom/design/reflector-subagent.md) 的自带 PreToolUse backstop 与 [`stage-skill.md`](research-loom/design/stage-skill.md) 的 subagent-scoped MCP 注册须改投递（退到 plugin 顶层 `hooks.json` / `.mcp.json` 再运行时 scope）。
+- [x] **实测 MNG 的调用捕获**（S5）。Skill 走 `Skill` 工具触发 `PreToolUse(Skill)`，transcript 另记
+  命名空间 `attributionSkill`（`plugin:skill`）—— 分子有真符号 hook。见
+  [`experiments/E6_platform_contracts`](../experiments/E6_platform_contracts/results.md)。
+- [x] **实测 plugin-shipped agent 是否支持 `hooks` / `mcpServers` frontmatter**（S1）。**否**（安全，2.1.63+
+  忽略）。决策：reflector backstop + stage_skill 退到 plugin 顶层 `hooks.json` / `.mcp.json`。见
+  [`experiments/E6_platform_contracts`](../experiments/E6_platform_contracts/results.md)。
 - [ ] **建 plugin 官方结构源卡**（`sources/`）：`plugin.json` / `hooks/hooks.json`（`${CLAUDE_PLUGIN_ROOT}` + `{"hooks":{...}}` 包裹）/ `agents/` / `.mcp.json` / marketplace —— `architecture.md` 的 provenance 现挂"待建"。
+- [ ] **吸收 Phase 0 决策进设计文档**（建 Phase 3/5/6 时，决策现住 E5/E6 证据卡）：mng 率分母锁
+  per-turn/per-Stop、分子取命名空间 skill id；reflector backstop=plugin 顶层 `hooks.json` 按 `agent_type`
+  匹配；stage_skill 走 plugin `.mcp.json`；cap 只数主 `Stop`（reflector 完成是 `SubagentStop`）。见
+  [`docs/plans/phase0-platform-spikes.md`](plans/phase0-platform-spikes.md)。
+- [ ] **Phase 5 行为型 live**（非 Phase 0）：reflector compare-first 真改优于建、最小权限不越界；顶层
+  PreToolUse backstop 运行时真 deny 一次 `Write`。归 `experiments/` + 手测 runbook。
 - [x] **Wire doc checkers into CI.** Done: `.github/workflows/ci.yml` runs both checkers +
   `--selftest` + `pytest -m "not live"` (tolerates empty collection until product tests land).
   Test strategy & execution order in `docs/plans/roadmap.md`.
