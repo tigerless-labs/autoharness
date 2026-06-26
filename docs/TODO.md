@@ -51,3 +51,12 @@
 - [ ] **CAP 触发裁决 → 真 spawn 接 Phase 5**：Phase 4 `on_stop`/`on_session_end` 只出「是否触发 + 窗口 N」、
   `capture.materialize` 备好脱敏窗物化；detached 后台 spawn reflector 由 Phase 5 `hook/spawn.py` 接（触发→读取
   race 的 transcript 上界也随 spawn 带，cap.md 待解）。
+- [ ] **公开发布的语言切换（发布期，非现在）.** 现在中文做工作语言；公开时需英文。**不要常驻双分支**
+  （dev 中文藏 + public 英文活 → 永久手动同步，违反「一个事实一个权威源」）。两条可选：① 一次性切换——
+  发布日做一次中→英全量翻译，之后工作语言换英文（中文留 git 历史）；② 翻译当发布步骤——继续用中文，
+  每次发版从 `main` 拉 `release-en` 翻译后 PR、用完即弃，中文为唯一活分支。优先 ①。注意：真正必须英文的是
+  README + 面向用户 public docs + 代码标识符；`docs/design/`、`docs/plans/` 是内部设计稿，可缩小翻译面。
+
+- [x] **Wire doc checkers into CI.** Done: `.github/workflows/ci.yml` runs both checkers +
+  `--selftest` + `pytest -m "not live"` (tolerates empty collection until product tests land).
+  Test strategy & execution order in `docs/plans/roadmap.md`.
