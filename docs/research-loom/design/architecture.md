@@ -32,6 +32,7 @@ autoharness/                         # plugin 根（装到 ~/.claude/plugins/cac
     │   └── server.py                #   MCP server：emit-intent，schema 强制结构 + LED 字段
     └── lib/                         # ★ write-once 维护原语（hook 层与 stage_skill 共用同一份）
         ├── layer.py                 #   由 layer 入参解析 global / repo 落盘位（层显形处之一：路径）
+        ├── atomic.py                #   POSIX 原子写原语（temp 同目录 + os.replace）：skill_store / sidecar / counters 复用
         ├── skill_store.py           #   skill CRUD：原子写 + 两层 find + 应用 delta
         ├── sidecar.py               #   sidecar 读写：created_by / 计数 / verification（单一实现）
         ├── ledger.py                #   LED append-only

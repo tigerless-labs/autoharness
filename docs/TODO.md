@@ -30,6 +30,12 @@
   [`docs/plans/phase0-platform-spikes.md`](plans/phase0-platform-spikes.md)。
 - [ ] **Phase 5 行为型 live**（非 Phase 0）：reflector compare-first 真改优于建、最小权限不越界；顶层
   PreToolUse backstop 运行时真 deny 一次 `Write`。归 `experiments/` + 手测 runbook。
+- [ ] **validate #416 子查补全**（Phase 2/3）：v1 结构查 = frontmatter + name/description +「被引且存在的
+  `.py` 语法解析」；**引用文件存在性 / 断 symlink** 待 intent 带显式文件清单再加（按散文路径串硬查会误杀
+  正当散文）。frontmatter 是最小 `key: value` 解析（非全 YAML）；global repo-agnostic 的「本仓名」标识需
+  promoter 把 `repo_name` 喂入（v1 仅 abs-path）。
+- [ ] **intent_queue durable 格式定稿**（与 [validate-store](research-loom/design/validate-store.md)「intent 队列是否持久」待解同）：
+  v1 = repo state 区 per-run `*.jsonl`，read 不删 / land 后 clear（at-least-once）；最终格式 / 粒度待定。
 - [x] **Wire doc checkers into CI.** Done: `.github/workflows/ci.yml` runs both checkers +
   `--selftest` + `pytest -m "not live"` (tolerates empty collection until product tests land).
   Test strategy & execution order in `docs/plans/roadmap.md`.

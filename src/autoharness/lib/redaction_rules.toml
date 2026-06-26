@@ -1,0 +1,43 @@
+# egress 红线规则集 —— CAP egress 与 LED 证据出口共用的单一来源（config 指向、redact 消费）。
+# 每条 = 一个命名正则；redact 把整段匹配替换为 [REDACTED:<category>:<name>]。
+# 过度脱敏是安全侧（宁可多删）；新增规则在此一处加，勿散落到代码。
+
+[[secret]]
+name = "aws_access_key_id"
+pattern = '''AKIA[0-9A-Z]{16}'''
+
+[[secret]]
+name = "private_key_block"
+pattern = '''-----BEGIN [A-Z ]*PRIVATE KEY-----'''
+
+[[secret]]
+name = "github_token"
+pattern = '''gh[posru]_[A-Za-z0-9]{20,}'''
+
+[[secret]]
+name = "slack_token"
+pattern = '''xox[abprs]-[A-Za-z0-9-]{10,}'''
+
+[[secret]]
+name = "bearer_token"
+pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{20,}'''
+
+[[secret]]
+name = "api_key_assignment"
+pattern = '''(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['"]?[A-Za-z0-9._\-/+]{12,}'''
+
+[[pii]]
+name = "email"
+pattern = '''[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'''
+
+[[pii]]
+name = "ssn"
+pattern = '''(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)'''
+
+[[pii]]
+name = "us_phone"
+pattern = '''(?<!\d)(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)'''
+
+[[pii]]
+name = "credit_card"
+pattern = '''(?<!\d)(?:\d[ -]?){13,16}(?!\d)'''
