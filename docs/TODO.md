@@ -31,6 +31,8 @@
 - [ ] **实测 MNG 的调用捕获**（[`research-loom/design/mng.md`](research-loom/design/mng.md) 率分子成立的前提；MNG 不自注册 hook，靠 CAP 逐回合捕获）：
   ① learned skill（描述召回的）被用时是否走 `Skill` 工具、能在 CAP 抓的 tool I/O 里现身；
   ② 捕获项是否带解析后的符号身份（对得上符号）。点一个 learned skill、看 CAP 捕获即可验。
+- [ ] **实测 plugin-shipped agent 是否支持 `hooks` / `mcpServers` frontmatter**（[`research-loom/design/architecture.md`](research-loom/design/architecture.md) 待解）。有资料称出于安全不支持；若属实，[`reflector-subagent.md`](research-loom/design/reflector-subagent.md) 的自带 PreToolUse backstop 与 [`stage-skill.md`](research-loom/design/stage-skill.md) 的 subagent-scoped MCP 注册须改投递（退到 plugin 顶层 `hooks.json` / `.mcp.json` 再运行时 scope）。
+- [ ] **建 plugin 官方结构源卡**（`sources/`）：`plugin.json` / `hooks/hooks.json`（`${CLAUDE_PLUGIN_ROOT}` + `{"hooks":{...}}` 包裹）/ `agents/` / `.mcp.json` / marketplace —— `architecture.md` 的 provenance 现挂"待建"。
 - [ ] **Wire doc checkers into CI.** `tools/check_doc_links.py` + `tools/check_research_loom.py`
   (and their `--selftest`) should gate PRs once a `.github/workflows` exists. Now unblocked — both
   checkers pass clean (no dangling links).
