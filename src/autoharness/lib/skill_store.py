@@ -1,9 +1,11 @@
-"""skill CRUD：原子写 SKILL.md + 两层 find（同名跨两层报错消歧）+ 应用 delta + 孤儿 .tmp sweep。
+"""skill CRUD：原子写 SKILL.md + 两层 find（同名跨两层报错消歧）+ 应用 delta + 归档 + 孤儿 .tmp sweep。
 
 落盘只此一处用 atomic（temp 同目录 + os.replace），live 永不半态。find 扩 Hermes `_find_skill`
 到 global+project 两层并集；同名跨两层 → 报错（promoter 解析 update/delete 层时据此消歧）。
-apply_delta 要求 old_string 唯一命中（不存在 / 多处歧义都拒），确定性重建。
+apply_delta 要求 old_string 唯一命中（不存在 / 多处歧义都拒），确定性重建。archive 原子移 symbol_dir
+进 `.archive`（保 LED/sidecar），delete 落地与 MNG（Phase 6）淘汰共用此一份。
 """
+import os
 import shutil
 
 from autoharness.lib import atomic, layer
@@ -49,6 +51,18 @@ def remove(lyr, name, root=None):
     sdir = layer.symbol_dir(lyr, name, root)
     if sdir.exists():
         shutil.rmtree(sdir)
+
+
+def archive(lyr, name, root=None):
+    sdir = layer.symbol_dir(lyr, name, root)
+    if not sdir.exists():
+        return None
+    dest = layer.archive_dir(lyr, root) / name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        shutil.rmtree(dest)
+    os.replace(sdir, dest)
+    return dest
 
 
 def sweep_orphans(lyr, root=None):

@@ -6,6 +6,8 @@ findings 非空即 reject。create 豁免「自产」查（其打标在六类全
 
 base_dir 给定时附加 #416 的「引用 .py 语法」查（被引且存在的 .py 必须可解析）。
 target_is_agent_created 由 promoter 读 sidecar 传入；create 时为 None、豁免。
+body=None（delete 成型结果=移除、无正文）时跳过依赖 body 的四类（安全/结构/完整/global），
+只留 LED + 自产两查。
 """
 import ast
 import re
@@ -57,24 +59,25 @@ def _structure(body, base_dir):
 def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None):
     findings = []
 
-    guard = skills_guard.scan(body)
-    if guard:
-        findings.append(("safety", guard))
+    if body is not None:
+        guard = skills_guard.scan(body)
+        if guard:
+            findings.append(("safety", guard))
 
-    findings += _structure(body, base_dir)
+        findings += _structure(body, base_dir)
+
+        if _PLACEHOLDER.search(body):
+            findings.append(("completeness", "contains TODO/placeholder"))
+
+        if intent.get("level") == "global":
+            markers = _ABS_PATH.findall(body)
+            if repo_name and repo_name in body:
+                markers.append(repo_name)
+            if markers:
+                findings.append(("global_repo_agnostic", markers))
 
     if not (intent.get("reason") or "").strip() or not (intent.get("evidence") or "").strip():
         findings.append(("led", "intent missing reason/evidence"))
-
-    if _PLACEHOLDER.search(body):
-        findings.append(("completeness", "contains TODO/placeholder"))
-
-    if intent.get("level") == "global":
-        markers = _ABS_PATH.findall(body)
-        if repo_name and repo_name in body:
-            markers.append(repo_name)
-        if markers:
-            findings.append(("global_repo_agnostic", markers))
 
     if intent.get("action") in _MODIFY and target_is_agent_created is not True:
         findings.append(("self_produced", "target live skill not created_by:agent"))

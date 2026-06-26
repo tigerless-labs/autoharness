@@ -36,6 +36,13 @@
   promoter 把 `repo_name` 喂入（v1 仅 abs-path）。
 - [ ] **intent_queue durable 格式定稿**（与 [validate-store](research-loom/design/validate-store.md)「intent 队列是否持久」待解同）：
   v1 = repo state 区 per-run `*.jsonl`，read 不删 / land 后 clear（at-least-once）；最终格式 / 粒度待定。
+- [ ] **promoter LED watermark + create anchor 接 CAP**（Phase 4）：v1 LED 条目 = `{action, reason, evidence}`、
+  无 watermark；create 的 sidecar `anchor` 由调用方入参、缺省 0。CAP（per-turn 计数）建好后供真值。
+- [ ] **promoter 逐条幂等 watermark**（与 intent_queue 粒度定稿同）：v1 整 run `clear`，崩溃极窗（land 与
+  clear 之间）补处理会重 append 同一 LED 条目（SKILL.md 写幂等、LED 非幂等）。逐 intent watermark 待队列粒度定。
+- [ ] **promoter 跨进程单写者锁**（与 sidecar/ledger 并发锁、mng 待解合一）：v1 单进程同步即「串行」，
+  两 run 并发同改一 skill 的锁粒度（last-writer）待定。
+- [ ] **delete 归档 = 移进 `.archive`（Phase 2 落）**；最终「交 MNG 归档」的退役编排（保留期 / GC）属 Phase 6 lifecycle。
 - [x] **Wire doc checkers into CI.** Done: `.github/workflows/ci.yml` runs both checkers +
   `--selftest` + `pytest -m "not live"` (tolerates empty collection until product tests land).
   Test strategy & execution order in `docs/plans/roadmap.md`.

@@ -33,7 +33,7 @@ autoharness/                         # plugin 根（装到 ~/.claude/plugins/cac
     └── lib/                         # ★ write-once 维护原语（hook 层与 stage_skill 共用同一份）
         ├── layer.py                 #   由 layer 入参解析 global / repo 落盘位（层显形处之一：路径）
         ├── atomic.py                #   POSIX 原子写原语（temp 同目录 + os.replace）：skill_store / sidecar / counters 复用
-        ├── skill_store.py           #   skill CRUD：原子写 + 两层 find + 应用 delta
+        ├── skill_store.py           #   skill CRUD：原子写 + 两层 find + 应用 delta + 归档（delete/MNG 共用）
         ├── sidecar.py               #   sidecar 读写：created_by / 计数 / verification（单一实现）
         ├── ledger.py                #   LED append-only
         ├── intent_queue.py          #   per-run intent 队列：append(stage_skill)/ drain(promoter)/ 启动 sweep 孤儿（持久策略见 validate-store 待解，先最小）
