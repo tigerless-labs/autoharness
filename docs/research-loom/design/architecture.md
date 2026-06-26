@@ -85,6 +85,7 @@ autoharness/                         # plugin 根（装到 ~/.claude/plugins/cac
 - 执行全收进 `hook/` 一个大模块（`dispatch` 单入口 + 子文件）；`stage_skill` 因独立 MCP 进程单列，是唯一例外。
 - `config.py` 单文件持全部旋钮（含分层上限 / 阈值）；红线集与 format spec 由 config 指向各自单一来源，多处只消费。
 - 数据按 storage 分 global / repo 落宿主对应目录；状态区 git-ignored，不入 live skills。
+- `format_spec` **不静态嵌 `agents/reflector.md`**，由 spawn 运行时注入 reflector 输入（与 episode 窗 / 描述索引同路）——单一来源只一份、不与 #416 linter 漂移（见 [reflector-subagent](reflector-subagent.md) 的「spawn 拼装」）。
 - src 锁 Python（与 `tools/` `experiments/` 一致），通过 plugin 分发、不污染宿主项目。
 - **测试只住仓库根 `tests/`**：按 `tests/test_<module>.py` 镜像 `src/autoharness/` 各模块，**不放进 plugin 树、不随 plugin 分发**（`pytest.ini` 的 `testpaths=tests` 物理封死收集范围）。依赖活宿主的用例 `@pytest.mark.live` 标记、CI 排除；执行顺序与三层测试策略见 [roadmap](../../plans/roadmap.md)。
 - 投递走**自建 marketplace**（一个含 `marketplace.json` 的 GitHub repo，用户 `/plugin marketplace add` 即装，无审核）；不追官方策展 marketplace。瓶颈不在上架，在"装后能跑 + 可信"。
@@ -94,7 +95,6 @@ autoharness/                         # plugin 根（装到 ~/.claude/plugins/cac
 - **plugin-shipped agent 是否支持 `hooks` / `mcpServers` frontmatter**：有资料称出于安全**不支持**。若属实，[reflector-subagent](reflector-subagent.md) 的"自带 PreToolUse backstop"与 [stage-skill](stage-skill.md) 的 subagent-scoped 注册都得改投递——backstop 退到 plugin 顶层 `hooks/hooks.json`、stage_skill 退到顶层 `.mcp.json` 再运行时 scope。先实测确认，再定 `agents/reflector.md` 能装多少。
 - **首次运行初始化**（marketplace 已定自建，见决策）：plugin 装好后组件（`agents/` `hooks/` `.mcp.json`）随 plugin 就位、**不另拷**（`reflector.md` 是 plugin 内组件，不进用户 `~/.claude/agents/`）；两层数据区（`~/.claude/skills`、`./.claude/autoharness` 等）首写时惰性建即可，是否要显式 init 脚本待定。`hooks.json` 用 `${CLAUDE_PLUGIN_ROOT}` 自定位是 plugin 机制、非安装动作。
 - **`hook/` 与 `lib/` 的进程边界**：每个 hook fire 是独立短进程，`lib/` 的计数 / 落盘必即时持久（内存留不住），与 promoter 的 durable intent 队列对齐。
-- **`format_spec.md` 怎么进 reflector 正文**：它是 `lib/` 单一来源，要同时喂 reflector authoring（`agents/reflector.md` 系统提示）与 #416 linter。但 agent 正文是静态 md——投递机制未定（候选：spawn 拼 bundle 时把 `format_spec` 内容一并注入 reflector 输入，与 episode / 描述索引同路，省一份静态拷贝）；不钉死则"单一来源"有变两份漂移的风险。
 
 ---
 

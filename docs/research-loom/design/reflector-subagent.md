@@ -16,7 +16,15 @@ type: design
 
 - **便宜模型**（如 haiku）：reflection 不需主模型。
 - **最小权限工具**：**读**用内建 `Read` / `Grep` / `Glob`（`Read` 读已知路径、`Grep` 搜内容、`Glob` 枚举两层 skill 树 / 候选 `references/`——compare-first 细看现有 skill 用；episode 与描述索引靠注入、不靠工具取）；**改动**只走自产的 **[stage_skill](stage-skill.md)**（发 intent、append per-run 队列、**不碰任何 skill 树**），**去掉通用 Write/Edit**，**不给 Bash / 网络**。subagent 默认继承宿主全部工具，故必须**显式收窄**（deny-by-default、least privilege，[additive-over-native-skill](../ideas/additive-over-native-skill.md)）。执行类（跑命令验证）留到 dry-run 阶段再按需加。
-- **正文** = compare-first 的 review + authoring 提示（仿 Hermes `_SKILL_REVIEW_PROMPT`；compare-first 偏好序见 [ref](ref.md)）。**格式与创建要求 = 一份单独维护的权威 spec**（必填 frontmatter / 命名 / 结构 / references 约定 / 放哪层 / 不可捕获项），**不靠"读现有 skill 当样例"推断**——冷启动可能没有、现有（含 native）格式可能不合本 spec。这份 spec **同时喂本正文（REF 按它写）与 [validate-store](validate-store.md) 的 #416 linter（按它验）**，是同一契约的两面、单一来源（config 一类）、保持同步。现有 skill 只供 compare-first（去重 / 放哪层），**不当格式源**。
+- **正文** = compare-first 的 review + authoring 提示（仿 Hermes `_SKILL_REVIEW_PROMPT`；compare-first 偏好序见 [ref](ref.md)）。**格式与创建要求 = 一份单独维护的权威 spec**（必填 frontmatter / 命名 / 结构 / references 约定 / 放哪层 / 不可捕获项），**不靠"读现有 skill 当样例"推断**——冷启动可能没有、现有（含 native）格式可能不合本 spec。这份 spec **同时喂 REF（按它写）与 [validate-store](validate-store.md) 的 #416 linter（按它验）**，是同一契约的两面、单一来源（config 一类）、保持同步——但**它不静态嵌进本 agent 正文**（那会成第二份拷贝、与 linter 漂移），而是由 spawn 在拼装时**运行时注入** reflector 输入（见下「spawn 拼装」）。现有 skill 只供 compare-first（去重 / 放哪层），**不当格式源**。
+
+## spawn 拼装与交接
+
+主会话 hook 在 episode 边界触发后，由 spawn 步（`hook/spawn.py`）**确定性**拼装 reflector 的输入，跨进程经磁盘交接（reflector 是独立子会话、碰不到主会话内存）：
+
+- **三件套**：CAP 物化的脱敏 episode 窗（[cap](cap.md) 的交接物）+ 现有两层 live skill 的**描述索引**（每符号 `name`+`description`，compare-first 去重 / 放哪层的唯一依据，跳归档）+ 单一来源 `format_spec`（authoring 契约，与 #416 linter 同源）。三者**靠注入、不靠工具取**，故 reflector 的读工具只用于 compare-first 细看候选正文。
+- **身份注入**：spawn 置递归 guard 信号（`CLAUDE_CODE_CHILD_SESSION`）+ 把本 run 的 intent 队列坐标（run_id / repo 根）经**环境**传给子会话，[stage_skill](stage-skill.md) 据此 append 回正确队列。
+- **接力**：spawn 出的子会话以 reflector 身份跑完（只可能 append intent），spawn 返回后接 [validate-store](validate-store.md) 的 promoter——读队列、校验、原子落盘。author 与 land 自此彻底分进程。
 
 ## 文件编辑范围限制（钉死写范围）
 
