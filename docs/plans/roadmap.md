@@ -36,9 +36,9 @@
 
 ## Phase 1 — config + `lib/` write-once 原语（地基）
 
-`config.py` 单点（节奏 / 成熟阈值 / 上限分层 / 红线集 + format_spec 指针）+ `layer` / `skill_store` / `sidecar` / `ledger` / `counters` / `redact` / `validate` / `skills_guard`。最底层、全管道复用、纯确定性。
+`config.py` 单点（节奏 / 成熟阈值 / 上限分层 / 红线集 + format_spec 指针）+ `layer` / `skill_store` / `sidecar` / `ledger` / `counters` / `redact` / `validate` / `skills_guard` / `intent_queue`。最底层、全管道复用、纯确定性。
 
-**测试（unit）**：`layer` 由入参解析两层落盘位；`skill_store` 原子写 + 两层 `find` + 应用 delta；`sidecar` 单实现读写 created_by/计数/verification；`ledger` append-only（只增不改）；`counters` 按层分子分母、O(1) 读改写；`redact` 红线消费（窗口切片 / LED 证据出口）；`validate` 六类 linter 跑在内存成型结果上；`skills_guard` 六族正则（exfiltration/injection/destructive/persistence/network/obfuscation）。**红队**：`skills_guard` 挡投毒 / 指令型注入；`redact` 不漏 PII / secret；global 含 repo-local 标识被 `validate` 降级或 reject。
+**测试（unit）**：`layer` 由入参解析两层落盘位；`skill_store` 原子写 + 两层 `find` + 应用 delta；`sidecar` 单实现读写 created_by/计数/verification；`ledger` append-only（只增不改）；`intent_queue` append / drain / 启动 sweep 孤儿（writer=stage_skill、reader=promoter 同源一份）；`counters` 按层分子分母、O(1) 读改写；`redact` 红线消费（窗口切片 / LED 证据出口）；`validate` 六类 linter 跑在内存成型结果上；`skills_guard` 六族正则（exfiltration/injection/destructive/persistence/network/obfuscation）。**红队**：`skills_guard` 挡投毒 / 指令型注入；`redact` 不漏 PII / secret；global 含 repo-local 标识被 `validate` 降级或 reject。
 
 ## Phase 2 — promoter 校验·存储（admission 闸 + 原子落盘）★安全 chokepoint
 

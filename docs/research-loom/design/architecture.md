@@ -35,6 +35,7 @@ autoharness/                         # plugin 根（装到 ~/.claude/plugins/cac
         ├── skill_store.py           #   skill CRUD：原子写 + 两层 find + 应用 delta
         ├── sidecar.py               #   sidecar 读写：created_by / 计数 / verification（单一实现）
         ├── ledger.py                #   LED append-only
+        ├── intent_queue.py          #   per-run intent 队列：append(stage_skill)/ drain(promoter)/ 启动 sweep 孤儿（持久策略见 validate-store 待解，先最小）
         ├── counters.py              #   CAP 会话计数 + MNG 分子 / 分母（单一实现、按层）
         ├── lifecycle.py             #   MNG：率 + 缓刑 + 容量竞争
         ├── validate.py              #   确定性 linter 六类（含自产标签）
@@ -71,8 +72,8 @@ autoharness/                         # plugin 根（装到 ~/.claude/plugins/cac
 |---|---|---|
 | CAP 捕获 | `hook/{on_stop,on_session_end,capture}` + `lib/{counters,redact}` | [cap](cap.md) |
 | REF 反思 | `agents/reflector.md`（定义） | [ref](ref.md) · [reflector-subagent](reflector-subagent.md) |
-| stage_skill | `stage_skill/server.py` + 复用 `lib/{skill_store,validate}` | [stage-skill](stage-skill.md) |
-| 校验·存储 | `hook/promoter.py` + `lib/{skill_store,validate,skills_guard,ledger,sidecar}` | [validate-store](validate-store.md) |
+| stage_skill | `stage_skill/server.py` + 复用 `lib/{skill_store,validate,intent_queue}` | [stage-skill](stage-skill.md) |
+| 校验·存储 | `hook/promoter.py` + `lib/{skill_store,validate,skills_guard,ledger,sidecar,intent_queue}` | [validate-store](validate-store.md) |
 | MNG 生命周期 | `hook/on_session_start.py` + `lib/{lifecycle,counters,sidecar}` | [mng](mng.md) |
 | LED 账本 | `lib/{ledger,sidecar}` | （per-module 待补） |
 
