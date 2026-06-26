@@ -24,10 +24,13 @@
   longer linked — the 8 source cards + `research-loom/index.md` now point at `synthesis/index.md` as a
   stopgap (matching `sources/papers/index.md`; link checker green). Still open: fold the
   ecosystem-heat / positioning / output-quality content into a real synthesis note and relink the cards.
-- [ ] **生命周期/去重的触发时机:适配非常驻宿主.** Hermes 的 curator 靠常驻 daemon(空闲 2h / 间隔 7d 自动醒);
-  Claude Code 等是临时进程,会话间无常驻、不会空闲自动醒,墙钟周期 sweep 无执行者。需定:失活走惰性判定
-  (SessionStart/注入时按时间戳现算)、去重走准入事件驱动;并决定失活刻度用墙钟天还是使用相对(几次会话未被用)。
-  见 [`research-loom/ideas/adherence-driven-curate.md`](research-loom/ideas/adherence-driven-curate.md) 的待解。
+- [ ] **去重的触发时机:适配非常驻宿主.** Hermes 的 curator 靠常驻 daemon(空闲 2h / 间隔 7d 自动醒);
+  Claude Code 等是临时进程,会话间无常驻、墙钟周期 sweep 无执行者。**失活已定**(MNG 走惰性 `SessionStart` 现算 +
+  调用率判据,非墙钟刻度,见 [`research-loom/design/mng.md`](research-loom/design/mng.md));剩**去重走准入事件驱动**
+  待落。见 [`research-loom/ideas/adherence-driven-curate.md`](research-loom/ideas/adherence-driven-curate.md) 的待解。
+- [ ] **实测 MNG 的调用捕获**（[`research-loom/design/mng.md`](research-loom/design/mng.md) 率分子成立的前提；MNG 不自注册 hook，靠 CAP 逐回合捕获）：
+  ① learned skill（描述召回的）被用时是否走 `Skill` 工具、能在 CAP 抓的 tool I/O 里现身；
+  ② 捕获项是否带解析后的符号身份（对得上符号）。点一个 learned skill、看 CAP 捕获即可验。
 - [ ] **Wire doc checkers into CI.** `tools/check_doc_links.py` + `tools/check_research_loom.py`
   (and their `--selftest`) should gate PRs once a `.github/workflows` exists. Now unblocked — both
   checkers pass clean (no dangling links).

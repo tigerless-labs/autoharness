@@ -9,6 +9,8 @@ status: 候选
 
 **主张**：autoharness 对宿主的一切增强（hook 观察 / 强制注入 / 独立存储）必须是**纯叠加**，**不改变原生 skill 本来的功能与使用体验**——skill 的新增、读取、description 概率触发等既有路径维持原样，不被替换、拦截、降级。「走 hook 强制注入」是在原生之外**另开一条确定性通道**，而非接管或绕改 skill 加载本身；两条通道并存，用户对原有流程的感知不变。
 
+自产 skill 落 **global / project 两层皆可**——那是「放哪」的问题，与本卡「不碰 native」**正交**：两层里的 native / 用户 skill 一律不动，叠加只新增自产符号。
+
 **这条边界只管「不破坏原生固有功能」，与「维护」分开**：去重 / 退役 / 纠偏是生命周期组件（[滚动 curate](adherence-driven-curate.md)）的职责，不在本卡。本卡是一条**非功能约束**——我们的叠加零侵入原生；至于要不要回头维护原生 skill，是 [按 provenance 划生命周期成员](lifecycle-by-provenance.md) 的显式授权路径另说。它也是 [hook 强制注入](hook-forced-injection.md) 能被采纳的**前提**：可靠性的提升不得以牺牲原生功能 / 体验为代价。
 
 ## 论据 / 出处
