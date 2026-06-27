@@ -14,3 +14,5 @@ build/
 .env
 .DS_Store
 .CLAUDE.md
+
+dev_skill/

@@ -3,7 +3,7 @@
 <p align="center"><strong>A per-symbol maintenance optimizer for an agent's skill layer — it learns skills from real runs and lets them earn their keep by being adhered to in use, not by an offline eval score.</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-design--stage-orange.svg" alt="status" />
+  <img src="https://img.shields.io/badge/status-built%20%26%20e2e--validated-brightgreen.svg" alt="status" />
   <img src="https://img.shields.io/badge/lifecycle-zero--daemon-blue.svg" alt="zero daemon" />
   <img src="https://img.shields.io/badge/form-Claude%20Code%20plugin-brightgreen.svg" alt="plugin" />
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" />
@@ -21,9 +21,21 @@ writing to disk. There is **no daemon**: the lifecycle recomputes lazily at sess
 symbols are judged by **invocation rate**, not elapsed time.
 
 > [!NOTE]
-> **Design-stage.** The architecture is settled and documented; the plugin is not built yet, so
-> there is no install path today. See [docs/](docs/index.md) for the design and
-> [docs/plans/roadmap.md](docs/plans/roadmap.md) for the build order.
+> **Built and validated end-to-end.** The full pipeline (Phases 1–7) is implemented, and the
+> packaged plugin has been run on a real Claude Code host in an isolated sandbox — install →
+> capture → reflect → land → invoke → archive → restore, with skills judged by invocation rate.
+> See [docs/](docs/index.md) for the design and [docs/plans/roadmap.md](docs/plans/roadmap.md)
+> for the build order.
+
+## Install
+
+```
+/plugin marketplace add tigerless-labs/autoharness
+/plugin install autoharness@autoharness
+```
+
+Restart Claude Code to activate. Learned skills land in `.claude/skills/` and are recalled by the
+host's own name-and-description mechanism — autoharness never touches the recall path.
 
 ## How it works
 
