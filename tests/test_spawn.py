@@ -57,6 +57,8 @@ def test_build_command_carries_agent_and_print():
     assert cmd[0] == "claude"
     assert "--agent" in cmd and "autoharness:reflector" in cmd
     assert "-p" in cmd
+    # autonomous spawn: no human to approve tool calls → must skip permission prompts
+    assert "--dangerously-skip-permissions" in cmd
 
 
 def test_child_env_sets_guard_and_coords_without_polluting():

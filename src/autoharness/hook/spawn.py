@@ -44,7 +44,10 @@ def build_bundle(window, index, spec):
 
 
 def build_command(*, agent, claude_bin):
-    return [claude_bin, "-p", "--agent", agent]
+    # 反思是无人值守后台作业——没有人来批准工具调用，故跳过权限提示。安全边界由 agent 的
+    # tools 白名单（Read/Grep/Glob/stage_skill）+ 顶层 PreToolUse 写 backstop 兜，非靠提示。
+    # （live e2e：reflector 真调 stage_skill 被权限门挡下、只能"narrate"，加此 flag 才落地。）
+    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions"]
 
 
 def child_env(run_id, root, *, base_env=None):
