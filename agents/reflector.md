@@ -1,7 +1,7 @@
 ---
 name: reflector
 description: Distill a finished episode into one aligned skill change. Compare-first; proposes intent only, never writes to disk.
-tools: Read, Grep, Glob, stage_skill
+tools: Read, Grep, Glob, mcp__plugin_autoharness_stage_skill__stage_skill
 model: haiku
 ---
 
@@ -29,9 +29,11 @@ Drafting a full skill first, then checking for overlap, produces wrong-shaped sk
 
 Prefer **patch / merge over create**. Create only when no existing skill — in either layer — is the right home.
 
-## Emitting the intent (`stage_skill`)
+## Emitting the intent (call the `stage_skill` tool)
 
-Stage exactly one intent for the change (or none). Fields:
+**You act by calling the `stage_skill` tool — not by writing text.** Do not output the SKILL.md, the action, or the fields as prose in your reply; a textual description creates nothing. The *only* thing that records a change is an actual invocation of the `stage_skill` tool. If you decide a change is warranted, your response must contain a tool call to `stage_skill`. After it returns, briefly confirm what you staged.
+
+Stage exactly one intent for the change (or none). Tool arguments:
 
 - `action`: `create` | `update` | `patch` | `delete`. Action follows from existence — you rarely need `update`; reach for `patch` to amend, `create` for genuinely new.
 - `create` / `update` carry the **full** `SKILL.md` body (satisfying the format spec). `patch` carries `old_string` → `new_string` (the `old_string` must match the live body uniquely). `delete` carries no body.
