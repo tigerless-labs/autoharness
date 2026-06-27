@@ -1,14 +1,14 @@
-"""REF 启动载体：确定性拼装 reflector 输入 → detached spawn 子会话 → 接 promoter.drain。
+"""REF launch vehicle: deterministically assemble the reflector input → detached spawn a child session → connect to promoter.drain.
 
-architecture line 29 / [reflector-subagent] / [cap]：CAP 触发那刻给「脱敏 episode 窗 + 触发节奏」，
-本步拼三件套（窗 + 现有 skill 描述索引(compare-first 去重源，跳归档) + 单一来源 format_spec）
-落盘 + 经 stdin 喂跨进程 reflector，spawn 用 CHILD_SESSION_ENV 置位（递归 guard）+ run_id/root
-经环境注入（stage_skill 据此 append 回队列），等子会话结束后 drain intent 队列落盘。author 与
-land 自此彻底分进程：reflector 只 append intent、promoter 独占校验·落盘。
+architecture line 29 / [reflector-subagent] / [cap]: at trigger time CAP gives "redacted episode window +
+trigger cadence"; this step assembles the three pieces (window + the existing skill description index
+(compare-first dedupe source, skips archived) + the single-source format_spec), persists them to disk,
+and feeds them via stdin to the cross-process reflector. spawn sets CHILD_SESSION_ENV (recursion guard) +
+injects run_id/root via env (stage_skill uses these to append back to the queue), then drains the intent
+queue to disk after the child session ends. Authoring and landing are fully split across processes from
+here: the reflector only appends intents, the promoter exclusively validates and lands.
 
-ponytail: run() 是「detached 后台作业」的作业体（同步 spawn→wait→drain）；「不堵宿主 Stop」的
-detach 由 Phase 7 dispatch 在 hook 顶层后台启 run()。spawn_fn 可注入（system 测用 fake reflector
-脚本替真 claude）。transcript 上界 race 精确化（cap.md 待解）仍 v0 容忍。
+ponytail: run() is the body of the "detached background job" (synchronous spawn→wait→drain); the "do not block the host Stop" detach is started in the background at the hook top level by the Phase 7 dispatch calling run(). spawn_fn is injectable (system tests use a fake reflector script in place of the real claude). Precise handling of the transcript upper-bound race (cap.md open) is still tolerated at v0.
 """
 import os
 import subprocess
@@ -44,9 +44,11 @@ def build_bundle(window, index, spec):
 
 
 def build_command(*, agent, claude_bin):
-    # 反思是无人值守后台作业——没有人来批准工具调用，故跳过权限提示。安全边界由 agent 的
-    # tools 白名单（Read/Grep/Glob/stage_skill）+ 顶层 PreToolUse 写 backstop 兜，非靠提示。
-    # （live e2e：reflector 真调 stage_skill 被权限门挡下、只能"narrate"，加此 flag 才落地。）
+    # Reflection is an unattended background job — nobody is there to approve tool calls, so skip the
+    # permission prompt. The security boundary is held by the agent's tools allowlist
+    # (Read/Grep/Glob/stage_skill) + the top-level PreToolUse write backstop, not by the prompt.
+    # (live e2e: a reflector's real stage_skill call gets blocked by the permission gate and can only
+    # "narrate"; only with this flag does it land.)
     return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions"]
 
 

@@ -1,10 +1,11 @@
-"""CAP 触发（收尾）：SessionEnd flush 余量 + 自删会话计数器。
+"""CAP triggering (wrap-up): SessionEnd flushes the remainder + self-deletes the session counter.
 
-cap.md：不满阈值的尾巴若不 flush 会永远丢；故会话结束时计数 > 0 即反思余量，**当前计数值
-正好告诉 REF 喂几个**（窗口 N == 计数、非阈值）。随后会话计数器随 session 生死自删。
-递归 guard 同 on_stop：reflector 子会话的 SessionEnd 不 flush。
+cap.md: a tail below the threshold is lost forever if not flushed; so on session end a count > 0 means
+there is a remainder to reflect on, and **the current count value tells REF exactly how many to feed**
+(window N == count, not the threshold). The session counter then self-deletes with the session's
+lifecycle. Recursion guard same as on_stop: a reflector child session's SessionEnd does not flush.
 
-ponytail: 崩溃 session 的孤儿计数器走 SessionStart 惰性 GC（Phase 6 该文件建时落，cap.md 待解）。
+ponytail: orphan counters of crashed sessions are GC'd lazily on SessionStart (landed when this file is built in Phase 6, cap.md open).
 """
 import os
 

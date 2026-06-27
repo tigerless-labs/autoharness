@@ -29,7 +29,7 @@ def test_clear_session_deletes_and_idempotent(tmp_path):
     assert counters._session_path("abc-123", tmp_path).exists()
     counters.clear_session("abc-123", tmp_path)
     assert counters.session_count("abc-123", tmp_path) == 0
-    counters.clear_session("abc-123", tmp_path)  # 缺失幂等、不抛
+    counters.clear_session("abc-123", tmp_path)  # idempotent when missing, no raise
 
 
 def test_unknown_layer_rejected(tmp_path):

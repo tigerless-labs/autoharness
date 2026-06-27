@@ -1,7 +1,8 @@
-"""把 layer 名解析成落盘位 —— 层在代码里唯一显形为路径的地方。
+"""Resolves a layer name into its on-disk location — the one place where a layer surfaces as a path.
 
-其余代码层无关、把 layer 当入参传进来。未知层 / 不安全符号名一律拒（fail-safe，
-deny-by-default），因为这是构造文件系统路径的咽喉，越权 / 路径穿越必须挡在此。
+The rest of the code is layer-agnostic and passes layer in as an argument. Unknown layers / unsafe
+symbol names are always rejected (fail-safe, deny-by-default), because this is the chokepoint that
+builds filesystem paths: privilege escalation / path traversal must be stopped here.
 """
 import re
 from pathlib import Path

@@ -1,8 +1,9 @@
-"""per-run intent 队列：writer=stage_skill(append) / reader=promoter(read+clear) 同源一份。
+"""per-run intent queue: writer=stage_skill(append) / reader=promoter(read+clear), one shared source.
 
-durable（崩溃补处理）：只 append 进 repo 层 state 区的 per-run 文件、不碰 skill 树。promoter
-走 read → land（原子、幂等）→ clear：crash 在 land 与 clear 之间 → 文件还在、下次 orphans
-扫到补处理（at-least-once + 原子 land = 实际 exactly-once）；极端没跑 → 零 land（fail-safe）。
+Durable (recovers after a crash): only appends to a per-run file in the repo-layer state area, never
+touches the skill tree. promoter runs read → land (atomic, idempotent) → clear: a crash between land
+and clear leaves the file in place, and the next run's orphans scan recovers it (at-least-once +
+atomic land = effectively exactly-once); in the extreme case where nothing ran, zero land (fail-safe).
 """
 import json
 import re

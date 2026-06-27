@@ -1,6 +1,6 @@
-# egress 红线规则集 —— CAP egress 与 LED 证据出口共用的单一来源（config 指向、redact 消费）。
-# 每条 = 一个命名正则；redact 把整段匹配替换为 [REDACTED:<category>:<name>]。
-# 过度脱敏是安全侧（宁可多删）；新增规则在此一处加，勿散落到代码。
+# egress redline rule set -- the single source shared by CAP egress and the LED evidence exit (config points to it, redact consumes it).
+# Each entry = one named regex; redact replaces the whole match with [REDACTED:<category>:<name>].
+# Over-redaction is the safe side (better to drop too much); add new rules here alone, do not scatter them across the code.
 
 [[secret]]
 name = "aws_access_key_id"

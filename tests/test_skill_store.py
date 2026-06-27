@@ -21,16 +21,16 @@ def test_find_two_layer_and_ambiguity(tmp_path):
     assert skill_store.find("foo", roots) == "project"
     assert skill_store.find("missing", roots) is None
     skill_store.write_body("global", "foo", "b", g)
-    with pytest.raises(ValueError):  # 同名跨两层 → 报错消歧
+    with pytest.raises(ValueError):  # same name across both layers → error to disambiguate
         skill_store.find("foo", roots)
 
 
 def test_apply_delta_unique_only():
     assert skill_store.apply_delta("a X b", "X", "Y") == "a Y b"
     with pytest.raises(ValueError):
-        skill_store.apply_delta("ab", "Z", "Y")          # old 不存在
+        skill_store.apply_delta("ab", "Z", "Y")          # old_string not found
     with pytest.raises(ValueError):
-        skill_store.apply_delta("X and X", "X", "Y")      # old 歧义（多处）
+        skill_store.apply_delta("X and X", "X", "Y")      # old_string ambiguous (multiple matches)
 
 
 def test_remove(tmp_path):
@@ -59,5 +59,5 @@ def test_sweep_orphans_removes_tmp_keeps_live(tmp_path):
     skill_store.write_body("project", "foo", "real", tmp_path)
     removed = skill_store.sweep_orphans("project", tmp_path)
     assert removed and all(str(r).endswith(".tmp") for r in removed)
-    assert skill_store.read_body("project", "foo", tmp_path) == "real"  # live 完好
+    assert skill_store.read_body("project", "foo", tmp_path) == "real"  # live file intact
     assert list(layer.skills_dir("project", tmp_path).rglob("*.tmp")) == []

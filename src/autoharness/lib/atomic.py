@@ -1,8 +1,9 @@
-"""POSIX 原子写原语：temp 同目录 + fsync + os.replace —— live 永不半态。
+"""POSIX atomic-write primitive: same-dir temp + fsync + os.replace — live is never half-written.
 
-validate-store 的"唯一落盘 = temp 同目录 + os.replace"就在此一处实现，skill_store / sidecar /
-counters 全复用。写中途崩溃只会留同目录 .tmp 孤儿（由 skill_store 启动 sweep），目标文件
-要么是旧内容、要么是新内容，绝无半写。
+validate-store's "the only way to persist = same-dir temp + os.replace" is implemented here alone;
+skill_store / sidecar / counters all reuse it. A crash mid-write leaves only a same-dir .tmp orphan
+(swept on skill_store startup); the target file is either the old content or the new content, never
+a half-write.
 """
 import os
 import tempfile

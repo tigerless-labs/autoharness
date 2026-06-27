@@ -1,7 +1,0 @@
-# [论文] Trace2Skill: Distill Trajectory-Local Lessons into Transferable Agent Skills
-
-**Jingwei Ni et al. (Alibaba Qwen + ETH Zürich / Univ. Zurich / Peking / Zhejiang)** — [arXiv:2603.25158](https://arxiv.org/abs/2603.25158), 2026-03 (v5 2026-06-04). code: [Qwen-Applications/Trace2Skill](https://github.com/Qwen-Applications/Trace2Skill) (~123★; 4–5 community re-implementations).
-
-**Skill creation/deepening** (the 沉淀/intake side, not management). Three-stage pipeline: (1) roll out a frozen agent → labeled success + failure trajectories; (2) propose trajectory-level skill **patches in parallel** with separate error & success analysts (Addition: new pattern from a success / new warning from an error; Edition: deepen an existing rule); (3) hierarchically **merge** all patches into one portable skill. Key claim: **parallel consolidation > sequential online editing** — sequential editing fragments knowledge across the collection and makes later skills depend on update order. Qwen3.5-35B-derived skills lift a 122B agent **+57.65pp on WikiTableQuestions**; beats ReasoningBank-style episodic retrieval; portable across model scales/families and OOD, with no parameter updates or test-time retrieval.
-
-**Relevance to autoharness:** the **沉淀 (intake)** reference — "parallel merge of patches beats sequential edits" supports batch maintenance over per-trace online editing. This is the *creation* side; relations / conflict / dedup are downstream management.

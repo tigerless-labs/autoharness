@@ -34,7 +34,7 @@ def test_create_appends_and_no_tree_write(tmp_path):
     got = _queue(tmp_path)
     assert got == [{"action": "create", "name": "foo", "level": "project",
                     "body": GOOD_BODY, "reason": "captured repeat", "evidence": "led slice"}]
-    assert not layer.skills_dir("project", tmp_path).exists()  # tool 碰不到 skill 树
+    assert not layer.skills_dir("project", tmp_path).exists()  # tool cannot touch the skill tree
 
 
 def test_default_level_project(tmp_path):
@@ -122,7 +122,7 @@ def test_bad_level_rejected_zero_append(tmp_path):
 def test_frontmatter_feedback_blocks_append(tmp_path):
     v = server.stage(_params(body="# no frontmatter\njust text\n"), run_id=RUN, root=tmp_path)
     assert not v["ok"] and "structure" in _errs(v)
-    assert _queue(tmp_path) == []  # 结构坏 → 零 append
+    assert _queue(tmp_path) == []  # bad structure -> zero append
 
 
 def test_oversize_body_rejected(tmp_path, monkeypatch):

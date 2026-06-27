@@ -1,7 +1,8 @@
-"""egress 红线消费者：把 secret/PII 在物化给下游那刻切片脱敏。
+"""egress redline consumer: redacts secret/PII slices at the moment they are materialized downstream.
 
-规则集是 config 指向的单一来源（redaction_rules.toml，CAP egress + LED 共用）；本模块只
-消费、不持有规则。整段匹配替换为 [REDACTED:<category>:<name>]，过度脱敏取安全侧。
+The rule set is the single source pointed to by config (redaction_rules.toml, shared by CAP egress +
+LED); this module only consumes rules, it does not own them. Each match is replaced wholesale with
+[REDACTED:<category>:<name>], erring on the side of over-redaction for safety.
 """
 import functools
 import re

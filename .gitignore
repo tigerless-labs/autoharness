@@ -16,3 +16,11 @@ build/
 .CLAUDE.md
 
 dev_skill/
+# dev-internal (lives on the dev branch, excluded from the public release)
+CLAUDE.md
+docs/research-loom/
+docs/plans/
+docs/TODO.md
+docs/testing.md
+docs/assets/
+experiments/

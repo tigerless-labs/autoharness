@@ -1,9 +1,11 @@
-"""skill CRUD：原子写 SKILL.md + 两层 find（同名跨两层报错消歧）+ 应用 delta + 归档 + 孤儿 .tmp sweep。
+"""skill CRUD: atomic SKILL.md write + two-layer find (ambiguity error when the same name spans both layers) + apply delta + archive + orphan .tmp sweep.
 
-落盘只此一处用 atomic（temp 同目录 + os.replace），live 永不半态。find 扩 Hermes `_find_skill`
-到 global+project 两层并集；同名跨两层 → 报错（promoter 解析 update/delete 层时据此消歧）。
-apply_delta 要求 old_string 唯一命中（不存在 / 多处歧义都拒），确定性重建。archive 原子移 symbol_dir
-进 `.archive`（保 LED/sidecar），delete 落地与 MNG（Phase 6）淘汰共用此一份。
+Persistence uses atomic (same-dir temp + os.replace) in this one place, so live is never half-written.
+find extends Hermes's `_find_skill` to the union of the global+project layers; the same name across
+both layers → error (promoter uses this to disambiguate the layer when resolving update/delete).
+apply_delta requires old_string to match uniquely (rejects both not-found and multiple-match
+ambiguity), a deterministic rebuild. archive atomically moves symbol_dir into `.archive` (preserving
+LED/sidecar); landing a delete and MNG (Phase 6) eviction share this one path.
 """
 import os
 import shutil

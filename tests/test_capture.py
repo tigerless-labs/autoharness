@@ -46,8 +46,8 @@ def test_materialize_atomic_no_source_mutation(tmp_path):
     dest = tmp_path / "state" / "window.md"
     out = capture.materialize(t, 1, dest)
     assert out == dest and dest.exists()
-    assert t.read_bytes() == before  # 宿主 raw log 字节不变
-    assert "AKIAIOSFODNN7EXAMPLE" not in dest.read_text()  # 物化窗已脱敏
+    assert t.read_bytes() == before  # host raw log bytes unchanged
+    assert "AKIAIOSFODNN7EXAMPLE" not in dest.read_text()  # materialized window is redacted
 
 
 def test_window_missing_transcript_empty(tmp_path):

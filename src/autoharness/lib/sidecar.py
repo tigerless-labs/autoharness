@@ -1,11 +1,13 @@
-"""per-符号 sidecar：created_by / 分子计数(calls) / 创建锚(anchor) / verification。
+"""per-symbol sidecar: created_by / numerator count (calls) / creation anchor (anchor) / verification.
 
-单一实现、随符号目录走层（promote/archive 的 mv 把含分子的它原子带走）。运维元数据走
-sidecar、不进 SKILL.md frontmatter（护召回、不污染用户作品）。created_by:agent 是 MNG 的
-成员资格钥匙 + promoter「只动自产」校验的依据。
+Single implementation, travels with the symbol directory across layers (promote/archive's mv carries
+it, numerator included, atomically). Operational metadata goes in the sidecar, not in SKILL.md
+frontmatter (protects recall, does not pollute the user's work). created_by:agent is MNG's
+membership key + the basis for promoter's "only touch self-produced" check.
 
-ponytail: bump_calls 是读-改-写、跨进程非原子；并发同改一符号的锁见 mng 待解（与 promoter
-单写者锁合一），unit 路径串行。
+ponytail: bump_calls is read-modify-write, not atomic across processes; the lock for concurrently
+modifying the same symbol is deferred to mng (merged with promoter's single-writer lock); the unit
+path is serial.
 """
 import json
 

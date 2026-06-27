@@ -7,7 +7,7 @@ def test_write_replaces_and_leaves_no_tmp(tmp_path):
     assert p.read_text() == "hello"
     atomic.write_text(p, "world")
     assert p.read_text() == "world"
-    # 原子 rename 成功后同目录无残留 .tmp（半态/孤儿不存在）
+    # after a successful atomic rename, no leftover .tmp in the dir (no half-state/orphan)
     assert list(p.parent.glob("*.tmp")) == []
 
 

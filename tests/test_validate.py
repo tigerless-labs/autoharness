@@ -63,6 +63,6 @@ def test_delete_missing_led_rejected():
 
 
 def test_referenced_py_syntax_error_rejected(tmp_path):
-    (tmp_path / "helper.py").write_text("def f(:\n")  # 语法错
+    (tmp_path / "helper.py").write_text("def f(:\n")  # syntax error
     body = "---\nname: foo\ndescription: d\n---\nSee `helper.py` for details.\n"
     assert "structure" in _families(validate.validate(GOOD_INTENT, body, base_dir=tmp_path))

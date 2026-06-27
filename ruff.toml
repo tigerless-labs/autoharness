@@ -1,5 +1,5 @@
-# lint 配置：选 pyflakes(F) + import 排序(I) + pyupgrade(UP) + bugbear(B) + 关键 pycodestyle
-# (E4/E7/E9)。不收 E501 行长 —— Chinese 注释会超 88、那是噪音非缺陷。
+# lint config: pyflakes(F) + import sorting(I) + pyupgrade(UP) + bugbear(B) + key pycodestyle
+# (E4/E7/E9). Skip E501 line length -- Chinese comments exceed 88, which is noise not a defect.
 target-version = "py311"
 
 [lint]

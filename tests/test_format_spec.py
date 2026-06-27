@@ -5,7 +5,7 @@ def test_format_spec_exists_and_states_required_fields():
     assert config.FORMAT_SPEC.is_file()
     text = config.FORMAT_SPEC.read_text()
     assert text.strip()
-    # 必填字段名是 #416 linter 与 reflector authoring 的同源契约 —— 不写到就会漂移
+    # required field names are the shared contract between the #416 linter and reflector authoring -- omit one and they drift
     for token in ["name", "description", "global"]:
         assert token in text
 

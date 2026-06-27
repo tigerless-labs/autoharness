@@ -17,7 +17,7 @@ def test_bump_calls_increments(tmp_path):
 
 
 def test_is_agent_created(tmp_path):
-    assert not sidecar.is_agent_created("project", "foo", tmp_path)  # 缺 sidecar → False（只动自产）
+    assert not sidecar.is_agent_created("project", "foo", tmp_path)  # no sidecar -> False (only touch self-produced)
     sidecar.create("project", "foo", 0, tmp_path)
     assert sidecar.is_agent_created("project", "foo", tmp_path)
 

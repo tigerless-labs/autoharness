@@ -24,8 +24,6 @@ symbols are judged by **invocation rate**, not elapsed time.
 > **Built and validated end-to-end.** The full pipeline (Phases 1–7) is implemented, and the
 > packaged plugin has been run on a real Claude Code host in an isolated sandbox — install →
 > capture → reflect → land → invoke → archive → restore, with skills judged by invocation rate.
-> See [docs/](docs/index.md) for the design and [docs/plans/roadmap.md](docs/plans/roadmap.md)
-> for the build order.
 
 ## Install
 
@@ -41,9 +39,21 @@ host's own name-and-description mechanism — autoharness never touches the reca
 
 A learning pipeline runs beside the host and keeps all of itself off the host's recall path.
 
-<p align="center"><img src="docs/assets/pipeline.svg" alt="autoharness pipeline: host → CAP → REF → promoter → .claude/skills → host, with MNG and LED beside" width="760" /></p>
+```mermaid
+flowchart LR
+    host["host agent"]
+    cap["CAP<br/>capture"]
+    ref["REF<br/>reflect"]
+    prom["promoter<br/>validate & store"]
+    skills[(".claude/skills")]
+    mng["MNG"]
+    led[("LED")]
 
-<sub>Diagram source: [`docs/assets/pipeline.mmd`](docs/assets/pipeline.mmd) — re-render to `pipeline.svg` after editing.</sub>
+    host -->|hooks| cap --> ref -->|intent| prom -->|pass| skills
+    skills -->|recall| host
+    mng --> skills
+    skills -.-> led
+```
 
 - **Author and validator are separate.** REF only proposes an intent; it has no write tools. The
   promoter is the sole writer and gates every intent through a deterministic linter.
@@ -89,8 +99,7 @@ deterministic promoter's alone, and nothing reaches disk before it passes.
 ### One plugin, data split by layer
 
 The final form is a single Claude Code plugin: one copy of the code, execution only from the hook
-layer, and only data and state split global versus repo. See
-[architecture](docs/research-loom/design/architecture.md).
+layer, and only data and state split global versus repo.
 
 ## Why not just let skills accumulate, or age them out on a timer?
 
@@ -106,17 +115,6 @@ used. autoharness keeps the layer bounded by adherence instead.
 | Survival signal | None | Wall-clock inactivity | Invocation rate in use |
 | Fair on ephemeral hosts | n/a | No | Yes |
 | Author separated from validator | n/a | No | Yes |
-
-## Documentation
-
-| | |
-|---|---|
-| [docs/](docs/index.md) | Documentation map — single entry point. |
-| [design spine](docs/research-loom/design/spine.md) | Principle, pipeline, global invariants, architecture diagram. |
-| [architecture](docs/research-loom/design/architecture.md) | Code structure and file tree of the plugin. |
-| [research-loom](docs/research-loom/index.md) | The literature-to-design workspace: every cited source synthesized into the design across five provenance-linked layers. |
-| [roadmap](docs/plans/roadmap.md) | Implementation roadmap, test strategy, CI gates. |
-| [TODO](docs/TODO.md) | Tracked follow-ups. |
 
 Built by Tigerless Labs.
 

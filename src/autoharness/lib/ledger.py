@@ -1,11 +1,14 @@
-"""LED：per-符号 append-only 账本（.ledger.jsonl）。只增不改。
+"""LED: per-symbol append-only ledger (.ledger.jsonl). Append-only, never modified.
 
-条目随 intent 自带（reason/evidence），promoter pass 那刻 append；MNG 退役补记；reject 不入账。
-记动作 + 理由 + 证据（脱敏切片 + 宿主 log 指针）+ watermark。本模块只管「追加 / 读」，不裁决
-内容（脱敏在 redact、字段必填在 validate）。append-only 守不可篡改：永不重写既有行。
+Entries carry their own data from the intent (reason/evidence), appended the moment promoter passes;
+MNG records retirements; rejects are not recorded. Logs action + reason + evidence (redacted slice +
+host log pointer) + watermark. This module only appends / reads, it does not adjudicate content
+(redaction is in redact, required fields are in validate). Append-only guarantees immutability:
+existing lines are never rewritten.
 
-ponytail: 一行 JSON 一次 write，小条目下 POSIX append 实际原子；跨进程并发追加同符号的严格
-顺序锁与 sidecar 一并留 mng 待解。
+ponytail: one JSON line per write, and under small entries a POSIX append is effectively atomic;
+the strict-ordering lock for concurrent cross-process appends to the same symbol is deferred to mng
+along with sidecar.
 """
 import json
 

@@ -1,12 +1,14 @@
-"""MNG 惰性重算：SessionStart 那刻对累积账现算 → 归档失活符号，跑在本会话召回前。
+"""MNG lazy recompute: at SessionStart, compute over the accumulated ledger now → archive inactive symbols, running before this session's recall.
 
-mng.md：非常驻宿主无后台 sweep，故淘汰骑 SessionStart——读 sidecar（calls 分子 + anchor）+
-层请求计数器（分母）累积水位、过 lifecycle 判定、把待归档名单逐个移出 live 树（archived 靠
-移目录出召回、可逆）。判定只读累积量（不读本 session 看到什么）→ 任意 repo 的 SessionStart
-同一结论。每会话一次、不节流。只管自产符号（原生 / 用户 skill 在池外，守零侵入）。
+mng.md: a non-resident host has no background sweep, so eviction rides SessionStart — read the sidecar
+(calls numerator + anchor) + the layer request counters (denominator) accumulated watermark, run the
+lifecycle decision, and move the to-archive list out of the live tree one by one (archiving = moving the
+directory out of recall, reversible). The decision reads only accumulated quantities (not what this
+session happened to see) → any repo's SessionStart reaches the same conclusion. Once per session, no
+throttling. Manages only self-produced symbols (native / user skills stay outside the pool, preserving
+zero intrusion).
 
-ponytail: 孤儿会话计数 GC（崩溃 session 残留）需会话存活信号才能安全扫（朴素扫会误删并发
-会话的活计数），缺信号前不做——clear_session 原语已备（Phase 4），policy 留 cap.md/mng.md 待解。
+ponytail: GC of orphan session counts (residue from crashed sessions) needs a session-liveness signal to sweep safely (a naive sweep would wrongly delete a concurrent session's live count), so it is deferred until that signal exists — the clear_session primitive is ready (Phase 4), policy left open in cap.md/mng.md.
 """
 from autoharness import config
 from autoharness.lib import counters, layer, lifecycle, sidecar, skill_store

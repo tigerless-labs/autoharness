@@ -1,8 +1,8 @@
-"""端到端 live 占位：真宿主装 plugin 跑全闭环，归 experiments/E7_plugin_e2e。
+"""End-to-end live placeholder: install the plugin on a real host and run the full loop, under experiments/E7_plugin_e2e.
 
-确定性接缝（dispatch 路由 / MCP serve / 清单 / spawn 跨进程）已在 CI 覆盖
-（test_dispatch / test_stage_skill / test_manifests / test_spawn）。本桩只标记 live 边界、
-指向手测 runbook；`pytest -m "not live"` 排除它，故不堵 CI。
+The deterministic seams (dispatch routing / MCP serve / manifests / cross-process spawn) are already covered in CI
+(test_dispatch / test_stage_skill / test_manifests / test_spawn). This stub only marks the live boundary and
+points to the manual-test runbook; `pytest -m "not live"` excludes it, so it does not block CI.
 """
 import pytest
 

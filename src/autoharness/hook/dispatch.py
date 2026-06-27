@@ -1,15 +1,18 @@
-"""单 dispatcher：plugin 所有 hook 事件的唯一入口，按事件名路由到对应 `on_*`。
+"""Single dispatcher: the one entry point for all the plugin's hook events, routing by event name to the matching `on_*`.
 
-architecture §执行只在 hook 全局层：`hooks.json` 只指本文件，凡 pipeline 执行步从这扇门进、
-按 `hook_event_name` 分发，未知 / 缺事件名安全忽略（fail-safe，宿主新增事件不致崩本 plugin）。
-E6 平台契约定细节：
-- `Stop`=每回合一次（S6）→ 收 Stop 时给两层请求计数器各 +1（MNG 率分母），再走 CAP 触发；
-  `SubagentStop`（reflector 完成，S4）不路由、不计。
-- `PreToolUse`：`Skill` → MNG 分子埋点（S5 身份在 `tool_input`）；reflector `agent_type`（S3 payload
-  带）对 `Write`/`Edit` → deny（plugin 顶层 backstop——plugin agent 不认自带 hooks，S1）。
-- 触发反思在 detached 后台作业里起（host-detach：不堵宿主 Stop），spawn CLI 入口接 promoter。
+architecture §execution lives only at the hook global layer: `hooks.json` points only at this file, every
+pipeline execution step enters through this one door and is dispatched by `hook_event_name`; unknown /
+missing event names are safely ignored (fail-safe — a new host event must not crash this plugin). E6
+platform contract pins the details:
+- `Stop` = once per turn (S6) → on Stop, +1 each to both layers' request counters (the MNG-rate
+  denominator), then run CAP triggering; `SubagentStop` (reflector done, S4) is not routed, not counted.
+- `PreToolUse`: `Skill` → MNG numerator instrumentation (identity in `tool_input`, S5); reflector
+  `agent_type` (carried in the S3 payload) on `Write`/`Edit` → deny (plugin top-level backstop — a
+  plugin agent does not honor its own hooks, S1).
+- Triggering reflection starts in a detached background job (host-detach: do not block the host Stop);
+  the spawn CLI entry connects to the promoter.
 
-ponytail: detached launch 是 fire-and-forget Popen；孤儿 / 超时隔离的健壮性留观测。
+ponytail: detached launch is a fire-and-forget Popen; robustness of orphan / timeout isolation left for observation.
 """
 import json
 import re
@@ -64,7 +67,7 @@ def dispatch(event, *, roots=None, reflect=None):
         if name == "SessionStart":
             return {"handled": name, "result": on_session_start.on_session_start(event, roots=roots)}
         if name == "Stop":
-            counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG 分母（每回合）
+            counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG denominator (per turn)
             counters.bump_request(layer.PROJECT, proot)
             result = on_stop.on_stop(event, root=proot)
             if result.get("triggered"):

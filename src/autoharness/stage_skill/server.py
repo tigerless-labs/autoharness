@@ -1,19 +1,21 @@
-"""stage_skill：reflector 的唯一写入面（emit-intent 提案工具）。
+"""stage_skill: the reflector's sole write surface (emit-intent proposal tool).
 
-模型改 skill 只此一途——去通用 Write/Edit。本工具**只 append per-run intent 队列、不碰任何
-skill 树**：成型 / 内容交叉引用 / 安全 / 落盘全在确定性 promoter（admission 模型，模型碰不到）。
-tool 只前置「结构」，promoter 兜「成型 + 内容 + 安全 + 落盘」（防御纵深，确定性侧别全信工具面）。
+The model's only path to change a skill — instead of the generic Write/Edit. This tool **only appends to
+the per-run intent queue, never touches any skill tree**: shaping / content cross-reference / security /
+landing all live in the deterministic promoter (admission model, untouchable by the model). The tool only
+front-checks "structure"; the promoter covers "shaping + content + security + landing" (defense in depth —
+the deterministic side does not fully trust the tool surface).
 
-- schema 强制：action enum；按 action 的 body|delta 必填与互斥；LED reason/evidence 必填；
-  create 的 level enum（默认 project，update/patch/delete 的层由 promoter 按两层 find 解析）。
-- 入参即时反馈：create/update 跑结构查（frontmatter + name/description，复用 validate.structure）
-  + body 大小，让模型在 subagent 会话内当场改、不整轮重来。
-- append 的 intent 形状与 promoter.promote 消费一致（patch 走顶层 old_string/new_string）。
+- Schema enforcement: action enum; per-action body|delta required-and-mutually-exclusive; LED
+  reason/evidence required; create's level enum (default project; the layer for update/patch/delete is
+  resolved by the promoter via a two-layer find).
+- Instant feedback on args: create/update run a structure check (frontmatter + name/description, reusing
+  validate.structure) + body size, so the model can fix it on the spot within the subagent session
+  instead of redoing a whole turn.
+- The appended intent's shape matches what promoter.promote consumes (patch uses top-level
+  old_string/new_string).
 
-ponytail: MCP stdio 进程外壳（serve）+ .mcp.json 注册缓 Phase 7——零依赖铁律禁引 mcp SDK、
-wire 形态又依 Phase 0 MCP-scope spike 结论。本模块现交付确定性处理器：TOOL_SCHEMA（广告面）
-+ stage（强制权威，条件式 body|delta 结构在此、非 JSON Schema 能净表达）。run_id/root 由
-spawn（Phase 5）经环境注入，此处收作入参。
+ponytail: the MCP stdio process shell (serve) + .mcp.json registration is deferred to Phase 7 — the zero-dependency rule forbids pulling in an mcp SDK, and the wire form depends on the Phase 0 MCP-scope spike's conclusion. This module currently delivers the deterministic handler: TOOL_SCHEMA (the advertised surface) + stage (the enforced authority; the conditional body|delta structure lives here, not cleanly expressible in JSON Schema). run_id/root are injected via env by spawn (Phase 5) and received here as args.
 """
 import json
 import os
@@ -31,15 +33,15 @@ TOOL_SCHEMA = {
     "type": "object",
     "properties": {
         "action": {"type": "string", "enum": list(_ACTIONS),
-                   "description": "create=新建(带 level) / update=整篇覆盖 / patch=小改(delta) / delete=删"},
-        "name": {"type": "string", "description": "skill 符号名"},
+                   "description": "create=new (with level) / update=replace whole file / patch=small edit (delta) / delete=remove"},
+        "name": {"type": "string", "description": "skill symbol name"},
         "level": {"type": "string", "enum": list(layer.LAYERS),
-                  "description": "仅 create；默认 project，global 高门槛"},
-        "body": {"type": "string", "description": "create/update：完整 SKILL.md 全文"},
-        "old_string": {"type": "string", "description": "patch：被替换原文（须唯一匹配 live）"},
-        "new_string": {"type": "string", "description": "patch：替换新文"},
-        "reason": {"type": "string", "description": "LED：为何改（必填）"},
-        "evidence": {"type": "string", "description": "LED：触发证据切片（必填）"},
+                  "description": "create only; defaults to project, global has a high bar"},
+        "body": {"type": "string", "description": "create/update: full SKILL.md text"},
+        "old_string": {"type": "string", "description": "patch: text to replace (must match the live copy uniquely)"},
+        "new_string": {"type": "string", "description": "patch: replacement text"},
+        "reason": {"type": "string", "description": "LED: why the change (required)"},
+        "evidence": {"type": "string", "description": "LED: triggering evidence slice (required)"},
     },
     "required": ["action", "name", "reason", "evidence"],
 }
@@ -138,8 +140,8 @@ def handle(request, *, run_id, root=None):
                             "serverInfo": {"name": TOOL_NAME, "version": "0.1.0"}})
     if method == "tools/list":
         return _ok(req_id, {"tools": [{"name": TOOL_NAME,
-                                       "description": "reflector 唯一写入面：emit-intent，只 append "
-                                                      "per-run intent 队列、不碰 skill 树",
+                                       "description": "the reflector's sole write surface: emit-intent, only appends "
+                                                      "to the per-run intent queue, never touches the skill tree",
                                        "inputSchema": TOOL_SCHEMA}]})
     if method == "tools/call":
         params = request.get("params") or {}

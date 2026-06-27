@@ -1,12 +1,15 @@
-"""CAP 交接物：触发那刻从宿主 transcript 取脱敏 tail-N 窗，物化给 reflector 跨进程读。
+"""CAP handoff artifact: at trigger time, take a redacted tail-N window from the host transcript and materialize it for the reflector to read across processes.
 
-cap.md：CAP 零内容拷贝——不触发不抄；触发时取最近 N exchange（N == reflect_every_n，与触发
-节奏同数、零重叠），过 egress 红线（redact），原子物化到 handoff 路径。**绝不回写宿主 raw
-log**（它不是我们的）。脱敏发生在「物化给下游那一刻」、非某份入口存储副本。
+cap.md: CAP copies zero content — no trigger, no copy; on trigger take the most recent N exchanges
+(N == reflect_every_n, same count as the trigger cadence, zero overlap), pass the egress red line
+(redact), and atomically materialize to the handoff path. **Never write back to the host raw log**
+(it is not ours). Redaction happens at the moment of materializing to the downstream, not as a stored
+copy at some entry point.
 
-ponytail: exchange 切分 = 宿主格式假设（user 角色起新窗、字段容错抽 role/text）。真 Claude
-Code .jsonl schema + compaction 下 tail-N 是否取到原始轮次 = Phase 0 live spike（cap.md 待解）；
-解析按 fixture 测不变量，spike 定真格式后再校准。
+ponytail: exchange splitting = an assumption about the host format (a user role starts a new window,
+role/text extracted with field-tolerant fallbacks). Whether tail-N captures the original turns under
+the real Claude Code .jsonl schema + compaction = Phase 0 live spike (cap.md open); parsing is tested
+on fixtures for invariants, recalibrated once the spike pins down the real format.
 """
 import json
 from pathlib import Path

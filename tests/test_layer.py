@@ -14,7 +14,7 @@ def test_paths_nest_under_root(tmp_path, lyr):
     assert layer.archive_dir(lyr, tmp_path) == skills / ".archive"
     assert layer.symbol_dir(lyr, "foo", tmp_path) == skills / "foo"
     assert layer.state_dir(lyr, tmp_path) == tmp_path / "autoharness"
-    # state区与 live skills 不相交（计数/队列绝不入 live skills 树）
+    # state area is disjoint from live skills (counters/queues never enter the live skills tree)
     assert layer.state_dir(lyr, tmp_path) != skills
     assert layer.archive_dir(lyr, tmp_path) != layer.symbol_dir(lyr, "foo", tmp_path)
 

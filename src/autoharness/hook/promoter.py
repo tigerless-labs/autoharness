@@ -1,20 +1,22 @@
-"""promoter：宿主 skill 树的唯一确定性写者（admission 闸，★安全 chokepoint）。
+"""promoter: the sole deterministic writer of the host skill tree (admission gate, ★security chokepoint).
 
-读 intent（reflector 经 stage_skill 发来的提案）→ 内存成型最终全文 → 内存校验六类 →
-pass 才原子落盘（validate-before-ANY-write）。模型只 propose、碰不到盘；land 与校验全在这。
-仿 K8s validating admission（校验 in-flight、allow 才 persist）+ POSIX atomic-write。
+Read the intent (the proposal the reflector sent via stage_skill) → shape the final full text in memory →
+validate the six classes in memory → only on pass write atomically to disk (validate-before-ANY-write).
+The model only proposes, never touches disk; landing and validation all happen here. Modeled on K8s
+validating admission (validate in-flight, persist only on allow) + POSIX atomic-write.
 
-- 成型：create/update=intent body；patch=read live + apply delta；delete=None（移除）。
-- 层解析：create 取 intent `level`；update/patch/delete 走 skill_store.find（同名跨层报错、缺失拒）。
-- 校验：复用 lib.validate 六类，喂 {**intent, level:解析层}（global 闸对 update 亦生效）。
-- land（pass 后）：写 SKILL.md（原子）→ create 盖 sidecar created_by:agent → append intent 自带 LED；
-  delete=LED 退役 + archive 移走。reject=零落盘、不打标、不入账。
-- drain：read 队列 → 逐条 promote → 末尾 clear（at-least-once + 原子 land = 实际 exactly-once）；
-  启动 sweep 孤儿 .tmp。崩溃下未处理 intent 留 durable 队列、下次补；极端没跑 → 零 land（fail-safe）。
+- Shaping: create/update = intent body; patch = read live + apply delta; delete = None (removal).
+- Layer resolution: create takes the intent `level`; update/patch/delete go through skill_store.find
+  (same name across layers errors, missing is rejected).
+- Validation: reuse lib.validate's six classes, fed {**intent, level: resolved layer} (the global gate
+  applies to update too).
+- Land (after pass): write SKILL.md (atomic) → create stamps the sidecar created_by:agent → append the
+  intent's own LED; delete = LED retirement + archive move-out. Reject = zero writes, no stamp, no ledger.
+- Drain: read queue → promote one by one → clear at the end (at-least-once + atomic land = effectively
+  exactly-once); on startup sweep orphan .tmp. On a crash, unprocessed intents stay in the durable queue
+  and are retried next time; in the extreme of never running → zero land (fail-safe).
 
-ponytail: 单进程同步即满足「串行单写者」；跨进程锁见 mng 待解。LED watermark / create anchor
-由 CAP（Phase 4）供真值，v1 anchor 走入参缺省 0。整 run clear，崩溃极窗（land 与 clear 之间）
-可重 append LED —— 逐条幂等 watermark 待 intent 队列粒度定稿（validate-store 待解）。
+ponytail: a single synchronous process already satisfies "serial single writer"; cross-process locking see mng open. LED watermark / create anchor get true values from CAP (Phase 4); v1 anchor uses the arg default 0. Whole-run clear, the tiny crash window (between land and clear) may re-append the LED — per-item idempotent watermark pending the intent-queue granularity being finalized (validate-store open).
 """
 from autoharness.lib import intent_queue, layer, ledger, sidecar, skill_store, validate
 

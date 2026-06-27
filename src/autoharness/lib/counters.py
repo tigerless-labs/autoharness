@@ -1,10 +1,12 @@
-"""会话计数器（CAP 触发：每 Stop +1、满 N 清零）+ 层请求计数器（MNG 分母：每回合 +1）。
+"""Session counter (CAP trigger: +1 per Stop, reset at N) + per-layer request counter (MNG denominator: +1 per turn).
 
-单一实现、按层；O(1) 读改写、即时持久（每个 hook 是独立短进程，内存留不住）。分子（被调
-次数）归 sidecar（随符号走层），不在此。会话计数住 repo 层 state 区（cap.md：session 级、
-落本仓 .claude，不入 live skills）。
+Single implementation, per-layer; O(1) read-modify-write, persisted immediately (each hook is a
+separate short-lived process, nothing survives in memory). The numerator (call count) belongs to
+sidecar (travels with the symbol across layers), not here. Session counts live in the repo-layer
+state area (cap.md: session-scoped, written to this repo's .claude, not into live skills).
 
-ponytail: 读-改-写跨进程非原子；global 请求计数器多 repo 并发写的锁见 mng 待解。
+ponytail: read-modify-write is not atomic across processes; the lock for the global request counter
+under concurrent multi-repo writes is deferred to mng.
 """
 import re
 

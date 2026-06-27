@@ -9,14 +9,14 @@ def test_append_read_clear_roundtrip(tmp_path):
     got = intent_queue.read("run1", tmp_path)
     assert [i["action"] for i in got] == ["create", "patch"]
     intent_queue.clear("run1", tmp_path)
-    assert intent_queue.read("run1", tmp_path) == []  # 处理完清空
+    assert intent_queue.read("run1", tmp_path) == []  # cleared once processed
 
 
 def test_read_does_not_delete_at_least_once(tmp_path):
-    # read 不删 → 崩在 land 与 clear 之间下次仍补处理（at-least-once）
+    # read does not delete -> a crash between land and clear is reprocessed next time (at-least-once)
     intent_queue.append("run1", {"action": "create"}, tmp_path)
     assert intent_queue.read("run1", tmp_path)
-    assert intent_queue.read("run1", tmp_path)  # 再读仍在
+    assert intent_queue.read("run1", tmp_path)  # still there on re-read
 
 
 def test_orphans_lists_undrained_runs(tmp_path):

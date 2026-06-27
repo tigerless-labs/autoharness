@@ -1,10 +1,12 @@
-"""MNG 分子埋点：`PreToolUse(Skill)` 那刻给被调符号 sidecar calls +1，纯观察不拦截。
+"""MNG numerator instrumentation: at `PreToolUse(Skill)`, +1 the called symbol's sidecar calls, pure observation, no interception.
 
-mng.md：率分子 = 被调次数，存被调符号 sidecar、层无关（身份决定落哪层）。**零侵入红线——
-只给自产符号计数**，绝不给原生 / 用户 skill 写 sidecar（碰它们即违反不碰宿主作品）。递归
-guard 同 CAP：reflector 子会话不计。坏 / 未知 / 同名歧义符号 fail-safe 不崩宿主 hook。
+mng.md: the rate numerator = number of calls, stored in the called symbol's sidecar, layer-agnostic
+(identity decides which layer). **Zero-intrusion red line — count only self-produced symbols**, never
+write a sidecar for native / user skills (touching them violates "do not touch the host's work").
+Recursion guard same as CAP: a reflector child session is not counted. Bad / unknown / same-name
+ambiguous symbols fail-safe without crashing the host hook.
 
-ponytail: event 里符号身份的确切 key = Phase 0 spike（mng.md 待解）；现按几个候选字段容错抽。
+ponytail: the exact key for a symbol's identity in the event = Phase 0 spike (mng.md open); for now extract with field-tolerant fallbacks over a few candidate keys.
 """
 import os
 

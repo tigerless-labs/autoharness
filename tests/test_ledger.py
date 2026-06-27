@@ -9,7 +9,7 @@ def test_append_only_grows_and_never_mutates(tmp_path):
 
     ledger.append("project", "foo", {"action": "delete", "reason": "r3"}, tmp_path)
     rows2 = ledger.read("project", "foo", tmp_path)
-    assert rows2[:2] == rows  # 既有条目只增不改
+    assert rows2[:2] == rows  # existing entries only grow, never mutate
     assert len(rows2) == 3
 
 

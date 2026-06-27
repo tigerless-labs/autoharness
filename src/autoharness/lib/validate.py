@@ -1,13 +1,15 @@
-"""确定性 linter 六类，跑在内存成型结果（最终全文 + intent）上、不调 LLM（快、精确、不可注入）。
+"""Six deterministic linter classes, run over the in-memory shaped result (final full text + intent), no LLM call (fast, precise, injection-proof).
 
-六类（validate-store §Validate）：安全 skills_guard / 结构 #416 / LED 有 / 内容完整 /
-global repo-agnostic / 自产标签（只动自产）。产 verdict {ok, findings:[(family, detail)]}；
-findings 非空即 reject。create 豁免「自产」查（其打标在六类全 pass 之后，由 promoter 盖）。
+The six classes (validate-store §Validate): safety skills_guard / structure #416 / LED present /
+content complete / global repo-agnostic / self-produced tag (only touch self-produced). Produces a
+verdict {ok, findings:[(family, detail)]}; non-empty findings = reject. create is exempt from the
+"self-produced" check (its tag is stamped after all six classes pass, by promoter).
 
-base_dir 给定时附加 #416 的「引用 .py 语法」查（被引且存在的 .py 必须可解析）。
-target_is_agent_created 由 promoter 读 sidecar 传入；create 时为 None、豁免。
-body=None（delete 成型结果=移除、无正文）时跳过依赖 body 的四类（安全/结构/完整/global），
-只留 LED + 自产两查。
+When base_dir is given, the #416 "referenced .py syntax" check is added (a referenced, existing .py
+must parse). target_is_agent_created is passed in by promoter after reading the sidecar; on create it
+is None and exempt. When body=None (a delete's shaped result = removal, no body), the four
+body-dependent classes (safety/structure/complete/global) are skipped, leaving only the LED +
+self-produced checks.
 """
 import ast
 import re

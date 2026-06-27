@@ -1,12 +1,14 @@
-"""CAP 触发（每轮）：Stop hook + 递归 guard + 计数闸，全确定性、不调 LLM。
+"""CAP triggering (per turn): Stop hook + recursion guard + count gate, fully deterministic, no LLM call.
 
-cap.md：唯一拿到「每次响应结束」的信号是 Stop。但 Stop=每轮、episode=跨多轮任务，故不每
-Stop 都 spawn——读小 int +1（O(1)、不扫 transcript），满 reflect_every_n 才出触发裁决并清零。
-detached spawn 本身接 Phase 5 spawn.py；本步只出「是否触发 + 窗口 N」，spawn 据此调
-capture.materialize（窗口 N == 阈值，与触发节奏同数、零重叠）。
+cap.md: the only signal for "each response ended" is Stop. But Stop = per turn while an episode = a task
+spanning many turns, so we do not spawn on every Stop — read a small int and +1 (O(1), no transcript
+scan), and only emit a trigger verdict and reset once reflect_every_n is reached. The detached spawn
+itself connects to Phase 5 spawn.py; this step only emits "trigger or not + window N", and spawn uses it
+to call capture.materialize (window N == threshold, same count as the trigger cadence, zero overlap).
 
-递归 guard：reflector 子会话（CHILD_SESSION_ENV 有值）的 Stop 不得再触发反思、且不计数，
-否则无限自反思。坏/缺 session-id → 不触发（fail-safe，不崩宿主 hook）。
+Recursion guard: a reflector child session's Stop (CHILD_SESSION_ENV set) must neither re-trigger
+reflection nor count, otherwise infinite self-reflection. Bad/missing session-id → no trigger
+(fail-safe, does not crash the host hook).
 """
 import os
 

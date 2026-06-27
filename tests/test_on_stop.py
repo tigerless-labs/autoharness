@@ -22,15 +22,15 @@ def test_triggers_and_resets_at_n(monkeypatch, tmp_path):
     on_stop.on_stop(EV, root=tmp_path, n=3)
     v = on_stop.on_stop(EV, root=tmp_path, n=3)
     assert v["triggered"] and v["window_n"] == 3
-    assert counters.session_count("sess-1", tmp_path) == 0  # 触发即清零
-    assert on_stop.on_stop(EV, root=tmp_path, n=3)["count"] == 1  # 下一轮从 1 起
+    assert counters.session_count("sess-1", tmp_path) == 0  # reset on trigger
+    assert on_stop.on_stop(EV, root=tmp_path, n=3)["count"] == 1  # next round starts at 1
 
 
 def test_recursion_guard_early_exit_no_count(monkeypatch, tmp_path):
     monkeypatch.setenv(config.CHILD_SESSION_ENV, "reflector-xyz")
     v = on_stop.on_stop(EV, root=tmp_path, n=3)
     assert not v["triggered"]
-    assert counters.session_count("sess-1", tmp_path) == 0  # child Stop 不计数
+    assert counters.session_count("sess-1", tmp_path) == 0  # child Stop does not count
 
 
 def test_missing_session_safe(monkeypatch, tmp_path):

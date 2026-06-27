@@ -1,11 +1,14 @@
-"""六族安全正则静态扫描（exfiltration / injection / destructive / persistence / network /
-obfuscation）。
+"""Static scan over six families of safety regexes (exfiltration / injection / destructive / persistence / network /
+obfuscation).
 
-self-produced 默认开：我们的 skill 延迟执行、持久、可传播、来料含 trace（间接注入），威胁
-模型强于 Hermes。injection 一等威胁 —— SKILL.md 正文本身即注入宿主上下文的载体。纯确定性、
-不可注入绕过。`scan` 返回 {family: [命中的 pattern]}；空 dict = 干净。
+self-produced is on by default: our skills are deferred-execution, persistent, propagatable, and their
+inputs carry traces (indirect injection), a stronger threat model than Hermes. injection is a
+first-class threat — the SKILL.md body itself is the vehicle for injecting into the host context.
+Purely deterministic, cannot be bypassed by injection. `scan` returns {family: [matched patterns]};
+an empty dict = clean.
 
-ponytail: 正则启发式、非沙箱执行分析。挡的是显式恶意串；要更强的语义检测再上 LLM/sandbox。
+ponytail: regex heuristics, not sandboxed execution analysis. It stops explicit malicious strings;
+for stronger semantic detection, add an LLM/sandbox.
 """
 import re
 
