@@ -1,0 +1,43 @@
+# egress redline rule set -- the single source shared by CAP egress and the LED evidence exit (config points to it, redact consumes it).
+# Each entry = one named regex; redact replaces the whole match with [REDACTED:<category>:<name>].
+# Over-redaction is the safe side (better to drop too much); add new rules here alone, do not scatter them across the code.
+
+[[secret]]
+name = "aws_access_key_id"
+pattern = '''AKIA[0-9A-Z]{16}'''
+
+[[secret]]
+name = "private_key_block"
+pattern = '''-----BEGIN [A-Z ]*PRIVATE KEY-----'''
+
+[[secret]]
+name = "github_token"
+pattern = '''gh[posru]_[A-Za-z0-9]{20,}'''
+
+[[secret]]
+name = "slack_token"
+pattern = '''xox[abprs]-[A-Za-z0-9-]{10,}'''
+
+[[secret]]
+name = "bearer_token"
+pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{20,}'''
+
+[[secret]]
+name = "api_key_assignment"
+pattern = '''(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['"]?[A-Za-z0-9._\-/+]{12,}'''
+
+[[pii]]
+name = "email"
+pattern = '''[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'''
+
+[[pii]]
+name = "ssn"
+pattern = '''(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)'''
+
+[[pii]]
+name = "us_phone"
+pattern = '''(?<!\d)(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)'''
+
+[[pii]]
+name = "credit_card"
+pattern = '''(?<!\d)(?:\d[ -]?){13,16}(?!\d)'''

@@ -1,0 +1,25 @@
+.claude/
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+.env
+.DS_Store
+.CLAUDE.md
+
+dev_skill/
+# dev-internal (lives on the dev branch, excluded from the public release)
+CLAUDE.md
+docs/research-loom/
+docs/plans/
+docs/TODO.md
+docs/testing.md
+experiments/

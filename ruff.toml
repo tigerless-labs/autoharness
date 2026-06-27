@@ -1,0 +1,6 @@
+# lint config: pyflakes(F) + import sorting(I) + pyupgrade(UP) + bugbear(B) + key pycodestyle
+# (E4/E7/E9). Skip E501 line length -- Chinese comments exceed 88, which is noise not a defect.
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
