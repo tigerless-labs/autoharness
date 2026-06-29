@@ -14,8 +14,7 @@ the skills it wrote itself**.
 
 Same model, different harness — 42% → 78% on CORE-Bench ([HAL](https://arxiv.org/abs/2510.11977)).
 The harness does much of the work (swyx's **Big Model vs Big Harness**), yet it's still rebuilt by
-hand every model generation. autoharness bets one slice of it — the skill layer — can maintain
-itself, learning from real work instead of an offline eval.
+hand every model generation. autoharness bets one slice of it — the skill layer — can maintain itself.
 
 | | |
 |---|---|
