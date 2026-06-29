@@ -7,9 +7,10 @@
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" />
 </p>
 
-**autoharness is a self-learning skill layer for Claude Code.** It learns skills from your real
-sessions, merges same-scenario ones instead of stacking near-duplicates, updates them in use, and
-prunes the unused — isolated beside the agent, touching only the skills it wrote itself.
+**autoharness is a self-learning skill layer for Claude Code.** It **learns** skills from your real
+sessions, **merges** same-scenario ones instead of stacking near-duplicates, **updates** them in use,
+and **prunes** any that stop getting used — so the layer **stays clean on its own**, **touching only
+the skills it wrote itself**.
 
 Same model, different harness — 42% → 78% on CORE-Bench ([HAL](https://arxiv.org/abs/2510.11977)).
 The harness does much of the work (swyx's **Big Model vs Big Harness**), yet it's still rebuilt by
