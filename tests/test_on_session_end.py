@@ -38,3 +38,10 @@ def test_recursion_guard_no_flush(monkeypatch, tmp_path):
     counters.bump_session("sess-1", tmp_path)
     v = on_session_end.on_session_end(EV, root=tmp_path)
     assert not v["triggered"]
+
+
+def test_platform_child_var_does_not_gate_flush(monkeypatch, tmp_path):
+    _unguard(monkeypatch)
+    monkeypatch.setenv("CLAUDE_CODE_CHILD_SESSION", "1")  # host sets this on every hook subprocess, not just reflectors
+    counters.bump_session("sess-1", tmp_path)
+    assert on_session_end.on_session_end(EV, root=tmp_path)["triggered"]
