@@ -33,6 +33,12 @@ def test_recursion_guard_early_exit_no_count(monkeypatch, tmp_path):
     assert counters.session_count("sess-1", tmp_path) == 0  # child Stop does not count
 
 
+def test_platform_child_var_does_not_gate_counting(monkeypatch, tmp_path):
+    _unguard(monkeypatch)
+    monkeypatch.setenv("CLAUDE_CODE_CHILD_SESSION", "1")  # host sets this on every hook subprocess, not just reflectors
+    assert on_stop.on_stop(EV, root=tmp_path, n=10).get("count") == 1
+
+
 def test_missing_session_safe(monkeypatch, tmp_path):
     _unguard(monkeypatch)
     assert not on_stop.on_stop({}, root=tmp_path, n=3)["triggered"]

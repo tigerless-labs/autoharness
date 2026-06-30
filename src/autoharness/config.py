@@ -32,7 +32,7 @@ _LIB = Path(__file__).parent / "lib"
 REDACTION_RULES = _LIB / "redaction_rules.toml"  # secret/PII rule set, single source for CAP egress + LED
 FORMAT_SPEC = _LIB / "format_spec.md"            # #416 single source for authoring + lint
 
-CHILD_SESSION_ENV = "CLAUDE_CODE_CHILD_SESSION"  # platform recursion-guard signal: set by spawn, read by CAP hook (single source)
+CHILD_SESSION_ENV = "AUTOHARNESS_CHILD_SESSION"  # recursion-guard signal: set ONLY by spawn, read by CAP hooks (single source). Must be autoharness-owned: the host sets CLAUDE_CODE_CHILD_SESSION on every hook subprocess, so reusing it would gate every top-level turn.
 
 REFLECTOR_AGENT = "autoharness:reflector"  # the --agent reference for spawn (plugin namespace, Phase 0 resolution pending live test)
 CLAUDE_BIN = "claude"                       # the child-session executable for spawn; PATH resolution, overridable in tests

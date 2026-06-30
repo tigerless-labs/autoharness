@@ -62,3 +62,11 @@ def test_recursion_guard_does_not_count(tmp_path, monkeypatch):
     r = on_skill_call.on_skill_call({"skill_name": "foo"}, roots=roots)
     assert not r["counted"] and r["reason"] == "recursion_guard"
     assert sidecar.read("project", "foo", root)["calls"] == 0  # reflector's own calls excluded
+
+
+def test_platform_child_var_does_not_gate_counting(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_CHILD_SESSION", "1")  # host sets this on every hook subprocess, not just reflectors
+    roots = _roots(tmp_path)
+    root = _seed_agent_skill(roots)
+    r = on_skill_call.on_skill_call({"skill_name": "foo"}, roots=roots)
+    assert r["counted"] and sidecar.read("project", "foo", root)["calls"] == 1
