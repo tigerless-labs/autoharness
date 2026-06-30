@@ -16,6 +16,8 @@ build/
 .CLAUDE.md
 
 dev_skill/
+# launch-post drafts + diagrams (x-launch-post skill)
+.X/
 # dev-internal (lives on the dev branch, excluded from the public release)
 CLAUDE.md
 docs/research-loom/
