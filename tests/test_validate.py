@@ -34,6 +34,12 @@ def test_completeness_placeholder_rejected():
     assert "completeness" in _families(validate.validate(GOOD_INTENT, body))
 
 
+def test_placeholder_mention_without_colon_passes():
+    body = ("---\nname: foo\ndescription: d\n---\n# Foo\n"
+            "Recorded in docs/TODO.md; we track TODOs there. FIXME.md too.\n")
+    assert not [f for f in validate.structure(body) if f[0] == "completeness"]
+
+
 def test_global_repo_agnostic_rejected_but_project_ok():
     body = "---\nname: foo\ndescription: d\n---\nRun /home/ryan/tigerless_ai/x.py\n"
     assert "global_repo_agnostic" in _families(validate.validate({**GOOD_INTENT, "level": "global"}, body))
