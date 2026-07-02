@@ -18,7 +18,7 @@ def _int_env(name, default):
         return default
 
 
-REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 10)  # trigger cadence == size of the window fed to REF
+REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 3)  # trigger cadence == size of the window fed to REF
 
 STAGE_MAX_BODY_BYTES = 100_000  # ponytail: placeholder, SKILL.md body cap; for instant feedback on stage_skill args
 
