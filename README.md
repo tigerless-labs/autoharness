@@ -44,6 +44,17 @@ Restart Claude Code, then check it's live:
 Zero config. It now watches your sessions and lands learned skills into `.claude/skills/` in the
 background. Cadence and lifecycle thresholds are tunable via `AUTOHARNESS_*` environment variables.
 
+### Update
+
+```
+/plugin marketplace update autoharness              # pull the latest release
+/plugin update autoharness@autoharness              # refresh the installed copy
+```
+
+Restart Claude Code afterwards — hooks and the MCP server are loaded at session start, so a running
+session keeps the old version until relaunched. The installed copy is cached by the version in
+`plugin.json`; releases always bump it, which is what makes `update` take effect.
+
 ### Uninstall
 
 ```
