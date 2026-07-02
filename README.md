@@ -48,12 +48,13 @@ background. Cadence and lifecycle thresholds are tunable via `AUTOHARNESS_*` env
 
 ```
 /plugin marketplace update autoharness              # pull the latest release
-/plugin update autoharness@autoharness              # refresh the installed copy
+/plugin update autoharness@autoharness              # then update autoharness (may open the plugin
+                                                    # manager — hit Update on autoharness there)
 ```
 
 Restart Claude Code afterwards — hooks and the MCP server are loaded at session start, so a running
 session keeps the old version until relaunched. The installed copy is cached by the version in
-`plugin.json`; releases always bump it, which is what makes `update` take effect.
+`plugin.json`; releases always bump it, which is what makes the update take effect.
 
 ### Uninstall
 
