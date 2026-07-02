@@ -1,7 +1,7 @@
 <h1 align="center">autoharness</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/release-v0.1.0-brightgreen.svg" alt="release" />
+  <img src="https://img.shields.io/badge/release-v0.2.0-brightgreen.svg" alt="release" />
   <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="python" />
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg" alt="platform" />
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" />
