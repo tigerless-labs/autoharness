@@ -124,8 +124,8 @@ def test_reflect_builds_run_id_and_skips_without_transcript(tmp_path):
     launched = []
     result = {"session_id": "abc", "count": 7, "window_n": 7}
     dispatch._reflect({"transcript_path": "/t.jsonl"}, result, _roots(tmp_path),
-                      launch=lambda tp, n, run_id, roots: launched.append((tp, n, run_id)))
-    assert launched == [("/t.jsonl", 7, "abc-7")]
+                      launch=lambda tp, sid, run_id, roots: launched.append((tp, sid, run_id)))
+    assert launched == [("/t.jsonl", "abc", "abc-7")]
 
     launched.clear()
     dispatch._reflect({}, result, _roots(tmp_path), launch=lambda *a: launched.append(a))

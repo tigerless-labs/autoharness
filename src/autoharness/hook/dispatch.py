@@ -41,10 +41,10 @@ def _is_reflector(event):
     return at == config.REFLECTOR_AGENT or at.endswith("reflector")
 
 
-def _detached_launch(transcript_path, window_n, run_id, roots):
+def _detached_launch(transcript_path, session_id, run_id, roots):
     subprocess.Popen(  # host-detach: fire-and-forget so the Stop hook returns immediately
         [sys.executable, "-m", "autoharness.hook.spawn",
-         str(transcript_path), str(window_n), run_id,
+         str(transcript_path), str(session_id), run_id,
          str(roots[layer.PROJECT]), str(roots[layer.GLOBAL])],
         start_new_session=True, stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -55,7 +55,7 @@ def _reflect(event, result, roots, launch=None):
     transcript_path = event.get("transcript_path")
     if not transcript_path:
         return
-    (launch or _detached_launch)(transcript_path, result.get("window_n", 0), _run_id(result), roots)
+    (launch or _detached_launch)(transcript_path, result.get("session_id", ""), _run_id(result), roots)
 
 
 def dispatch(event, *, roots=None, reflect=None):

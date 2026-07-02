@@ -18,7 +18,12 @@ def _int_env(name, default):
         return default
 
 
-REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 3)  # trigger cadence == size of the window fed to REF
+REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 3)  # trigger cadence; the window itself is watermark-delimited (capture)
+
+# raw-capture byte caps (ponytail: placeholders, calibrate in experiments/): per transcript record,
+# and per handoff window (tail kept) — bound tool dumps / base64 away from the child context.
+CAPTURE_MAX_RECORD_BYTES = 4_000
+CAPTURE_MAX_WINDOW_BYTES = 200_000
 
 STAGE_MAX_BODY_BYTES = 100_000  # ponytail: placeholder, SKILL.md body cap; for instant feedback on stage_skill args
 

@@ -58,3 +58,17 @@ def clear_session(session_id, root=None):
     p = _session_path(session_id, root)
     if p.exists():
         p.unlink()
+
+
+def _offset_path(session_id, root=None):
+    if not isinstance(session_id, str) or not _SAFE_SESSION.match(session_id):
+        raise ValueError(f"unsafe session id: {session_id!r}")
+    return layer.state_dir(layer.PROJECT, root) / f"offset-{session_id}"
+
+
+def session_offset(session_id, root=None):
+    return _read_int(_offset_path(session_id, root))
+
+
+def write_session_offset(session_id, offset, root=None):
+    atomic.write_text(_offset_path(session_id, root), str(int(offset)))

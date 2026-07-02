@@ -1,78 +1,44 @@
-"""CAP handoff artifact: at trigger time, take a redacted tail-N window from the host transcript and materialize it for the reflector to read across processes.
+"""CAP handoff window: a raw byte slice of the host transcript since the last reflection — zero parsing.
 
-cap.md: CAP copies zero content — no trigger, no copy; on trigger take the most recent N exchanges
-(N == reflect_every_n, same count as the trigger cadence, zero overlap), pass the egress red line
-(redact), and atomically materialize to the handoff path. **Never write back to the host raw log**
-(it is not ours). Redaction happens at the moment of materializing to the downstream, not as a stored
-copy at some entry point.
-
-ponytail: exchange splitting = an assumption about the host format (a user role starts a new window,
-role/text extracted with field-tolerant fallbacks). Whether tail-N captures the original turns under
-the real Claude Code .jsonl schema + compaction = Phase 0 live spike (cap.md open); parsing is tested
-on fixtures for invariants, recalibrated once the spike pins down the real format.
+cap.md + docs/plans/raw-capture.md: the transcript is the host's internal event log, not a chat log;
+any role/text extraction here is a format assumption that live windows proved wrong (meta records as
+empty roles, tool results as pseudo-user turns). So capture does not interpret the format at all —
+the reflector (an LLM) reads raw JSONL fine. capture only moves bytes: slice from the session's byte
+watermark to EOF, clip oversized records and the window total (tool dumps / base64 must not blow the
+child context), pass the egress red line (redact), and hand the text plus the new watermark back to
+the caller. **Never write back to the host raw log** (it is not ours). A missing / stale / negative
+watermark (compaction rewrote the file) fails safe to a full re-read bounded by the window cap.
 """
-import json
 from pathlib import Path
 
-from autoharness.lib import atomic, redact
+from autoharness import config
+from autoharness.lib import redact
+
+TRUNCATION_MARK = "...[truncated]"
 
 
-def _records(transcript_path):
-    p = Path(transcript_path)
-    if not p.exists():
-        return []
-    records = []
-    for line in p.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return records
+def _clip(line, cap):
+    return line if len(line) <= cap else line[:cap] + TRUNCATION_MARK
 
 
-def _role(rec):
-    return str(rec.get("role") or rec.get("type") or "")
-
-
-def _text(rec):
-    msg = rec.get("message") if isinstance(rec.get("message"), dict) else rec
-    content = msg.get("content", msg.get("text", ""))
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict):
-                parts.append(str(block.get("text") or block.get("content") or ""))
-            else:
-                parts.append(str(block))
-        return " ".join(p for p in parts if p)
-    return str(content)
-
-
-def _exchanges(records):
-    exchanges, current = [], []
-    for rec in records:
-        if _role(rec).startswith("user") and current:
-            exchanges.append(current)
-            current = []
-        current.append(rec)
-    if current:
-        exchanges.append(current)
-    return exchanges
-
-
-def window(transcript_path, n, *, rules_path=None):
-    if n <= 0:
-        return ""
-    tail = _exchanges(_records(transcript_path))[-n:]
-    lines = [f"{_role(rec)}: {_text(rec)}" for ex in tail for rec in ex]
-    return redact.redact("\n".join(lines), rules_path)
-
-
-def materialize(transcript_path, n, dest, *, rules_path=None):
-    atomic.write_text(dest, window(transcript_path, n, rules_path=rules_path))
-    return dest
+def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes=None,
+           rules_path=None):
+    record_cap = max_record_bytes or config.CAPTURE_MAX_RECORD_BYTES
+    window_cap = max_window_bytes or config.CAPTURE_MAX_WINDOW_BYTES
+    path = Path(transcript_path)
+    if not path.exists():
+        return "", 0
+    data = path.read_bytes()
+    new_offset = len(data)
+    if not 0 <= offset <= new_offset:
+        offset = 0
+    lines = [_clip(line, record_cap)
+             for line in data[offset:].decode("utf-8", errors="replace").splitlines()]
+    kept, total = [], 0
+    for line in reversed(lines):
+        total += len(line) + 1
+        if total > window_cap:
+            kept.append(TRUNCATION_MARK)
+            break
+        kept.append(line)
+    return redact.redact("\n".join(reversed(kept)), rules_path), new_offset

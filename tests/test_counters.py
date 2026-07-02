@@ -40,3 +40,20 @@ def test_unknown_layer_rejected(tmp_path):
 def test_session_id_traversal_rejected(tmp_path):
     with pytest.raises(ValueError):
         counters.bump_session("../evil", tmp_path)
+
+
+def test_session_offset_roundtrip_default_zero(tmp_path):
+    assert counters.session_offset("s1", tmp_path) == 0
+    counters.write_session_offset("s1", 12345, tmp_path)
+    assert counters.session_offset("s1", tmp_path) == 12345
+
+
+def test_session_offset_garbage_reads_zero(tmp_path):
+    counters.write_session_offset("s2", 7, tmp_path)
+    counters._offset_path("s2", tmp_path).write_text("not-a-number")
+    assert counters.session_offset("s2", tmp_path) == 0
+
+
+def test_session_offset_traversal_rejected(tmp_path):
+    with pytest.raises(ValueError):
+        counters.write_session_offset("../evil", 1, tmp_path)

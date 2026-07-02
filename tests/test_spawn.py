@@ -2,7 +2,7 @@ from pathlib import Path
 
 from autoharness import config
 from autoharness.hook import spawn
-from autoharness.lib import layer, ledger, sidecar, skill_store
+from autoharness.lib import counters, layer, ledger, sidecar, skill_store
 
 _SRC = str(Path(__file__).resolve().parents[1] / "src")
 
@@ -14,15 +14,27 @@ def _roots(tmp_path):
 
 
 def test_main_parses_argv_and_runs(tmp_path, monkeypatch):
-    monkeypatch.setattr(spawn.capture, "window", lambda tp, n, **k: f"WIN[{tp}|{n}]")
+    monkeypatch.setattr(spawn.capture, "window", lambda tp, off, **k: (f"WIN[{tp}|{off}]", 42))
     seen = {}
     monkeypatch.setattr(spawn, "run",
                         lambda w, rid, **k: seen.update(w=w, rid=rid, roots=k["roots"]))
-    spawn.main(["/t.jsonl", "5", "run-9", str(tmp_path / "p"), str(tmp_path / "g")])
-    assert seen["w"] == "WIN[/t.jsonl|5]"
+    spawn.main(["/t.jsonl", "sess-1", "run-9", str(tmp_path / "p"), str(tmp_path / "g")])
+    assert seen["w"] == "WIN[/t.jsonl|0]"
     assert seen["rid"] == "run-9"
     assert seen["roots"][layer.PROJECT] == tmp_path / "p"
     assert seen["roots"][layer.GLOBAL] == tmp_path / "g"
+    assert counters.session_offset("sess-1", tmp_path / "p") == 42
+
+
+def test_main_offset_advances_only_after_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.capture, "window", lambda tp, off, **k: ("W", 99))
+    monkeypatch.setattr(spawn, "run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    counters.write_session_offset("sess-2", 7, tmp_path / "p")
+    try:
+        spawn.main(["/t.jsonl", "sess-2", "run-1", str(tmp_path / "p"), str(tmp_path / "g")])
+    except RuntimeError:
+        pass
+    assert counters.session_offset("sess-2", tmp_path / "p") == 7  # crash -> window re-fed next time
 
 
 # --- U3 deterministic assembly ---

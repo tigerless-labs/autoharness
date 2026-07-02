@@ -17,7 +17,7 @@ from pathlib import Path
 
 from autoharness import config
 from autoharness.hook import capture, promoter
-from autoharness.lib import atomic, layer, skill_store, validate
+from autoharness.lib import atomic, counters, layer, skill_store, validate
 
 
 def description_index(roots=None):
@@ -81,9 +81,13 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
 
 
 def main(argv=None):
-    transcript_path, n, run_id, proot, groot = argv if argv is not None else sys.argv[1:]
+    transcript_path, session_id, run_id, proot, groot = argv if argv is not None else sys.argv[1:]
     roots = {layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)}
-    run(capture.window(transcript_path, int(n)), run_id, roots=roots)
+    offset = counters.session_offset(session_id, roots[layer.PROJECT])
+    window_text, new_offset = capture.window(transcript_path, offset)
+    result = run(window_text, run_id, roots=roots)
+    counters.write_session_offset(session_id, new_offset, roots[layer.PROJECT])
+    return result
 
 
 if __name__ == "__main__":
