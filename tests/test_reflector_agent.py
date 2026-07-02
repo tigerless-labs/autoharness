@@ -34,5 +34,13 @@ def test_reflector_body_teaches_folder_skill():
         assert token in body
 
 
-def test_reflector_keeps_single_intent_rule():
-    assert "at most one" in AGENT.read_text().lower()
+def test_reflector_prompt_has_no_authoring_gates():
+    body = AGENT.read_text().lower()
+    for gate in ("at most one", "do not capture", "only valid if"):
+        assert gate not in body
+
+
+def test_reflector_prompt_encourages_generation():
+    body = AGENT.read_text().lower()
+    assert "one intent per" in body
+    assert body.index("patch") < body.index("`create`")
