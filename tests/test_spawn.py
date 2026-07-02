@@ -85,7 +85,7 @@ def test_child_env_sets_guard_and_coords_without_polluting():
 
 # --- U4 run orchestration + system (fake reflector) ---
 
-def test_run_materializes_handoff_and_drains(tmp_path):
+def test_run_feeds_bundle_and_drains_no_handoff_persisted(tmp_path):
     roots = _roots(tmp_path)
     seen = {}
 
@@ -106,6 +106,7 @@ def test_run_materializes_handoff_and_drains(tmp_path):
     assert "WINDOW" in seen["bundle"]
     assert [v["ok"] for v in verdicts] == [True]
     assert skill_store.read_body("project", "learned", roots["project"]) is not None
+    assert not (layer.state_dir(layer.PROJECT, roots["project"]) / "handoff").exists()  # bundle lives only in the pipe
 
 
 def _fake_reflector_script(tmp_path):
