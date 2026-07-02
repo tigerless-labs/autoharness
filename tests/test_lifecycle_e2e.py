@@ -52,7 +52,7 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
                                 {"action": "create", "name": "learned", "level": "project",
                                  "body": LEARNED, "reason": "captured repeat", "evidence": "slice"},
                                 rts[layer.PROJECT])
-        spawn.run(capture.window(event["transcript_path"], result["window_n"]),
+        spawn.run(capture.window(event["transcript_path"])[0],
                   dispatch._run_id(result), roots=rts, spawn_fn=fake_spawn)
 
     # BEAT 1 — birth: drive Stops until the cadence triggers reflection

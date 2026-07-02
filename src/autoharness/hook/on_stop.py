@@ -3,8 +3,8 @@
 cap.md: the only signal for "each response ended" is Stop. But Stop = per turn while an episode = a task
 spanning many turns, so we do not spawn on every Stop — read a small int and +1 (O(1), no transcript
 scan), and only emit a trigger verdict and reset once reflect_every_n is reached. The detached spawn
-itself connects to Phase 5 spawn.py; this step only emits "trigger or not + window N", and spawn uses it
-to call capture.materialize (window N == threshold, same count as the trigger cadence, zero overlap).
+itself connects to Phase 5 spawn.py; this step only emits the trigger verdict — the window itself is
+watermark-delimited by capture (raw bytes since the last reflection, zero overlap by construction).
 
 Recursion guard: a reflector child session's Stop (CHILD_SESSION_ENV set) must neither re-trigger
 reflection nor count, otherwise infinite self-reflection. Bad/missing session-id → no trigger
