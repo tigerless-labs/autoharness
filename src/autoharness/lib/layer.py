@@ -49,3 +49,21 @@ def state_dir(layer, root=None):
 def symbol_dir(layer, name, root=None):
     _check_name(name)
     return skills_dir(layer, root) / name
+
+
+SUBFILE_DIRS = ("scripts", "templates", "assets", "references")
+
+
+def check_subfile(rel):
+    if not isinstance(rel, str) or not rel or ".." in rel or "\\" in rel:
+        raise ValueError(f"unsafe subfile path: {rel!r}")
+    segments = rel.split("/")
+    if len(segments) < 2 or segments[0] not in SUBFILE_DIRS:
+        raise ValueError(f"subfile path must sit under one of {SUBFILE_DIRS}: {rel!r}")
+    for segment in segments:
+        _check_name(segment)
+
+
+def subfile_path(layer, name, rel, root=None):
+    check_subfile(rel)
+    return symbol_dir(layer, name, root) / rel

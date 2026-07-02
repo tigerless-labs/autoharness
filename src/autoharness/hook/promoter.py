@@ -10,15 +10,32 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
   (same name across layers errors, missing is rejected).
 - Validation: reuse lib.validate's six classes, fed {**intent, level: resolved layer} (the global gate
   applies to update too).
-- Land (after pass): write SKILL.md (atomic) → create stamps the sidecar created_by:agent → append the
-  intent's own LED; delete = LED retirement + archive move-out. Reject = zero writes, no stamp, no ledger.
+- Land (after pass): land intent subfiles first (paths re-gated; every landing parent resolved and
+  escape-checked BEFORE any write — a pre-planted symlink rejects with zero writes) → materialize the
+  evidence slice into references/evidence-<hash>.md (redacted again at this egress, content-addressed →
+  idempotent; the model never names or writes it) → write SKILL.md last (atomic replace = the commit
+  point: recall only reads SKILL.md, so a reader never sees it point at an unlanded subfile) → create
+  stamps the sidecar created_by:agent → append the intent's own LED with evidence as the slice's
+  relative path. delete = materialize evidence + LED retirement + archive move-out (whole-dir
+  os.replace carries the slices along). Reject = zero writes, no stamp, no ledger.
 - Drain: read queue → promote one by one → clear at the end (at-least-once + atomic land = effectively
   exactly-once); on startup sweep orphan .tmp. On a crash, unprocessed intents stay in the durable queue
   and are retried next time; in the extreme of never running → zero land (fail-safe).
 
 ponytail: a single synchronous process already satisfies "serial single writer"; cross-process locking see mng open. LED watermark / create anchor get true values from CAP (Phase 4); v1 anchor uses the arg default 0. Whole-run clear, the tiny crash window (between land and clear) may re-append the LED — per-item idempotent watermark pending the intent-queue granularity being finalized (validate-store open).
 """
-from autoharness.lib import intent_queue, layer, ledger, sidecar, skill_store, validate
+import hashlib
+
+from autoharness.lib import (
+    atomic,
+    intent_queue,
+    layer,
+    ledger,
+    redact,
+    sidecar,
+    skill_store,
+    validate,
+)
 
 _MODIFY = ("update", "patch", "delete")
 
@@ -50,21 +67,45 @@ def _shape(intent, level, root):
     raise ValueError(f"unknown action: {action!r}")
 
 
-def _led(intent):
+def _led(intent, evidence_ref):
     return {"action": intent.get("action"),
             "reason": intent.get("reason"),
-            "evidence": intent.get("evidence")}
+            "evidence": evidence_ref}
+
+
+def _materialize_evidence(level, name, evidence, root):
+    text = redact.redact(evidence)
+    rel = f"references/evidence-{hashlib.sha256(text.encode('utf-8')).hexdigest()[:8]}.md"
+    p = layer.subfile_path(level, name, rel, root)
+    if not p.exists():
+        atomic.write_text(p, text)
+    return rel
+
+
+def _land_files(level, name, files, root):
+    if not files:
+        return
+    sdir = layer.symbol_dir(level, name, root).resolve()
+    paths = {rel: layer.subfile_path(level, name, rel, root) for rel in sorted(files)}
+    for rel, p in paths.items():
+        if not p.resolve().is_relative_to(sdir):
+            raise ValueError(f"subfile escapes the skill dir: {rel}")
+    for rel, p in paths.items():
+        atomic.write_text(p, files[rel])
 
 
 def _land(action, intent, body, level, name, root, anchor):
     if action == "delete":
-        ledger.append(level, name, _led(intent), root)
+        evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
+        ledger.append(level, name, _led(intent, evidence_ref), root)
         skill_store.archive(level, name, root)
         return
+    _land_files(level, name, intent.get("files"), root)
+    evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
     skill_store.write_body(level, name, body, root)
     if action == "create":
         sidecar.create(level, name, anchor, root)
-    ledger.append(level, name, _led(intent), root)
+    ledger.append(level, name, _led(intent, evidence_ref), root)
 
 
 def promote(intent, *, roots=None, repo_name=None, anchor=0):
@@ -95,7 +136,10 @@ def promote(intent, *, roots=None, repo_name=None, anchor=0):
     if not verdict["ok"]:
         return _reject(action, level, verdict["findings"])
 
-    _land(action, intent, body, level, name, root, anchor)
+    try:
+        _land(action, intent, body, level, name, root, anchor)
+    except ValueError as exc:
+        return _reject(action, level, [("landing", str(exc))])
     return {"ok": True, "action": action, "level": level, "findings": []}
 
 

@@ -12,3 +12,10 @@ def test_format_spec_exists_and_states_required_fields():
 
 def test_redaction_rules_exists():
     assert config.REDACTION_RULES.is_file()
+
+
+def test_format_spec_states_subfile_contract():
+    text = config.FORMAT_SPEC.read_text()
+    # subfile categories + the pointer rule are shared contract between validate and reflector authoring
+    for token in ["scripts/", "templates/", "assets/", "references/", "Pointer rule"]:
+        assert token in text

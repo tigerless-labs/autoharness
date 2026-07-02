@@ -145,6 +145,85 @@ def test_stage_never_writes_skill_tree_any_action(tmp_path):
     assert not layer.archive_dir("project", tmp_path).exists()
 
 
+# --- files (folder-skill subfiles) ---
+
+FILES_BODY = ("---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\n"
+              "Run scripts/run.sh; details in references/notes.md\n")
+GOOD_FILES = {"scripts/run.sh": "echo hi\n", "references/notes.md": "notes\n"}
+
+
+def test_tool_schema_advertises_files():
+    assert server.TOOL_SCHEMA["properties"]["files"]["type"] == "object"
+
+
+def test_create_with_files_appends_verbatim(tmp_path):
+    v = server.stage(_params(body=FILES_BODY, files=GOOD_FILES), run_id=RUN, root=tmp_path)
+    assert v["ok"], v["errors"]
+    assert _queue(tmp_path)[0]["files"] == GOOD_FILES
+    assert not layer.skills_dir("project", tmp_path).exists()  # still zero tree write
+
+
+def test_intent_without_files_carries_no_files_key(tmp_path):
+    server.stage(_params(), run_id=RUN, root=tmp_path)
+    assert "files" not in _queue(tmp_path)[0]
+
+
+def test_files_on_patch_rejected(tmp_path):
+    v = server.stage({"action": "patch", "name": "foo", "old_string": "x", "new_string": "y",
+                      "reason": "r", "evidence": "e", "files": GOOD_FILES},
+                     run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "schema" in _errs(v)
+    assert _queue(tmp_path) == []
+
+
+def test_files_on_delete_rejected(tmp_path):
+    v = server.stage({"action": "delete", "name": "foo", "reason": "r", "evidence": "e",
+                      "files": GOOD_FILES}, run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "schema" in _errs(v)
+
+
+def test_files_non_dict_rejected(tmp_path):
+    v = server.stage(_params(body=FILES_BODY, files=["scripts/run.sh"]), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "schema" in _errs(v)
+
+
+def test_files_path_gate_red_team(tmp_path):
+    for bad in ("../x", "/etc/passwd", "scripts/../SKILL.md", "SKILL.md",
+                ".sidecar.json", ".ledger.jsonl", "bin/x.sh"):
+        v = server.stage(_params(body=FILES_BODY, files={bad: "x"}), run_id=RUN, root=tmp_path)
+        assert not v["ok"] and "files" in _errs(v), bad
+    assert _queue(tmp_path) == []  # every attempt: zero append
+
+
+def test_files_non_string_content_rejected(tmp_path):
+    v = server.stage(_params(body=FILES_BODY, files={"scripts/run.sh": 7}), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "files" in _errs(v)
+
+
+def test_files_count_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "STAGE_MAX_FILES", 1)
+    v = server.stage(_params(body=FILES_BODY, files=GOOD_FILES), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "files" in _errs(v)
+
+
+def test_files_per_file_size_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "STAGE_MAX_FILE_BYTES", 3)
+    v = server.stage(_params(body=FILES_BODY, files=GOOD_FILES), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "files" in _errs(v)
+
+
+def test_files_total_size_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "STAGE_MAX_FILES_TOTAL_BYTES", 10)
+    v = server.stage(_params(body=FILES_BODY, files=GOOD_FILES), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "files" in _errs(v)
+
+
+def test_unpointed_subfile_instant_feedback(tmp_path):
+    v = server.stage(_params(files=GOOD_FILES), run_id=RUN, root=tmp_path)  # GOOD_BODY: no pointers
+    assert not v["ok"] and "structure" in _errs(v)
+    assert _queue(tmp_path) == []
+
+
 # --- MCP stdio shell (zero-dep, hand-rolled JSON-RPC) ---
 
 def _req(method, req_id=1, params=None):

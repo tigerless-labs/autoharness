@@ -26,3 +26,13 @@ def test_reflector_tools_are_least_privilege():
 def test_reflector_body_binds_emit_only():
     body = AGENT.read_text()
     assert "stage_skill" in body  # the only sanctioned write face
+
+
+def test_reflector_body_teaches_folder_skill():
+    body = AGENT.read_text()
+    for token in ("files", "scripts/", "templates/", "references/", "class-level"):
+        assert token in body
+
+
+def test_reflector_keeps_single_intent_rule():
+    assert "at most one" in AGENT.read_text().lower()
