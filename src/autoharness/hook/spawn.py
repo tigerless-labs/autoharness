@@ -2,8 +2,8 @@
 
 architecture line 29 / [reflector-subagent] / [cap]: at trigger time CAP gives "redacted episode window +
 trigger cadence"; this step assembles the three pieces (window + the existing skill description index
-(compare-first dedupe source, skips archived) + the single-source format_spec), persists them to disk,
-and feeds them via stdin to the cross-process reflector. spawn sets CHILD_SESSION_ENV (recursion guard) +
+(compare-first dedupe source, skips archived) + the single-source format_spec) and feeds them via
+stdin to the cross-process reflector — nothing is persisted; the bundle lives only in the pipe. spawn sets CHILD_SESSION_ENV (recursion guard) +
 injects run_id/root via env (stage_skill uses these to append back to the queue), then drains the intent
 queue to disk after the child session ends. Authoring and landing are fully split across processes from
 here: the reflector only appends intents, the promoter exclusively validates and lands.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 from autoharness import config
 from autoharness.hook import capture, promoter
-from autoharness.lib import atomic, counters, layer, skill_store, validate
+from autoharness.lib import counters, layer, skill_store, validate
 
 
 def description_index(roots=None):
@@ -70,7 +70,6 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     proot = roots.get(layer.PROJECT)
     spec = (spec_path or config.FORMAT_SPEC).read_text()
     bundle = build_bundle(window_text, description_index(roots), spec)
-    atomic.write_text(layer.state_dir(layer.PROJECT, proot) / "handoff" / f"{run_id}.md", bundle)
 
     argv = build_command(agent=agent or config.REFLECTOR_AGENT,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
