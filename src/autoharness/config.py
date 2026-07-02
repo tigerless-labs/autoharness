@@ -22,6 +22,11 @@ REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 10)  # trigger cadence
 
 STAGE_MAX_BODY_BYTES = 100_000  # ponytail: placeholder, SKILL.md body cap; for instant feedback on stage_skill args
 
+# folder-skill subfile caps (ponytail: placeholders like STAGE_MAX_BODY_BYTES, calibrate in experiments/)
+STAGE_MAX_FILES = 8
+STAGE_MAX_FILE_BYTES = 64_000
+STAGE_MAX_FILES_TOTAL_BYTES = 256_000
+
 # maturity threshold (denominator gate to graduate out of probation) / capacity cap, set per layer, independently tunable. global has a larger blast radius -> more conservative (smaller capacity).
 MATURITY_THRESHOLD = {layer.GLOBAL: _int_env("AUTOHARNESS_MATURITY_GLOBAL", 50),
                       layer.PROJECT: _int_env("AUTOHARNESS_MATURITY_PROJECT", 20)}

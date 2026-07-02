@@ -1,10 +1,14 @@
 """LED: per-symbol append-only ledger (.ledger.jsonl). Append-only, never modified.
 
 Entries carry their own data from the intent (reason/evidence), appended the moment promoter passes;
-MNG records retirements; rejects are not recorded. Logs action + reason + evidence (redacted slice +
-host log pointer) + watermark. This module only appends / reads, it does not adjudicate content
-(redaction is in redact, required fields are in validate). Append-only guarantees immutability:
-existing lines are never rewritten.
+MNG records retirements; rejects are not recorded. This module only appends / reads, it does not
+adjudicate content (redaction is in redact, required fields are in validate). Append-only guarantees
+immutability: existing lines are never rewritten.
+
+`evidence` is an opaque string. New entries carry a relative path into the symbol folder
+(`references/evidence-<hash>.md`, the promoter-materialized redacted slice) instead of the inline
+slice; entries written before folder-skills keep their inline string (append-only, never
+rewritten). Readers must not assume either form.
 
 ponytail: one JSON line per write, and under small entries a POSIX append is effectively atomic;
 the strict-ordering lock for concurrent cross-process appends to the same symbol is deferred to mng

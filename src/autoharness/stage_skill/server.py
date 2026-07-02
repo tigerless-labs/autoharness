@@ -42,6 +42,10 @@ TOOL_SCHEMA = {
         "new_string": {"type": "string", "description": "patch: replacement text"},
         "reason": {"type": "string", "description": "LED: why the change (required)"},
         "evidence": {"type": "string", "description": "LED: triggering evidence slice (required)"},
+        "files": {"type": "object", "additionalProperties": {"type": "string"},
+                  "description": "create/update only: subfiles as relative path -> content, under "
+                                 "scripts/|templates/|assets/|references/; each must be referenced "
+                                 "by its relative path in the SKILL.md body"},
     },
     "required": ["action", "name", "reason", "evidence"],
 }
@@ -64,11 +68,14 @@ def _schema_errors(params):
 
     has_body = params.get("body") is not None
     has_delta = params.get("old_string") is not None or params.get("new_string") is not None
+    has_files = params.get("files") is not None
     if action in _BODY_ACTIONS:
         if not has_body:
             errors.append(("schema", f"{action} requires body"))
         if has_delta:
             errors.append(("schema", f"{action} takes body, not old_string/new_string"))
+        if has_files and not isinstance(params["files"], dict):
+            errors.append(("schema", "files must be an object of relative path -> content"))
         if action == "create":
             level = params.get("level", layer.PROJECT)
             if level not in layer.LAYERS:
@@ -78,9 +85,13 @@ def _schema_errors(params):
             errors.append(("schema", "patch takes old_string/new_string, not body"))
         if params.get("old_string") is None or params.get("new_string") is None:
             errors.append(("schema", "patch requires both old_string and new_string"))
+        if has_files:
+            errors.append(("schema", "patch takes no files (use update to change subfiles)"))
     elif action == "delete":
         if has_body or has_delta:
             errors.append(("schema", "delete takes no body/delta"))
+        if has_files:
+            errors.append(("schema", "delete takes no files"))
     return errors
 
 
@@ -91,7 +102,9 @@ def _content_errors(params):
     errors = []
     if len(body.encode("utf-8")) > config.STAGE_MAX_BODY_BYTES:
         errors.append(("size", f"body exceeds {config.STAGE_MAX_BODY_BYTES} bytes"))
-    errors += validate.structure(body)
+    files = params.get("files")
+    errors += validate.check_files(files)
+    errors += validate.structure(body, files)
     return errors
 
 
@@ -103,6 +116,8 @@ def _intent(params):
         intent["level"] = params.get("level", layer.PROJECT)
     if action in _BODY_ACTIONS:
         intent["body"] = params["body"]
+        if params.get("files"):
+            intent["files"] = params["files"]
     elif action == "patch":
         intent["old_string"] = params["old_string"]
         intent["new_string"] = params["new_string"]
@@ -137,7 +152,7 @@ def handle(request, *, run_id, root=None):
     if method == "initialize":
         return _ok(req_id, {"protocolVersion": _PROTOCOL_VERSION,
                             "capabilities": {"tools": {}},
-                            "serverInfo": {"name": TOOL_NAME, "version": "0.1.0"}})
+                            "serverInfo": {"name": TOOL_NAME, "version": "0.2.0"}})
     if method == "tools/list":
         return _ok(req_id, {"tools": [{"name": TOOL_NAME,
                                        "description": "the reflector's sole write surface: emit-intent, only appends "
