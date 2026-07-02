@@ -3,8 +3,17 @@
 The rest of the code is layer-agnostic and passes layer in as an argument. Unknown layers / unsafe
 symbol names are always rejected (fail-safe, deny-by-default), because this is the chokepoint that
 builds filesystem paths: privilege escalation / path traversal must be stopped here.
+
+The project layer's identity is the session cwd — except inside a linked git worktree, where it is
+remapped to the main worktree root, so counters / intents / skills from all worktrees of one repo
+land in one place and survive worktree removal. Only the linked-worktree case is remapped (git-dir
+differs from git-common-dir): plain repos, repo subdirectories, and non-git directories keep cwd
+verbatim, so a nested project can never be attributed to an enclosing repo. Any git failure falls
+back to cwd (fail-safe).
 """
 import re
+import subprocess
+from functools import cache
 from pathlib import Path
 
 GLOBAL = "global"
@@ -24,9 +33,29 @@ def _check_name(name):
         raise ValueError(f"unsafe symbol name: {name!r}")
 
 
+@cache
+def _main_worktree_root(cwd):
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--git-dir", "--git-common-dir"],
+            cwd=cwd, capture_output=True, text=True, timeout=5,
+        )
+        lines = proc.stdout.splitlines()
+        if proc.returncode != 0 or len(lines) < 2:
+            return Path(cwd)
+        git_dir, common_dir = ((Path(cwd) / line).resolve() for line in lines[:2])
+        if git_dir != common_dir:
+            return common_dir.parent
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return Path(cwd)
+
+
 def default_root(layer):
     _check_layer(layer)
-    return Path.home() / ".claude" if layer == GLOBAL else Path.cwd() / ".claude"
+    if layer == GLOBAL:
+        return Path.home() / ".claude"
+    return _main_worktree_root(str(Path.cwd())) / ".claude"
 
 
 def _root(layer, root):
