@@ -82,3 +82,86 @@ def test_window_never_mutates_source(tmp_path):
 
 def test_window_missing_transcript_empty(tmp_path):
     assert capture.window(tmp_path / "nope.jsonl") == ("", 0)
+
+
+def _assistant(text=None, tool=None):
+    content = []
+    if text:
+        content.append({"type": "text", "text": text})
+    if tool:
+        content.append({"type": "tool_use", "name": tool, "input": {"command": "secret-args"}})
+    return {"type": "assistant", "message": {"role": "assistant", "content": content}}
+
+
+def _tool_result(output):
+    return {"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "content": output}]}}
+
+
+def test_digest_keeps_text_and_tool_names_drops_outputs(tmp_path):
+    t = tmp_path / "transcript.jsonl"
+    _write_transcript(t, [
+        _record(0, text="fix the login bug"),
+        _assistant(text="Looking at auth.py", tool="Bash"),
+        _tool_result("HUGE-TOOL-OUTPUT-" * 50),
+        _assistant(text="Fixed by adding a null check."),
+    ])
+    end = t.stat().st_size
+    d = capture.digest(t, end)
+    assert "fix the login bug" in d
+    assert "Looking at auth.py" in d
+    assert "Bash" in d                      # tool name survives
+    assert "HUGE-TOOL-OUTPUT" not in d      # tool result content dropped
+    assert "secret-args" not in d           # tool input dropped too
+
+
+def test_digest_only_covers_bytes_before_offset(tmp_path):
+    t = tmp_path / "transcript.jsonl"
+    _write_transcript(t, [_record(0, text="early context")])
+    end = t.stat().st_size
+    with t.open("a") as f:
+        f.write(json.dumps(_record(1, text="fresh window")) + "\n")
+    d = capture.digest(t, end)
+    assert "early context" in d
+    assert "fresh window" not in d
+    assert capture.digest(t, 0) == ""       # nothing before offset zero
+
+
+def test_digest_keeps_only_last_n_exchanges(tmp_path):
+    t = tmp_path / "transcript.jsonl"
+    records = []
+    for i in range(30):
+        records.append(_record(i, text=f"question-{i}"))
+        records.append(_assistant(text=f"answer-{i}"))
+    _write_transcript(t, records)
+    d = capture.digest(t, t.stat().st_size, max_exchanges=5)
+    assert "question-29" in d and "answer-29" in d
+    assert "question-24" not in d and "question-0" not in d
+
+
+def test_digest_clips_records_and_total(tmp_path):
+    t = tmp_path / "transcript.jsonl"
+    _write_transcript(t, [_record(0, text="y" * 5000), _record(1, text="tail-mark")])
+    d = capture.digest(t, t.stat().st_size, max_record_chars=100)
+    assert "tail-mark" in d
+    assert "y" * 200 not in d
+    big = tmp_path / "big.jsonl"
+    _write_transcript(big, [_record(i, text=f"m{i}-" + "z" * 150) for i in range(100)])
+    d2 = capture.digest(big, big.stat().st_size, max_digest_bytes=500)
+    assert len(d2) < 1200
+    assert "m99-" in d2                      # tail kept when capped
+
+
+def test_digest_redacts_and_survives_garbage(tmp_path):
+    t = tmp_path / "transcript.jsonl"
+    t.write_text("NOT-JSON{{{\n"
+                 + json.dumps(_record(0, text="key AKIAIOSFODNN7EXAMPLE end")) + "\n"
+                 + '{"type": "assistant", "message": null}\n')
+    d = capture.digest(t, t.stat().st_size)
+    assert "AKIAIOSFODNN7EXAMPLE" not in d
+    assert "[REDACTED:" in d
+    assert "NOT-JSON" not in d               # garbage lines skipped, no crash
+
+
+def test_digest_missing_transcript_empty(tmp_path):
+    assert capture.digest(tmp_path / "nope.jsonl", 100) == ""

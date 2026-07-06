@@ -15,11 +15,13 @@ def _roots(tmp_path):
 
 def test_main_parses_argv_and_runs(tmp_path, monkeypatch):
     monkeypatch.setattr(spawn.capture, "window", lambda tp, off, **k: (f"WIN[{tp}|{off}]", 42))
+    monkeypatch.setattr(spawn.capture, "digest", lambda tp, off, **k: f"DIG[{tp}|{off}]")
     seen = {}
     monkeypatch.setattr(spawn, "run",
-                        lambda w, rid, **k: seen.update(w=w, rid=rid, roots=k["roots"]))
+                        lambda w, rid, **k: seen.update(w=w, rid=rid, roots=k["roots"], digest=k["digest"]))
     spawn.main(["/t.jsonl", "sess-1", "run-9", str(tmp_path / "p"), str(tmp_path / "g")])
     assert seen["w"] == "WIN[/t.jsonl|0]"
+    assert seen["digest"] == "DIG[/t.jsonl|0]"  # digest covers the bytes before the window offset
     assert seen["rid"] == "run-9"
     assert seen["roots"][layer.PROJECT] == tmp_path / "p"
     assert seen["roots"][layer.GLOBAL] == tmp_path / "g"
@@ -28,6 +30,7 @@ def test_main_parses_argv_and_runs(tmp_path, monkeypatch):
 
 def test_main_offset_advances_only_after_run(tmp_path, monkeypatch):
     monkeypatch.setattr(spawn.capture, "window", lambda tp, off, **k: ("W", 99))
+    monkeypatch.setattr(spawn.capture, "digest", lambda tp, off, **k: "")
     monkeypatch.setattr(spawn, "run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     counters.write_session_offset("sess-2", 7, tmp_path / "p")
     try:
@@ -62,6 +65,13 @@ def test_description_index_empty_is_placeholder(tmp_path):
 def test_build_bundle_injects_three_pieces():
     b = spawn.build_bundle("WINDOW_MARK", "INDEX_MARK", "SPEC_MARK")
     assert "WINDOW_MARK" in b and "INDEX_MARK" in b and "SPEC_MARK" in b
+
+
+def test_build_bundle_prepends_digest_when_present():
+    b = spawn.build_bundle("WINDOW_MARK", "INDEX_MARK", "SPEC_MARK", digest="DIGEST_MARK")
+    assert "DIGEST_MARK" in b
+    assert b.index("DIGEST_MARK") < b.index("WINDOW_MARK")  # chronological: prior context first
+    assert "DIGEST_MARK" not in spawn.build_bundle("W", "I", "S", digest="")  # empty -> no section
 
 
 def test_build_command_carries_agent_and_print():
