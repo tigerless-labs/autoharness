@@ -33,8 +33,8 @@ STAGE_MAX_FILE_BYTES = 64_000
 STAGE_MAX_FILES_TOTAL_BYTES = 256_000
 
 # maturity threshold (denominator gate to graduate out of probation) / capacity cap, set per layer, independently tunable. global has a larger blast radius -> more conservative (smaller capacity).
-MATURITY_THRESHOLD = {layer.GLOBAL: _int_env("AUTOHARNESS_MATURITY_GLOBAL", 50),
-                      layer.PROJECT: _int_env("AUTOHARNESS_MATURITY_PROJECT", 20)}
+MATURITY_THRESHOLD = {layer.GLOBAL: _int_env("AUTOHARNESS_MATURITY_GLOBAL", 300),
+                      layer.PROJECT: _int_env("AUTOHARNESS_MATURITY_PROJECT", 100)}
 CAPACITY = {layer.GLOBAL: _int_env("AUTOHARNESS_CAPACITY_GLOBAL", 20),
             layer.PROJECT: _int_env("AUTOHARNESS_CAPACITY_PROJECT", 50)}
 
