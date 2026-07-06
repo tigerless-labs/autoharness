@@ -65,7 +65,7 @@ def _detached_spawn(argv, env, bundle):
 
 
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
-        spec_path=None, anchor=0, spawn_fn=None):
+        spec_path=None, spawn_fn=None):
     roots = roots or {}
     proot = roots.get(layer.PROJECT)
     spec = (spec_path or config.FORMAT_SPEC).read_text()
@@ -76,7 +76,7 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     env = child_env(run_id, proot)
     (spawn_fn or _detached_spawn)(argv, env, bundle)
 
-    return promoter.drain(run_id, roots=roots, repo_name=repo_name, anchor=anchor)
+    return promoter.drain(run_id, roots=roots, repo_name=repo_name)
 
 
 def main(argv=None):

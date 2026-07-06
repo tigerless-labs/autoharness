@@ -22,12 +22,13 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
   exactly-once); on startup sweep orphan .tmp. On a crash, unprocessed intents stay in the durable queue
   and are retried next time; in the extreme of never running → zero land (fail-safe).
 
-ponytail: a single synchronous process already satisfies "serial single writer"; cross-process locking see mng open. LED watermark / create anchor get true values from CAP (Phase 4); v1 anchor uses the arg default 0. Whole-run clear, the tiny crash window (between land and clear) may re-append the LED — per-item idempotent watermark pending the intent-queue granularity being finalized (validate-store open).
+ponytail: a single synchronous process already satisfies "serial single writer"; cross-process locking see mng open. LED watermark still pends true values from CAP; the create anchor reads the layer request counter at land time (probation is fiction without a true anchor). Whole-run clear, the tiny crash window (between land and clear) may re-append the LED — per-item idempotent watermark pending the intent-queue granularity being finalized (validate-store open).
 """
 import hashlib
 
 from autoharness.lib import (
     atomic,
+    counters,
     intent_queue,
     layer,
     ledger,
@@ -94,7 +95,7 @@ def _land_files(level, name, files, root):
         atomic.write_text(p, files[rel])
 
 
-def _land(action, intent, body, level, name, root, anchor):
+def _land(action, intent, body, level, name, root):
     if action == "delete":
         evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
         ledger.append(level, name, _led(intent, evidence_ref), root)
@@ -104,11 +105,11 @@ def _land(action, intent, body, level, name, root, anchor):
     evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
     skill_store.write_body(level, name, body, root)
     if action == "create":
-        sidecar.create(level, name, anchor, root)
+        sidecar.create(level, name, counters.request_count(level, root), root)
     ledger.append(level, name, _led(intent, evidence_ref), root)
 
 
-def promote(intent, *, roots=None, repo_name=None, anchor=0):
+def promote(intent, *, roots=None, repo_name=None):
     roots = roots or {}
     action = intent.get("action")
     name = intent.get("name")
@@ -137,7 +138,7 @@ def promote(intent, *, roots=None, repo_name=None, anchor=0):
         return _reject(action, level, verdict["findings"])
 
     try:
-        _land(action, intent, body, level, name, root, anchor)
+        _land(action, intent, body, level, name, root)
     except ValueError as exc:
         return _reject(action, level, [("landing", str(exc))])
     return {"ok": True, "action": action, "level": level, "findings": []}
@@ -151,11 +152,11 @@ def sweep(roots=None):
     return removed
 
 
-def drain(run_id, *, roots=None, repo_name=None, anchor=0):
+def drain(run_id, *, roots=None, repo_name=None):
     roots = roots or {}
     sweep(roots)
     proot = roots.get(layer.PROJECT)
-    verdicts = [promote(i, roots=roots, repo_name=repo_name, anchor=anchor)
+    verdicts = [promote(i, roots=roots, repo_name=repo_name)
                 for i in intent_queue.read(run_id, proot)]
     intent_queue.clear(run_id, proot)
     return verdicts

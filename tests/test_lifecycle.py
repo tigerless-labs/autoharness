@@ -11,9 +11,15 @@ def test_probation_never_archived():
     assert out == []
 
 
-def test_graduation_audit_zero_calls_archived():
-    # denom = 20 ≥ maturity 10, calls 0 → archived on graduation
+def test_mature_zero_calls_survives_without_capacity_pressure():
+    # denom = 20 ≥ maturity 10, calls 0, pool under cap → capacity contention is the only death
     out = lifecycle.evaluate([_m("idle", 0)], request_count=20, maturity=10, capacity=5)
+    assert out == []
+
+
+def test_mature_zero_calls_evicted_first_under_capacity_pressure():
+    members = [_m("idle", 0), _m("used", 30)]
+    out = lifecycle.evaluate(members, request_count=100, maturity=10, capacity=1)
     assert out == ["idle"]
 
 
@@ -30,10 +36,10 @@ def test_high_rate_kept_under_capacity():
 
 
 def test_denominator_grows_with_requests():
-    # same symbol: probation at low request count, auditable once denom passes maturity
-    m = [_m("x", 0, anchor=0)]
-    assert lifecycle.evaluate(m, request_count=9, maturity=10, capacity=5) == []      # denom 9 < 10
-    assert lifecycle.evaluate(m, request_count=10, maturity=10, capacity=5) == ["x"]  # denom 10 ≥ 10
+    # same symbol: probation at low request count, joins the mature pool once denom passes maturity
+    m = [_m("x", 0, anchor=0), _m("y", 8, anchor=0)]
+    assert lifecycle.evaluate(m, request_count=9, maturity=10, capacity=1) == []       # denom 9 < 10: both probation
+    assert lifecycle.evaluate(m, request_count=10, maturity=10, capacity=1) == ["x"]   # mature pool of 2 over cap 1, lowest rate out
 
 
 def test_anchor_offsets_denominator():

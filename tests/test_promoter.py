@@ -1,7 +1,7 @@
 import json
 
 from autoharness.hook import promoter
-from autoharness.lib import intent_queue, layer, ledger, sidecar, skill_store
+from autoharness.lib import counters, intent_queue, layer, ledger, sidecar, skill_store
 
 GOOD_BODY = "---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\nUse strftime.\n"
 
@@ -21,12 +21,14 @@ def _families(v):
 
 def test_create_lands_body_sidecar_led(tmp_path):
     roots = _roots(tmp_path)
-    v = promoter.promote(_create(), roots=roots, anchor=7)
+    for _ in range(7):
+        counters.bump_request("project", roots["project"])
+    v = promoter.promote(_create(), roots=roots)
     assert v["ok"] and v["level"] == "project"
     root = roots["project"]
     assert skill_store.read_body("project", "foo", root) == GOOD_BODY
     assert sidecar.is_agent_created("project", "foo", root)
-    assert sidecar.read("project", "foo", root)["anchor"] == 7
+    assert sidecar.read("project", "foo", root)["anchor"] == 7  # anchor = layer request count at land time
     led = ledger.read("project", "foo", root)
     assert len(led) == 1 and led[0]["action"] == "create" and led[0]["reason"]
 

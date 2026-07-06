@@ -54,6 +54,17 @@ def test_subagent_stop_is_ignored(tmp_path):
     assert dispatch.dispatch({"hook_event_name": "SubagentStop"}, roots=_roots(tmp_path))["ignored"] is True
 
 
+def test_child_session_stop_bumps_nothing(tmp_path, monkeypatch):
+    # a reflector child's turns must not inflate MNG denominators (guard runs before the bump)
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    roots = _roots(tmp_path)
+    out = dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"},
+                            roots=roots, reflect=lambda *a: None)
+    assert out["result"]["triggered"] is False
+    assert counters.request_count(layer.PROJECT, roots[layer.PROJECT]) == 0
+    assert counters.request_count(layer.GLOBAL, roots[layer.GLOBAL]) == 0
+
+
 def test_stop_bumps_both_layer_denominators(tmp_path):
     roots = _roots(tmp_path)
     dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"},

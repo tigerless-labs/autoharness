@@ -15,6 +15,7 @@ platform contract pins the details:
 ponytail: detached launch is a fire-and-forget Popen; robustness of orphan / timeout isolation left for observation.
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -67,6 +68,8 @@ def dispatch(event, *, roots=None, reflect=None):
         if name == "SessionStart":
             return {"handled": name, "result": on_session_start.on_session_start(event, roots=roots)}
         if name == "Stop":
+            if os.environ.get(config.CHILD_SESSION_ENV):
+                return {"handled": name, "result": {"triggered": False, "reason": "recursion_guard"}}
             counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG denominator (per turn)
             counters.bump_request(layer.PROJECT, proot)
             result = on_stop.on_stop(event, root=proot)
