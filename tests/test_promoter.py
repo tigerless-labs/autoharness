@@ -267,3 +267,90 @@ def test_delete_materializes_evidence_and_archives_it(tmp_path):
     assert len(slices) == 1 and slices[0].read_text() == "retire slice"  # provenance rides the mv
     entries = [json.loads(x) for x in (arch / ".ledger.jsonl").read_text().splitlines() if x.strip()]
     assert entries[-1]["evidence"].startswith("references/evidence-")
+
+
+# --- remove_file: single-subfile deletion channel ---
+
+NO_REF_BODY = "---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\nUse strftime.\n"
+
+
+def _remove(path="scripts/run.sh"):
+    return {"action": "remove_file", "name": "foo", "path": path,
+            "reason": "drop stale helper", "evidence": "remove slice"}
+
+
+def _live_with_subfile(roots):
+    v = promoter.promote({**_create(body=FILES_BODY),
+                          "files": {"scripts/run.sh": "echo hi\n"}}, roots=roots)
+    assert v["ok"], v["findings"]
+
+
+def test_remove_file_unlinks_ledgers_keeps_body(tmp_path):
+    roots = _roots(tmp_path)
+    _live_with_subfile(roots)
+    patch = {"action": "patch", "name": "foo", "old_string": "Run scripts/run.sh",
+             "new_string": "Use strftime.", "reason": "r", "evidence": "e"}
+    assert promoter.promote(patch, roots=roots)["ok"]  # drop the pointer first
+    v = promoter.promote(_remove(), roots=roots)
+    assert v["ok"], v["findings"]
+    assert not (_sdir(roots) / "scripts" / "run.sh").exists()
+    assert skill_store.exists("project", "foo", roots["project"])  # skill itself stays live
+    entry = ledger.read("project", "foo", roots["project"])[-1]
+    assert entry["action"] == "remove_file" and entry["path"] == "scripts/run.sh"
+    assert entry["evidence"].startswith("references/evidence-")
+
+
+def test_remove_file_still_referenced_rejected(tmp_path):
+    roots = _roots(tmp_path)
+    _live_with_subfile(roots)  # FILES_BODY still points at scripts/run.sh
+    v = promoter.promote(_remove(), roots=roots)
+    assert not v["ok"] and "landing" in _families(v)
+    assert (_sdir(roots) / "scripts" / "run.sh").exists()  # nothing removed
+
+
+def test_remove_file_user_skill_rejected(tmp_path):
+    roots = _roots(tmp_path)
+    root = roots["project"]
+    skill_store.write_body("project", "foo", NO_REF_BODY, root)  # no sidecar: user-owned
+    (layer.symbol_dir("project", "foo", root) / "scripts").mkdir()
+    (layer.symbol_dir("project", "foo", root) / "scripts" / "run.sh").write_text("x")
+    v = promoter.promote(_remove(), roots=roots)
+    assert not v["ok"] and "self_produced" in _families(v)
+    assert (_sdir(roots) / "scripts" / "run.sh").exists()
+
+
+def test_remove_file_missing_target_file_is_noop_ok(tmp_path):
+    roots = _roots(tmp_path)
+    promoter.promote(_create(body=NO_REF_BODY), roots=roots)
+    v = promoter.promote(_remove(path="scripts/never-existed.sh"), roots=roots)
+    assert v["ok"], v["findings"]  # idempotent: crash-replay safe
+    assert ledger.read("project", "foo", roots["project"])[-1]["action"] == "remove_file"
+
+
+def test_remove_file_missing_skill_rejected(tmp_path):
+    v = promoter.promote(_remove(), roots=_roots(tmp_path))
+    assert not v["ok"] and "routing" in _families(v)
+
+
+def test_remove_file_evidence_slice_rejected_zero_disk(tmp_path):
+    roots = _roots(tmp_path)
+    promoter.promote(_create(body=NO_REF_BODY), roots=roots)
+    slice_rel = ledger.read("project", "foo", roots["project"])[0]["evidence"]
+    v = promoter.promote(_remove(path=slice_rel), roots=roots)
+    assert not v["ok"] and "files" in _families(v)
+    assert (_sdir(roots) / slice_rel).exists()  # provenance untouched
+
+
+def test_remove_file_symlink_escape_rejected(tmp_path):
+    roots = _roots(tmp_path)
+    root = roots["project"]
+    skill_store.write_body("project", "foo", NO_REF_BODY, root)
+    sidecar.create("project", "foo", 0, root)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / "victim.sh"
+    victim.write_text("keep me")
+    (_sdir(roots) / "scripts").symlink_to(outside)
+    v = promoter.promote(_remove(path="scripts/victim.sh"), roots=roots)
+    assert not v["ok"] and "landing" in _families(v)
+    assert victim.read_text() == "keep me"  # nothing outside the skill dir was touched

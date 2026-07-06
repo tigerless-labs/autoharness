@@ -81,6 +81,7 @@ def symbol_dir(layer, name, root=None):
 
 
 SUBFILE_DIRS = ("scripts", "templates", "assets", "references")
+EVIDENCE_PREFIX = "references/evidence-"
 
 
 def check_subfile(rel):

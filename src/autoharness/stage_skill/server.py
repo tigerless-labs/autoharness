@@ -6,9 +6,9 @@ landing all live in the deterministic promoter (admission model, untouchable by 
 front-checks "structure"; the promoter covers "shaping + content + security + landing" (defense in depth —
 the deterministic side does not fully trust the tool surface).
 
-- Schema enforcement: action enum; per-action body|delta required-and-mutually-exclusive; LED
-  reason/evidence required; create's level enum (default project; the layer for update/patch/delete is
-  resolved by the promoter via a two-layer find).
+- Schema enforcement: action enum; per-action body|delta|path required-and-mutually-exclusive; LED
+  reason/evidence required; create's level enum (default project; the layer for update/patch/
+  remove_file/delete is resolved by the promoter via a two-layer find).
 - Instant feedback on args: create/update run a structure check (frontmatter + name/description, reusing
   validate.structure) + body size, so the model can fix it on the spot within the subagent session
   instead of redoing a whole turn.
@@ -24,7 +24,7 @@ import sys
 from autoharness import config
 from autoharness.lib import intent_queue, layer, validate
 
-_ACTIONS = ("create", "update", "patch", "delete")
+_ACTIONS = ("create", "update", "patch", "remove_file", "delete")
 _BODY_ACTIONS = ("create", "update")
 TOOL_NAME = "stage_skill"
 _PROTOCOL_VERSION = "2024-11-05"
@@ -33,7 +33,8 @@ TOOL_SCHEMA = {
     "type": "object",
     "properties": {
         "action": {"type": "string", "enum": list(_ACTIONS),
-                   "description": "create=new (with level) / update=replace whole file / patch=small edit (delta) / delete=remove"},
+                   "description": "create=new (with level) / update=replace whole file / patch=small edit (delta) / "
+                                  "remove_file=drop one subfile / delete=remove the whole skill"},
         "name": {"type": "string", "description": "skill symbol name"},
         "level": {"type": "string", "enum": list(layer.LAYERS),
                   "description": "create only; defaults to project, global has a high bar"},
@@ -46,6 +47,9 @@ TOOL_SCHEMA = {
                   "description": "create/update only: subfiles as relative path -> content, under "
                                  "scripts/|templates/|assets/|references/; each must be referenced "
                                  "by its relative path in the SKILL.md body"},
+        "path": {"type": "string",
+                 "description": "remove_file only: relative path of the subfile to remove; the live "
+                                "SKILL.md must no longer reference it (patch the pointer out first)"},
     },
     "required": ["action", "name", "reason", "evidence"],
 }
@@ -69,6 +73,8 @@ def _schema_errors(params):
     has_body = params.get("body") is not None
     has_delta = params.get("old_string") is not None or params.get("new_string") is not None
     has_files = params.get("files") is not None
+    if action != "remove_file" and params.get("path") is not None:
+        errors.append(("schema", f"{action} takes no path (path is remove_file only)"))
     if action in _BODY_ACTIONS:
         if not has_body:
             errors.append(("schema", f"{action} requires body"))
@@ -87,6 +93,11 @@ def _schema_errors(params):
             errors.append(("schema", "patch requires both old_string and new_string"))
         if has_files:
             errors.append(("schema", "patch takes no files (use update to change subfiles)"))
+    elif action == "remove_file":
+        if not _nonempty(params, "path"):
+            errors.append(("schema", "remove_file requires path"))
+        if has_body or has_delta or has_files:
+            errors.append(("schema", "remove_file takes only path, no body/delta/files"))
     elif action == "delete":
         if has_body or has_delta:
             errors.append(("schema", "delete takes no body/delta"))
@@ -96,6 +107,8 @@ def _schema_errors(params):
 
 
 def _content_errors(params):
+    if params["action"] == "remove_file":
+        return validate.check_remove_path(params["path"])
     body = params.get("body")
     if body is None:
         return []
@@ -121,6 +134,8 @@ def _intent(params):
     elif action == "patch":
         intent["old_string"] = params["old_string"]
         intent["new_string"] = params["new_string"]
+    elif action == "remove_file":
+        intent["path"] = params["path"]
     return intent
 
 

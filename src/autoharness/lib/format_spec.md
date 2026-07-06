@@ -45,7 +45,12 @@ rejected. Conversely, a whitelisted-directory path referenced in the body must b
 same intent or already live in the skill folder.
 
 `references/evidence-*.md` files are promoter-materialized provenance (the ledger points at
-them); they are never authored in an intent and are exempt from the pointer rule.
+them); they are never authored in an intent and are exempt from the pointer rule. Intents can
+neither carry them in `files` nor target them with `remove_file`.
+
+A subfile that is no longer needed is dropped with the `remove_file` action (one relative path
+per intent, same path rules). The live `SKILL.md` must no longer reference the path — patch the
+pointer out first; both intents can ride the same run, they land in order.
 
 ## Content completeness
 
