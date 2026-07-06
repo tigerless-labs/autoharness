@@ -42,7 +42,7 @@ Run `/reload-plugins` (or restart Claude Code), then check it's live:
 ```
 
 Zero config. It now watches your sessions and lands learned skills into `.claude/skills/` in the
-background. Cadence and lifecycle thresholds are tunable via `AUTOHARNESS_*` environment variables.
+background. Cadence and lifecycle thresholds are tunable — see [Configuration](#configuration).
 
 ### Update
 
@@ -68,6 +68,31 @@ plugin and stay on disk. To clear those too, delete its state dir (`~/.claude/au
 `<repo>/.claude/autoharness/` per project) and the self-authored skills under `.claude/skills/` (each
 carries a `self-authored` ledger marker, so they're easy to tell from yours). Your own skills are
 never touched.
+
+## Configuration
+
+Every knob is an `AUTOHARNESS_*` environment variable with a built-in default — nothing to
+configure unless you want to change the pace.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `AUTOHARNESS_REFLECT_EVERY_N` | `3` | Reflection cadence: a background reflection run fires every N host turns. Lower = learns faster, spawns more child sessions. |
+| `AUTOHARNESS_DIGEST_EXCHANGES` | `20` | How many exchanges *before* the episode window are compressed into the reflector's prior-context digest (text + tool names only). |
+| `AUTOHARNESS_MATURITY_PROJECT` | `100` | Probation gate, project layer: a skill only graduates — starts counting against capacity and becoming evictable — after this many requests have arrived in its layer since it landed. Until then it's recalled as usual but can't be archived. |
+| `AUTOHARNESS_MATURITY_GLOBAL` | `300` | Same gate for the global layer — higher because a global skill loads in every project. |
+| `AUTOHARNESS_CAPACITY_PROJECT` | `50` | Cap on *mature* skills in the project layer. Capacity contention is the only death: nothing is archived until the mature pool exceeds this, then the lowest invocation rates go first. |
+| `AUTOHARNESS_CAPACITY_GLOBAL` | `20` | Same cap for the global layer — smaller because its blast radius is every project. |
+
+Set them in the environment Claude Code launches with — either the shell
+(`export AUTOHARNESS_REFLECT_EVERY_N=10`) or the `env` map in `.claude/settings.json`:
+
+```json
+{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "10" } }
+```
+
+Hooks read the environment on every event, so a change applies from the next session. The defaults
+are deliberate placeholders pending empirical calibration (tracked under `experiments/`); size caps
+on captured windows and staged skill bodies are fixed constants, not env knobs.
 
 ## How it works
 
