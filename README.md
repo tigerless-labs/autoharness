@@ -34,7 +34,7 @@ dependencies); its hooks and MCP server won't fire without it.
 /plugin install autoharness@autoharness
 ```
 
-Restart Claude Code, then check it's live:
+Run `/reload-plugins` (or restart Claude Code), then check it's live:
 
 ```
 /plugin    # autoharness@autoharness — enabled
@@ -48,13 +48,13 @@ background. Cadence and lifecycle thresholds are tunable via `AUTOHARNESS_*` env
 
 ```
 /plugin marketplace update autoharness              # pull the latest release
-/plugin update autoharness@autoharness              # then update autoharness (may open the plugin
-                                                    # manager — hit Update on autoharness there)
+/plugin update autoharness                          # update the installed copy
+/reload-plugins                                     # apply in the running session
 ```
 
-Restart Claude Code afterwards — hooks and the MCP server are loaded at session start, so a running
-session keeps the old version until relaunched. The installed copy is cached by the version in
-`plugin.json`; releases always bump it, which is what makes the update take effect.
+`/reload-plugins` re-arms the hooks and the MCP server in place; restarting Claude Code works too.
+The installed copy is cached by the version in `plugin.json`; releases always bump it, which is
+what makes the update take effect.
 
 ### Uninstall
 
@@ -81,7 +81,7 @@ skills, recalled by the host's own name-and-description mechanism as if a human 
 | Component | Role |
 |---|---|
 | **CAP** · capture | Hook-driven dumb pipe: grabs each turn (user input, agent output, tool I/O), redacts at egress, points back at the host log instead of copying it. |
-| **REF** · reflect | At an episode boundary, reads the existing skill index and decides add / merge / patch / delete — emits an intent (body or delta, plus reason and evidence). Proposes only; no write tools. |
+| **REF** · reflect | At an episode boundary, reads the existing skill index and decides add / merge / patch / drop a support file / delete — emits an intent (body, delta, or path, plus reason and evidence). Proposes only; no write tools. |
 | **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. |
 | **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by invocation rate — calls over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. Capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
 | **LED** · ledger | Per-symbol append-only sidecar: why each symbol was born or changed, with evidence and a reflection watermark. Kept out of the skill body so recall stays clean. |
