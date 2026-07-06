@@ -111,6 +111,70 @@ skills, recalled by the host's own name-and-description mechanism as if a human 
 | **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by invocation rate — calls over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. Capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
 | **LED** · ledger | Per-symbol append-only sidecar: why each symbol was born or changed, with evidence and a reflection watermark. Kept out of the skill body so recall stays clean. |
 
+## Walkthrough: watching it learn
+
+Everything autoharness does lands on disk as plain files — a demo is just opening them in the
+right order. For a fast-paced run, speed up the loop first (see [Configuration](#configuration)):
+
+```json
+{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "1",
+           "AUTOHARNESS_MATURITY_PROJECT": "5",
+           "AUTOHARNESS_CAPACITY_PROJECT": "2" } }
+```
+
+**1 · The pipeline running.** Work a few normal turns on anything non-trivial (debug something,
+figure out a workflow). Every Nth turn a background reflection fires — nothing blocks your session.
+Its bookkeeping is visible in the state dir:
+
+```
+ls .claude/autoharness/        # per project — ~/.claude/autoharness/ for the global layer
+  requests                     # layer request counter (MNG's denominator)
+  session-<id>                 # per-session turn count toward the next reflection
+  offset-<id>                  # byte watermark: where the last captured window ended
+  intents/                     # queued skill proposals awaiting the promoter
+```
+
+**2 · A skill is born.** After a reflection lands, a new folder appears under `.claude/skills/`
+(project) or `~/.claude/skills/` (global — for techniques that aren't repo-specific). Use `ls -la`:
+the interesting files are hidden.
+
+```
+.claude/skills/<name>/
+  SKILL.md                     # the skill itself — plain native format, nothing proprietary
+  .ledger.jsonl                # LED: why it was born / changed (append-only)
+  .sidecar.json                # lifecycle counters MNG reads
+  references/evidence-*.md     # the transcript slice that justified each ledger entry
+  scripts/ templates/ ...      # optional support files the reflector attached
+```
+
+**3 · LED — the paper trail.** `cat .ledger.jsonl` — one JSON line per lifecycle event:
+
+```json
+{"action": "create", "reason": "User asked about the correct command to update a plugin ...", "evidence": "references/evidence-21cd22cc.md"}
+{"action": "patch",  "reason": "User discovered /reload-plugins is required in-session ...",  "evidence": "references/evidence-1a4ec51d.md"}
+```
+
+`action` + `reason` + `evidence` — and the evidence file is a real, redacted slice of the session
+that taught it, materialized by the promoter (content-addressed, so the model never names files).
+This is the "evidence kept for later" from the table above.
+
+**4 · An update, not a duplicate.** Hit the same scenario again with a correction ("that's missing
+a step") and let the next reflection run. The skill layer does **not** grow a near-duplicate:
+the existing skill's `SKILL.md` changes and its ledger appends a `patch`/`update` line — the
+two-line ledger above is a real example. `git diff` on a project-layer skill shows the edit.
+
+**5 · Recall is the host's, untouched.** Landed skills load like hand-written ones — same
+name-and-description recall, no autoharness code on that path. When one fires, `calls` in its
+`.sidecar.json` ticks up: that adherence count is the validation signal.
+
+**6 · Retirement is an archive, not a delete.** Once a layer's mature pool exceeds capacity, the
+lowest-invocation-rate skills move — folder, ledger, evidence and all — to
+`.claude/skills/.archive/<name>/`, out of recall. Moving the folder back revives it, history intact.
+With the shrunk knobs above this fires within one session; at defaults it takes hundreds of turns.
+
+**7 · Yours are never touched.** Every autoharness-authored skill carries the ledger marker;
+anything without it — skills you wrote or installed — is invisible to the promoter and MNG.
+
 ## How it compares
 
 A self-learning skill layer can be validated against a held-out benchmark, or against its own use.
