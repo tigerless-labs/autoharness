@@ -30,7 +30,7 @@ def test_archives_idle_and_overflow_keeps_strong_and_probation(tmp_path, monkeyp
     _small_knobs(monkeypatch, cap_project=1)
     roots = _roots(tmp_path)
     _set_requests(roots, "project", 100)
-    _seed(roots, "idle", calls=0)             # mature, zero calls → graduation audit
+    _seed(roots, "idle", calls=0)             # mature, rate 0 → bottom of the capacity race
     _seed(roots, "weak", calls=5)             # rate .05, loses capacity race
     _seed(roots, "strong", calls=80)          # rate .8, top of pool → kept
     _seed(roots, "baby", calls=1, anchor=95)  # denom 5 < 10 → probation → survives
@@ -59,7 +59,7 @@ def test_native_skill_never_archived(tmp_path, monkeypatch):
 
 
 def test_verdict_reads_accumulated_state_same_across_repos(tmp_path, monkeypatch):
-    _small_knobs(monkeypatch)
+    _small_knobs(monkeypatch, cap_project=1)
     # two repos seeded identically → identical verdict (reads water level, not session)
     def run(sub):
         roots = _roots(tmp_path / sub)
@@ -72,9 +72,19 @@ def test_verdict_reads_accumulated_state_same_across_repos(tmp_path, monkeypatch
 
 
 def test_second_run_is_noop_after_archival(tmp_path, monkeypatch):
-    _small_knobs(monkeypatch)
+    _small_knobs(monkeypatch, cap_project=1)
     roots = _roots(tmp_path)
     _set_requests(roots, "project", 100)
     _seed(roots, "idle", calls=0)
+    _seed(roots, "used", calls=50)
     assert on_session_start.on_session_start(roots=roots)["archived"]["project"] == ["idle"]
     assert on_session_start.on_session_start(roots=roots)["archived"]["project"] == []
+
+
+def test_mature_zero_calls_survives_without_capacity_pressure(tmp_path, monkeypatch):
+    _small_knobs(monkeypatch, cap_project=5)
+    roots = _roots(tmp_path)
+    _set_requests(roots, "project", 100)
+    _seed(roots, "idle", calls=0)  # mature, rate 0 — but pool under cap → survives
+    assert on_session_start.on_session_start(roots=roots)["archived"]["project"] == []
+    assert skill_store.exists("project", "idle", roots["project"])

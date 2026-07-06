@@ -73,8 +73,11 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
     print(f"[use]    learned calls={sidecar.read('project', 'learned', proot)['calls']}")
 
     # BEAT 3 — compete: a weak unused peer; MNG recompute (SessionStart) archives the loser.
+    # learned landed with a real anchor (=2), so two more turns first to graduate it out of probation.
+    for _ in range(2):
+        dispatch.dispatch(stop, roots=roots, reflect=lambda *a: None)
     skill_store.write_body("project", "weak", WEAK, proot)
-    sidecar.create("project", "weak", anchor=0, root=proot)              # mature (denom 2), zero calls
+    sidecar.create("project", "weak", anchor=0, root=proot)              # mature (denom 4), zero calls
     req = counters.request_count(layer.PROJECT, proot)
     mat = config.MATURITY_THRESHOLD[layer.PROJECT]
     for name in ("learned", "weak"):                                    # monitor MNG numerator/denominator
