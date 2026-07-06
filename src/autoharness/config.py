@@ -24,6 +24,9 @@ REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 3)  # trigger cadence;
 # and per handoff window (tail kept) — bound tool dumps / base64 away from the child context.
 CAPTURE_MAX_RECORD_BYTES = 4_000
 CAPTURE_MAX_WINDOW_BYTES = 200_000
+DIGEST_EXCHANGES = _int_env("AUTOHARNESS_DIGEST_EXCHANGES", 20)  # prior-context digest: exchanges before the window
+DIGEST_MAX_RECORD_CHARS = 200
+DIGEST_MAX_BYTES = 20_000
 
 STAGE_MAX_BODY_BYTES = 100_000  # ponytail: placeholder, SKILL.md body cap; for instant feedback on stage_skill args
 

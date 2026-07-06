@@ -35,9 +35,14 @@ def description_index(roots=None):
     return "\n".join(lines) if lines else "(no live skills yet)"
 
 
-def build_bundle(window, index, spec):
+def build_bundle(window, index, spec, digest=""):
+    preamble = (
+        "# Prior context digest (older exchanges, tool outputs omitted — background only,"
+        " never an evidence source)\n\n" + digest + "\n\n"
+    ) if digest else ""
     return (
-        "# Episode window (redacted)\n\n" + window
+        preamble
+        + "# Episode window (redacted)\n\n" + window
         + "\n\n# Existing skills (compare-first: dedupe / patch / where)\n\n" + index
         + "\n\n# Authoring + format spec (write to satisfy this)\n\n" + spec + "\n"
     )
@@ -65,11 +70,11 @@ def _detached_spawn(argv, env, bundle):
 
 
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
-        spec_path=None, spawn_fn=None):
+        spec_path=None, digest="", spawn_fn=None):
     roots = roots or {}
     proot = roots.get(layer.PROJECT)
     spec = (spec_path or config.FORMAT_SPEC).read_text()
-    bundle = build_bundle(window_text, description_index(roots), spec)
+    bundle = build_bundle(window_text, description_index(roots), spec, digest=digest)
 
     argv = build_command(agent=agent or config.REFLECTOR_AGENT,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
@@ -84,7 +89,8 @@ def main(argv=None):
     roots = {layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)}
     offset = counters.session_offset(session_id, roots[layer.PROJECT])
     window_text, new_offset = capture.window(transcript_path, offset)
-    result = run(window_text, run_id, roots=roots)
+    result = run(window_text, run_id, roots=roots,
+                 digest=capture.digest(transcript_path, offset))
     counters.write_session_offset(session_id, new_offset, roots[layer.PROJECT])
     return result
 
