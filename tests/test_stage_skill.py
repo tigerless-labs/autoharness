@@ -281,3 +281,68 @@ def test_serve_loops_stdin_to_stdout(tmp_path):
     server.serve(stdin=stdin, stdout=stdout)
     line = stdout.getvalue().strip()
     assert json.loads(line)["result"]["serverInfo"]["name"] == server.TOOL_NAME
+
+
+# --- remove_file (single-subfile deletion) ---
+
+def _remove(**kw):
+    base = {"action": "remove_file", "name": "foo", "path": "scripts/run.sh",
+            "reason": "r", "evidence": "e"}
+    base.update(kw)
+    return base
+
+
+def test_tool_schema_advertises_remove_file():
+    assert "remove_file" in server.TOOL_SCHEMA["properties"]["action"]["enum"]
+    assert server.TOOL_SCHEMA["properties"]["path"]["type"] == "string"
+
+
+def test_remove_file_appends_intent(tmp_path):
+    v = server.stage(_remove(), run_id=RUN, root=tmp_path)
+    assert v["ok"], v["errors"]
+    assert _queue(tmp_path) == [{"action": "remove_file", "name": "foo",
+                                 "path": "scripts/run.sh", "reason": "r", "evidence": "e"}]
+    assert not layer.skills_dir("project", tmp_path).exists()  # still zero tree write
+
+
+def test_remove_file_requires_path(tmp_path):
+    p = _remove()
+    del p["path"]
+    v = server.stage(p, run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "schema" in _errs(v)
+    assert _queue(tmp_path) == []
+
+
+def test_remove_file_rejects_body_delta_files(tmp_path):
+    for kw in ({"body": GOOD_BODY}, {"old_string": "a", "new_string": "b"}, {"files": GOOD_FILES}):
+        v = server.stage(_remove(**kw), run_id=RUN, root=tmp_path)
+        assert not v["ok"] and "schema" in _errs(v), kw
+    assert _queue(tmp_path) == []
+
+
+def test_path_on_other_actions_rejected(tmp_path):
+    v = server.stage(_params(path="scripts/run.sh"), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "schema" in _errs(v)
+    assert _queue(tmp_path) == []
+
+
+def test_remove_file_path_gate_red_team(tmp_path):
+    for bad in ("../x", "/etc/passwd", "scripts/../SKILL.md", "SKILL.md",
+                ".sidecar.json", "bin/x.sh"):
+        v = server.stage(_remove(path=bad), run_id=RUN, root=tmp_path)
+        assert not v["ok"] and "files" in _errs(v), bad
+    assert _queue(tmp_path) == []
+
+
+def test_remove_file_evidence_slice_denied(tmp_path):
+    v = server.stage(_remove(path="references/evidence-a1b2c3d4.md"), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "files" in _errs(v)
+    assert _queue(tmp_path) == []
+
+
+def test_files_carrying_evidence_slice_denied(tmp_path):
+    body = FILES_BODY + "See references/evidence-ffff.md\n"  # pointed at, still denied
+    files = {**GOOD_FILES, "references/evidence-ffff.md": "forged"}
+    v = server.stage(_params(body=body, files=files), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "files" in _errs(v)
+    assert _queue(tmp_path) == []

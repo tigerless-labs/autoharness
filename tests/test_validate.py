@@ -126,3 +126,42 @@ def test_global_subfile_repo_local_rejected():
               "files": {"references/notes.md": "Run /home/ryan/tigerless_ai/x.py\n"}}
     body = GOOD_BODY + "\nSee references/notes.md\n"
     assert "global_repo_agnostic" in _families(validate.validate(intent, body))
+
+
+# --- remove_file + evidence-slice write/remove deny ---
+
+REMOVE_INTENT = {"action": "remove_file", "name": "foo", "path": "scripts/run.sh",
+                 "reason": "r", "evidence": "e"}
+
+
+def test_check_files_evidence_slice_denied():
+    fs = {"references/evidence-a1b2c3d4.md": "forged provenance"}
+    assert any(f[0] == "files" for f in validate.check_files(fs))
+
+
+def test_remove_file_clean_passes():
+    v = validate.validate(REMOVE_INTENT, None, target_is_agent_created=True)
+    assert v["ok"], v["findings"]
+
+
+def test_remove_file_bad_path_rejected():
+    for bad in ("../x", "/etc/passwd", "SKILL.md", "bin/x.sh", "", None):
+        v = validate.validate({**REMOVE_INTENT, "path": bad}, None, target_is_agent_created=True)
+        assert not v["ok"] and "files" in _families(v), bad
+
+
+def test_remove_file_evidence_slice_denied():
+    v = validate.validate({**REMOVE_INTENT, "path": "references/evidence-a1b2c3d4.md"},
+                          None, target_is_agent_created=True)
+    assert not v["ok"] and "files" in _families(v)
+
+
+def test_remove_file_requires_agent_tag():
+    v = validate.validate(REMOVE_INTENT, None, target_is_agent_created=False)
+    assert not v["ok"] and "self_produced" in _families(v)
+
+
+def test_remove_file_missing_led_rejected():
+    v = validate.validate({**REMOVE_INTENT, "reason": "", "evidence": ""},
+                          None, target_is_agent_created=True)
+    assert not v["ok"] and "led" in _families(v)

@@ -48,13 +48,15 @@ A skill is a folder. Besides the SKILL.md body, `create`/`update` may carry `fil
 
 Every subfile you carry must be referenced by its relative path somewhere in the SKILL.md body (a one-line pointer is enough) — the promoter rejects unpointed subfiles. Keep the SKILL.md itself tight; move bulk detail into `references/`.
 
+To drop a subfile that is stale or wrong, stage a `remove_file` intent carrying its relative `path`. The live SKILL.md must no longer reference the path, so `patch` the pointer out first — stage both intents in the same run, they land in order. `references/evidence-*` files are promoter-owned provenance: you can neither write nor remove them.
+
 ## Emitting intents (call the `stage_skill` tool)
 
 **You act by calling the `stage_skill` tool — not by writing text.** Do not output the SKILL.md, the action, or the fields as prose in your reply; a textual description creates nothing. The *only* thing that records a change is an actual invocation of the `stage_skill` tool. Stage one intent per distinct lesson — several lessons, several calls. After they return, briefly confirm what you staged.
 
 Tool arguments:
 
-- `action`: `create` | `update` | `patch` | `delete`. Action follows from the rung you chose — reach for `patch` to amend, `update` when adding subfiles or rewriting, `create` when nothing existing fits.
-- `create` / `update` carry the **full** `SKILL.md` body (satisfying the format spec), plus optional `files`. `patch` carries `old_string` → `new_string` (the `old_string` must match the live body uniquely). `delete` carries no body.
+- `action`: `create` | `update` | `patch` | `remove_file` | `delete`. Action follows from the rung you chose — reach for `patch` to amend, `update` when adding subfiles or rewriting, `remove_file` to drop one subfile, `create` when nothing existing fits.
+- `create` / `update` carry the **full** `SKILL.md` body (satisfying the format spec), plus optional `files`. `patch` carries `old_string` → `new_string` (the `old_string` must match the live body uniquely). `remove_file` carries `path`. `delete` carries no body.
 - `create` also carries `level`. Choose by what the lesson is *about*: repo-specific (this codebase, its paths, stack, conventions) → `project`; a user preference (style, tone, workflow) or a general technique → `global`; unsure → `project`. A `global` skill loads in every project, so it and its subfiles must contain **no** repo-local identifiers (absolute paths, this repo's name) — if they would, make it `project`.
 - `reason` and `evidence` are required on every intent. `evidence` must be a verbatim slice from the raw episode window (never from the digest), not invented — the promoter materializes it into the skill's `references/` as permanent provenance, so keep it the real excerpt.

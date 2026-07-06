@@ -8,14 +8,16 @@ verdict {ok, findings:[(family, detail)]}; non-empty findings = reject. create i
 When base_dir is given, the #416 "referenced .py syntax" check is added (a referenced, existing .py
 must parse), plus the subfile-reference check: a whitelisted-dir path mentioned in the body must be
 carried in the intent's `files` or already live under base_dir. target_is_agent_created is passed in
-by promoter after reading the sidecar; on create it is None and exempt. When body=None (a delete's
-shaped result = removal, no body), the four body-dependent classes (safety/structure/complete/global)
-are skipped, leaving only the LED + self-produced checks.
+by promoter after reading the sidecar; on create it is None and exempt. When body=None (delete /
+remove_file shape to no body change), the four body-dependent classes (safety/structure/complete/
+global) are skipped, leaving the LED + self-produced checks — remove_file adds its path gate
+(check_remove_path: subfile whitelist + evidence-slice deny).
 
 folder-skill `files` (relative path → content) gets its own `files` family (check_files: shape, path
 gate via layer.check_subfile, count/size caps) + the pointer rule (every carried subfile must be
 referenced in the body) + per-subfile safety and global scans — otherwise subfiles would be a trivial
-bypass of both gates. Promoter-materialized `references/evidence-*.md` never travel in `files`.
+bypass of both gates. Promoter-materialized `references/evidence-*` slices are off-limits to intents
+in both directions: carrying one in `files` and removing one via remove_file are rejected.
 """
 import ast
 import re
@@ -28,7 +30,7 @@ _PLACEHOLDER = re.compile(r"\b(TODO|FIXME|XXX):|<[A-Z][A-Z_]{2,}>")
 _ABS_PATH = re.compile(r"(?:/home/|/Users/|/root/)[^\s`)\]]+|[A-Za-z]:\\[^\s`)\]]+")
 _PY_REF = re.compile(r"[\w./-]+\.py")
 _SUBFILE_REF = re.compile(r"\b(?:{})/[A-Za-z0-9._/-]+".format("|".join(layer.SUBFILE_DIRS)))
-_MODIFY = ("update", "patch", "delete")
+_MODIFY = ("update", "patch", "remove_file", "delete")
 
 
 def _frontmatter(body):
@@ -43,6 +45,20 @@ def _frontmatter(body):
         key, value = line.split(":", 1)
         fm[key.strip()] = value.strip().strip('"').strip("'")
     return fm
+
+
+def _evidence_slice_denied(rel):
+    if rel.startswith(layer.EVIDENCE_PREFIX):
+        return [("files", f"{rel}: promoter-materialized evidence slices are off-limits to intents")]
+    return []
+
+
+def check_remove_path(rel):
+    try:
+        layer.check_subfile(rel)
+    except ValueError as exc:
+        return [("files", str(exc))]
+    return _evidence_slice_denied(rel)
 
 
 def check_files(files):
@@ -63,6 +79,7 @@ def check_files(files):
         if not isinstance(content, str):
             findings.append(("files", f"{rel}: content must be a string"))
             continue
+        findings += _evidence_slice_denied(rel)
         size = len(content.encode("utf-8"))
         total += size
         if size > config.STAGE_MAX_FILE_BYTES:
@@ -132,6 +149,9 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
                 markers.append(repo_name)
             if markers:
                 findings.append(("global_repo_agnostic", markers))
+
+    if intent.get("action") == "remove_file":
+        findings += check_remove_path(intent.get("path"))
 
     if not (intent.get("reason") or "").strip() or not (intent.get("evidence") or "").strip():
         findings.append(("led", "intent missing reason/evidence"))
