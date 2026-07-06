@@ -1,7 +1,7 @@
 <h1 align="center">autoharness</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/release-v0.2.5-brightgreen.svg" alt="release" />
+  <img src="https://img.shields.io/badge/release-v0.2.9-brightgreen.svg" alt="release" />
   <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="python" />
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg" alt="platform" />
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" />
@@ -83,7 +83,7 @@ skills, recalled by the host's own name-and-description mechanism as if a human 
 | **CAP** · capture | Hook-driven dumb pipe: grabs each turn (user input, agent output, tool I/O), redacts at egress, points back at the host log instead of copying it. |
 | **REF** · reflect | At an episode boundary, reads the existing skill index and decides add / merge / patch / delete — emits an intent (body or delta, plus reason and evidence). Proposes only; no write tools. |
 | **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. |
-| **MNG** · lifecycle | Daemon-free. Ranks symbols by invocation rate per layer, shields new ones during probation, archives the weakest when a mature pool is over capacity. Archives, never deletes. |
+| **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by invocation rate — calls over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. Capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
 | **LED** · ledger | Per-symbol append-only sidecar: why each symbol was born or changed, with evidence and a reflection watermark. Kept out of the skill body so recall stays clean. |
 
 ## How it compares
