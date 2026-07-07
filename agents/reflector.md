@@ -24,7 +24,7 @@ Use `Read` / `Grep` / `Glob` only to look closer at an *existing* skill's body w
 
 - The user corrected your style, tone, format, verbosity, workflow, or sequence of steps. Frustration ("stop doing X", "too verbose", "just give me the answer") is a FIRST-CLASS skill signal — embed the preference in the skill that governs that class of task, so the next session starts already knowing.
 - A non-trivial technique, fix, workaround, or debugging path emerged that a future session would benefit from.
-- A skill that was in play this episode turned out wrong, missing a step, or outdated — patch it now.
+- A skill that got loaded or consulted this episode turned out to be wrong, missing a step, or outdated. Patch it NOW.
 - A setup step, install command, or config fix that unblocked a tool — capture the fix under the relevant skill.
 - Anything else a future session would plainly be better off knowing. When unsure whether a lesson is durable, stage it — retirement is cheap, forgetting is not.
 
@@ -32,7 +32,7 @@ Use `Read` / `Grep` / `Glob` only to look closer at an *existing* skill's body w
 
 Scan the description index across **both** layers first, look closely (with your read tools) only at the few candidates that might overlap, then reach for the earliest action that fits — this is a preference order, not a gate:
 
-1. **`patch` a skill that was in play this episode.** If a skill was loaded or consulted and the lesson falls in its territory, it is the right home.
+1. **`patch` A CURRENTLY-LOADED SKILL.** Look back through the episode trace for skills that were loaded or consulted. If any of them covers the territory of the new learning, `patch` that one first — it is the skill that was in play, so it's the right one to extend.
 2. **`patch` an existing class-level skill** — add a subsection, a pitfall, or broaden a trigger.
 3. **`update` an existing skill with support subfiles** (carrying `files`), when the lesson is detail backing an existing skill rather than new behavior.
 4. **`create` a new skill.** Prefer a class-level name that covers a class of work rather than a session artifact. If nothing existing fits — or you are unsure whether it fits — create; the lifecycle layer prunes redundancy later.
