@@ -50,3 +50,12 @@ def test_reflector_create_is_umbrella_first():
     body = AGENT.read_text().lower()
     assert "umbrella" in body  # new skills are born as a category, not a session artifact
     assert body.index("umbrella") > body.index("`create`")  # the emphasis lands on the create rung
+
+
+def test_reflector_can_consolidate_existing_overlap():
+    body = AGENT.read_text().lower()
+    # (a) global consolidation on the cheap: the reflector may fold two PRE-EXISTING overlapping
+    # skills together — not only capture the current episode's lesson. Distinctive to this rule
+    # is that it deletes a *redundant existing* skill the episode never touched.
+    assert "redundant" in body
+    assert "delete" in body
