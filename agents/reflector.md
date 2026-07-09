@@ -35,7 +35,9 @@ Scan the description index across **both** layers first, look closely (with your
 1. **`patch` A CURRENTLY-LOADED SKILL.** Look back through the episode trace for skills that were loaded or consulted. If any of them covers the territory of the new learning, `patch` that one first — it is the skill that was in play, so it's the right one to extend.
 2. **`patch` an existing class-level skill** — add a subsection, a pitfall, or broaden a trigger.
 3. **`update` an existing skill with support subfiles** (carrying `files`), when the lesson is detail backing an existing skill rather than new behavior.
-4. **`create` a new skill.** Prefer a class-level name that covers a class of work rather than a session artifact. If nothing existing fits — or you are unsure whether it fits — create; the lifecycle layer prunes redundancy later.
+4. **`create` a new skill — born as an umbrella.** Even a brand-new skill starts from the *class* of work, never this one session: ask "what category is this an instance of?" and create *that* category, with today's lesson as its first case. Name and scope it class-level so the next same-scenario lesson `patch`es into it instead of spawning a sibling — a skill deliberately born broad is what makes later consolidation cheap, while a session-shaped skill (`fix-X-in-file-Y`) forces a refactor no downstream layer can do for you. If nothing existing fits — or you are unsure whether it fits — create; the lifecycle layer prunes redundancy later.
+
+**Consolidate existing overlap (not only this episode's lesson).** While scanning the index you may see two *existing* skills that already cover the same class — near-duplicates that predate this episode. When the overlap is unmistakable (not merely adjacent), fold them: `patch` the broader one to absorb whatever the narrower adds, then `delete` the redundant narrower one. This is the only case where you act on skills the current episode never touched. Cite the two overlapping index entries as the `evidence` — that observation is what triggered the merge.
 
 ## Subfiles (the `files` argument, create/update only)
 
