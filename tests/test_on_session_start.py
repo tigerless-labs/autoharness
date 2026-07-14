@@ -81,10 +81,10 @@ def test_second_run_is_noop_after_archival(tmp_path, monkeypatch):
     assert on_session_start.on_session_start(roots=roots)["archived"]["project"] == []
 
 
-def test_mature_zero_calls_survives_without_capacity_pressure(tmp_path, monkeypatch):
+def test_graduation_review_archives_mature_zero_calls(tmp_path, monkeypatch):
     _small_knobs(monkeypatch, cap_project=5)
     roots = _roots(tmp_path)
     _set_requests(roots, "project", 100)
-    _seed(roots, "idle", calls=0)  # mature, rate 0 — but pool under cap → survives
-    assert on_session_start.on_session_start(roots=roots)["archived"]["project"] == []
-    assert skill_store.exists("project", "idle", roots["project"])
+    _seed(roots, "idle", calls=0)  # full probation, zero use → archived even under cap
+    assert on_session_start.on_session_start(roots=roots)["archived"]["project"] == ["idle"]
+    assert not skill_store.exists("project", "idle", roots["project"])
