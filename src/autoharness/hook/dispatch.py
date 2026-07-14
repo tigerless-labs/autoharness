@@ -6,9 +6,10 @@ missing event names are safely ignored (fail-safe — a new host event must not 
 platform contract pins the details:
 - `Stop` = once per turn (S6) → on Stop, +1 each to both layers' request counters (the MNG-rate
   denominator), then run CAP triggering; `SubagentStop` (reflector done, S4) is not routed, not counted.
-- `PreToolUse`: `Skill` → MNG numerator instrumentation (identity in `tool_input`, S5); reflector
-  `agent_type` (carried in the S3 payload) on `Write`/`Edit` → deny (plugin top-level backstop — a
-  plugin agent does not honor its own hooks, S1).
+- `PreToolUse`: `Skill` → MNG numerator instrumentation (identity in `tool_input`, S5); `Read` into a
+  managed symbol directory → same numerator (the dominant consumption path, E8), except reflector
+  reads (library comparison, not use); reflector `agent_type` (carried in the S3 payload) on
+  `Write`/`Edit` → deny (plugin top-level backstop — a plugin agent does not honor its own hooks, S1).
 - Triggering reflection starts in a detached background job (host-detach: do not block the host Stop);
   the spawn CLI entry connects to the promoter.
 
@@ -85,6 +86,10 @@ def dispatch(event, *, roots=None, reflect=None):
             tool = event.get("tool_name")
             if tool == "Skill":
                 return {"handled": name, "result": on_skill_call.on_skill_call(event, roots=roots)}
+            if tool == "Read":
+                if _is_reflector(event):
+                    return {"handled": name, "result": {"counted": False, "reason": "reflector_read"}}
+                return {"handled": name, "result": on_skill_call.on_skill_read(event, roots=roots)}
             if tool in _WRITE_TOOLS and _is_reflector(event):
                 return {"deny": True, "reason": "reflector may only stage intents, not write files"}
             return {"ignored": True, "reason": "untracked PreToolUse"}
