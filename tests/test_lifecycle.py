@@ -11,16 +11,23 @@ def test_probation_never_archived():
     assert out == []
 
 
-def test_mature_zero_calls_survives_without_capacity_pressure():
-    # denom = 20 ≥ maturity 10, calls 0, pool under cap → capacity contention is the only death
+def test_graduation_review_archives_mature_zero_calls_without_capacity_pressure():
+    # denom = 20 ≥ maturity 10, calls 0 → archived at review, never enters the pool
     out = lifecycle.evaluate([_m("idle", 0)], request_count=20, maturity=10, capacity=5)
+    assert out == ["idle"]
+
+
+def test_graduated_low_rate_survives_without_capacity_pressure():
+    # calls ≥ 1 graduates; low rate alone is not a death line (capacity contention is)
+    out = lifecycle.evaluate([_m("rare", 1)], request_count=1000, maturity=10, capacity=5)
     assert out == []
 
 
-def test_mature_zero_calls_evicted_first_under_capacity_pressure():
-    members = [_m("idle", 0), _m("used", 30)]
+def test_review_and_capacity_compose():
+    # idle archived by review; the graduated pool then contends for capacity separately
+    members = [_m("idle", 0), _m("hi", 80), _m("lo", 5)]
     out = lifecycle.evaluate(members, request_count=100, maturity=10, capacity=1)
-    assert out == ["idle"]
+    assert out == ["idle", "lo"]
 
 
 def test_capacity_competition_archives_lowest_rate():
