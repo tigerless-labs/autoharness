@@ -111,6 +111,31 @@ def test_pretooluse_skill_counts_numerator(tmp_path):
     assert sidecar.read("project", "foo", root)["calls"] == 1
 
 
+def test_pretooluse_read_of_skill_counts_numerator(tmp_path):
+    roots = _roots(tmp_path)
+    root = roots[layer.PROJECT]
+    skill_store.write_body("project", "foo", "b", root)
+    sidecar.create("project", "foo", anchor=0, root=root)
+    out = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Read",
+                             "tool_input": {"file_path": str(root / "skills" / "foo" / "SKILL.md")}},
+                            roots=roots)
+    assert out["result"]["counted"]
+    assert sidecar.read("project", "foo", root)["calls"] == 1
+
+
+def test_reflector_read_not_counted(tmp_path):
+    roots = _roots(tmp_path)
+    root = roots[layer.PROJECT]
+    skill_store.write_body("project", "foo", "b", root)
+    sidecar.create("project", "foo", anchor=0, root=root)
+    out = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Read",
+                             "agent_type": "autoharness:reflector",
+                             "tool_input": {"file_path": str(root / "skills" / "foo" / "SKILL.md")}},
+                            roots=roots)
+    assert not out["result"]["counted"]
+    assert sidecar.read("project", "foo", root)["calls"] == 0
+
+
 def test_reflector_write_is_denied(tmp_path):
     out = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Write",
                              "agent_type": "autoharness:reflector"}, roots=_roots(tmp_path))

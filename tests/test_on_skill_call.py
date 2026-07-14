@@ -55,6 +55,65 @@ def test_missing_name_failsafe(tmp_path):
     assert not on_skill_call.on_skill_call({}, roots=_roots(tmp_path))["counted"]
 
 
+def _read_event(path):
+    return {"tool_name": "Read", "tool_input": {"file_path": str(path)}}
+
+
+def test_read_of_skill_file_bumps_numerator(tmp_path):
+    roots = _roots(tmp_path)
+    root = _seed_agent_skill(roots)
+    r = on_skill_call.on_skill_read(_read_event(root / "skills" / "foo" / "SKILL.md"), roots=roots)
+    assert r["counted"] and r["level"] == "project"
+    assert sidecar.read("project", "foo", root)["calls"] == 1
+
+
+def test_read_of_skill_subfile_bumps_numerator(tmp_path):
+    roots = _roots(tmp_path)
+    root = _seed_agent_skill(roots)
+    r = on_skill_call.on_skill_read(
+        _read_event(root / "skills" / "foo" / "references" / "evidence-1.md"), roots=roots)
+    assert r["counted"]
+    assert sidecar.read("project", "foo", root)["calls"] == 1
+
+
+def test_read_outside_skills_not_counted(tmp_path):
+    roots = _roots(tmp_path)
+    _seed_agent_skill(roots)
+    r = on_skill_call.on_skill_read(_read_event(tmp_path / "elsewhere" / "SKILL.md"), roots=roots)
+    assert not r["counted"]
+
+
+def test_read_of_archived_skill_not_counted(tmp_path):
+    roots = _roots(tmp_path)
+    root = _seed_agent_skill(roots)
+    r = on_skill_call.on_skill_read(
+        _read_event(root / "skills" / ".archive" / "foo" / "SKILL.md"), roots=roots)
+    assert not r["counted"]
+    assert sidecar.read("project", "foo", root)["calls"] == 0
+
+
+def test_read_of_non_agent_skill_never_touched(tmp_path):
+    roots = _roots(tmp_path)
+    root = roots["project"]
+    skill_store.write_body("project", "native", "b", root)
+    r = on_skill_call.on_skill_read(_read_event(root / "skills" / "native" / "SKILL.md"), roots=roots)
+    assert not r["counted"] and r["reason"] == "not_agent_created"
+    assert sidecar.read("project", "native", root) == {}
+
+
+def test_read_missing_path_failsafe(tmp_path):
+    assert not on_skill_call.on_skill_read({"tool_name": "Read"}, roots=_roots(tmp_path))["counted"]
+
+
+def test_read_recursion_guard_does_not_count(tmp_path, monkeypatch):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    roots = _roots(tmp_path)
+    root = _seed_agent_skill(roots)
+    r = on_skill_call.on_skill_read(_read_event(root / "skills" / "foo" / "SKILL.md"), roots=roots)
+    assert not r["counted"] and r["reason"] == "recursion_guard"
+    assert sidecar.read("project", "foo", root)["calls"] == 0
+
+
 def test_recursion_guard_does_not_count(tmp_path, monkeypatch):
     monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
     roots = _roots(tmp_path)

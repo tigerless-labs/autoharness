@@ -24,9 +24,11 @@ def test_hooks_route_all_events_to_dispatch():
     assert (ROOT / "src/autoharness/hook/dispatch.py").exists()
 
 
-def test_pretooluse_scoped_to_skill():
+def test_pretooluse_covers_skill_and_read_numerator():
     pre = _load("hooks/hooks.json")["hooks"]["PreToolUse"]
-    assert any(group.get("matcher") == "Skill" for group in pre)
+    matchers = [group.get("matcher") or "" for group in pre]
+    assert any("Skill" in m for m in matchers)
+    assert any("Read" in m for m in matchers)
 
 
 def test_pretooluse_backstops_reflector_writes():
