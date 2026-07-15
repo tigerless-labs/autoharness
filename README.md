@@ -20,7 +20,7 @@ hand every model generation. autoharness bets one slice of it — the skill laye
 |---|---|
 | **Learns from real work** | Each episode is distilled into a skill from the session you were already having — no separate data-collection or replay loop. |
 | **Groups, doesn't just pile up** | A new episode doesn't always add a skill — the reflector compares it against what's there and folds same-scenario skills into one, so the layer consolidates by category instead of accreting near-duplicates. |
-| **Validated in use, not on a benchmark** | A skill survives by being adhered to in later turns (invocation rate), not a held-out score. No oracle on the active path, and no tokens spent on a dedicated eval. |
+| **Validated in use, not on a benchmark** | A skill survives by being adhered to in later turns (usage rate), not a held-out score. No oracle on the active path, and no tokens spent on a dedicated eval. |
 | **Only its own skills** | Touches only the skills it generated through this plugin — everything else, whether you wrote it or installed it, is left completely alone. |
 | **Evidence kept for later** | Every create/update logs its scenario and decision to a per-skill ledger — the raw material to build a benchmark from real usage if you ever want one. |
 
@@ -76,18 +76,18 @@ configure unless you want to change the pace.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `AUTOHARNESS_REFLECT_EVERY_N` | `3` | Reflection cadence: a background reflection run fires every N host turns. Lower = learns faster, spawns more child sessions. |
+| `AUTOHARNESS_REFLECT_EVERY_N` | `10` | Reflection cadence: a background reflection run fires every N host turns, and each run receives that full N-turn window. Lower = learns faster, spawns more child sessions. |
 | `AUTOHARNESS_DIGEST_EXCHANGES` | `20` | How many exchanges *before* the episode window are compressed into the reflector's prior-context digest (text + tool names only). |
-| `AUTOHARNESS_MATURITY_PROJECT` | `100` | Probation gate, project layer: a skill only graduates — starts counting against capacity and becoming evictable — after this many requests have arrived in its layer since it landed. Until then it's recalled as usual but can't be archived. |
+| `AUTOHARNESS_MATURITY_PROJECT` | `100` | Probation gate, project layer: after this many requests have arrived in its layer since a skill landed, it faces graduation review — never used across the whole probation → archived; used at least once → graduates into the mature pool. Until then it's recalled as usual but can't be archived. |
 | `AUTOHARNESS_MATURITY_GLOBAL` | `300` | Same gate for the global layer — higher because a global skill loads in every project. |
-| `AUTOHARNESS_CAPACITY_PROJECT` | `50` | Cap on *mature* skills in the project layer. Capacity contention is the only death: nothing is archived until the mature pool exceeds this, then the lowest invocation rates go first. |
+| `AUTOHARNESS_CAPACITY_PROJECT` | `50` | Cap on *mature* skills in the project layer. For graduates, capacity contention is the only death: nothing is archived until the mature pool exceeds this, then the lowest usage rates go first. |
 | `AUTOHARNESS_CAPACITY_GLOBAL` | `20` | Same cap for the global layer — smaller because its blast radius is every project. |
 
 Set them in the environment Claude Code launches with — either the shell
-(`export AUTOHARNESS_REFLECT_EVERY_N=10`) or the `env` map in `.claude/settings.json`:
+(`export AUTOHARNESS_REFLECT_EVERY_N=3`) or the `env` map in `.claude/settings.json`:
 
 ```json
-{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "10" } }
+{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "3" } }
 ```
 
 Hooks read the environment on every event, so a change applies from the next session. The defaults
@@ -108,7 +108,7 @@ skills, recalled by the host's own name-and-description mechanism as if a human 
 | **CAP** · capture | Hook-driven dumb pipe: grabs each turn (user input, agent output, tool I/O), redacts at egress, points back at the host log instead of copying it. |
 | **REF** · reflect | At an episode boundary, receives the current episode window in full detail (the last N turns, tool I/O included) plus a compressed digest of the exchanges before it (text and tool names only), reads the existing skill index, and decides add / merge / patch / drop a support file / delete — emits an intent (body, delta, or path, plus reason and evidence). Proposes only; no write tools. |
 | **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. |
-| **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by invocation rate — calls over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. Capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
+| **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by usage rate — uses over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). A use is counted whenever the host consumes the skill: a Skill-tool invocation or a read of any file in the skill's directory (measured to be the dominant path). New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. At maturity, graduation review: zero use across the whole probation → archived, never enters the pool. For graduates, capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
 | **LED** · ledger | Per-symbol append-only sidecar: why each symbol was born or changed, with evidence and a reflection watermark. Kept out of the skill body so recall stays clean. |
 
 ## Walkthrough: watching it learn
@@ -164,13 +164,16 @@ the existing skill's `SKILL.md` changes and its ledger appends a `patch`/`update
 two-line ledger above is a real example. `git diff` on a project-layer skill shows the edit.
 
 **5 · Recall is the host's, untouched.** Landed skills load like hand-written ones — same
-name-and-description recall, no autoharness code on that path. When one fires, `calls` in its
-`.sidecar.json` ticks up: that adherence count is the validation signal.
+name-and-description recall, no autoharness code on that path. When one is used — invoked as a
+skill or read from its directory — `calls` in its `.sidecar.json` ticks up: that adherence count
+is the validation signal.
 
-**6 · Retirement is an archive, not a delete.** Once a layer's mature pool exceeds capacity, the
-lowest-invocation-rate skills move — folder, ledger, evidence and all — to
-`.claude/skills/.archive/<name>/`, out of recall. Moving the folder back revives it, history intact.
-With the shrunk knobs above this fires within one session; at defaults it takes hundreds of turns.
+**6 · Retirement is an archive, not a delete.** Two paths out, both a folder move to
+`.claude/skills/.archive/<name>/` — ledger, evidence and all, out of recall. A skill never used
+across its whole probation is archived at graduation review; after graduation, once a layer's
+mature pool exceeds capacity the lowest-usage-rate skills go. Moving the folder back revives it,
+history intact. With the shrunk knobs above this fires within one session; at defaults it takes
+hundreds of turns.
 
 **7 · Yours are never touched.** Every autoharness-authored skill carries the ledger marker;
 anything without it — skills you wrote or installed — is invisible to the promoter and MNG.
