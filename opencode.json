@@ -1,18 +1,10 @@
 {
-  "mcpServers": {
-    "stage_skill": {
-      "command": "python3",
-      "args": [
-        "-m",
-        "autoharness.stage_skill.server"
-      ],
-      "env": {
-        "PYTHONPATH": "${CLAUDE_PLUGIN_ROOT}/src"
-      }
-    },
+  "mcp": {
     "open-knowledge": {
-      "command": "/bin/sh",
-      "args": [
+      "type": "local",
+      "enabled": true,
+      "command": [
+        "/bin/sh",
         "-l",
         "-c",
         "# ok-mcp-v1\nUSER_BUNDLE=\"$HOME/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh\"\n[ -f \"$USER_BUNDLE\" ] && [ -x \"$USER_BUNDLE\" ] && exec \"$USER_BUNDLE\" mcp\nBUNDLE=\"/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh\"\n[ -f \"$BUNDLE\" ] && [ -x \"$BUNDLE\" ] && exec \"$BUNDLE\" mcp\ncommand -v npx >/dev/null 2>&1 && exec npx -y @inkeep/open-knowledge@latest mcp\nfor d in \"$HOME/.nvm/versions/node\"/*/bin \"$HOME/.fnm/node-versions\"/*/installation/bin \"$HOME/.asdf/installs/nodejs\"/*/bin /opt/homebrew/bin /usr/local/bin \"$HOME/.local/bin\" \"$HOME/.volta/bin\"; do\n  [ -f \"$d/npx\" ] && [ -x \"$d/npx\" ] && exec \"$d/npx\" -y @inkeep/open-knowledge@latest mcp\ndone\necho \"OpenKnowledge: install OK Desktop or Node.js 24+, then restart your editor\" >&2\nexit 127"
