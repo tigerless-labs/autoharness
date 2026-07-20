@@ -12,19 +12,22 @@
 | 项目层(出镜) | `$DEMO/repo/.claude/skills/` | skill 落盘处,和真实用户项目一模一样 |
 | 用户层(不出镜) | `$DEMO/sandbox-home/.claude/` | 用 `HOME` 覆盖隔离:画面无日常插件、Step 1 可现场装、真实 `~/.claude` 零污染 |
 
-已固化进 `sandbox-home/.claude/settings.json`(开新终端也不会丢):
+配置分两处。`sandbox-home/.claude/settings.json`(sandbox 常驻,只对 sandbox HOME 生效):
 
 ```json
 {
-  "autoMemoryEnabled": false,
-  "env": { "AUTOHARNESS_REFLECT_EVERY_N": "2" }
+  "autoMemoryEnabled": false
 }
 ```
 
 - `autoMemoryEnabled: false` — 关掉 Claude Code 自带 auto-memory,让效果只归因于 skill
-- `AUTOHARNESS_REFLECT_EVERY_N=2` — 纠正那轮立即触发反思(默认 10,录屏等不起)
 
-`repo/demo-env.sh` 只做一件事:`export HOME=~/autoharness-walkthrough-demo/sandbox-home`。
+`repo/demo-env.sh`(每次演示前手动 `source` 一次,只对当前终端生效——文件存在本身不生效):
+
+```bash
+export HOME=~/autoharness-walkthrough-demo/sandbox-home   # 用户层隔离进 sandbox
+export AUTOHARNESS_REFLECT_EVERY_N=2                      # 纠正那轮立即触发反思(默认 10,录屏等不起)
+```
 
 **铁律:每个要跑 `claude` 的终端,先 `source demo-env.sh`,再用 `echo $HOME` 确认指向 sandbox-home。**
 (排练翻车均源于漏掉这步:会话跑进真实环境,真实插件在计数、auto-memory 在记笔记、反思阈值还是 10。)
