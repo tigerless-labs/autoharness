@@ -29,9 +29,7 @@ hand every model generation. autoharness bets one slice of it — the skill laye
 **Requires `python3` on your PATH** — autoharness runs entirely as Python (zero third-party
 dependencies); its hooks and MCP server won't fire without it.
 
-Type these as slash commands inside Claude Code — at the prompt, the same place you type
-messages. Not a terminal, not GitHub: autoharness is a Claude Code plugin, installed and run
-entirely from within Claude Code.
+Type these in the Claude Code input box.
 
 ```
 /plugin marketplace add tigerless-labs/autoharness
