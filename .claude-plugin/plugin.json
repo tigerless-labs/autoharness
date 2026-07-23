@@ -1,6 +1,6 @@
 {
   "name": "autoharness",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Per-symbol maintenance optimizer for an agent's skill layer — learns skills from real runs and keeps them by adherence in use, not by an offline eval score.",
   "author": { "name": "Tigerless Labs" },
   "homepage": "https://github.com/tigerless-labs/autoharness",
