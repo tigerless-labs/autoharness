@@ -38,6 +38,11 @@ def _run_id(result):
     return f"{sid}-{result.get('count', 0)}"
 
 
+def _curate_run_id(event, pcount):
+    sid = _SANITIZE.sub("", str(event.get("session_id") or "")) or "run"
+    return f"{sid}-c{pcount}"  # keyed on the monotonic request count → unique per curator launch
+
+
 def _is_reflector(event):
     at = str(event.get("agent_type") or "")
     return at == config.REFLECTOR_AGENT or at.endswith("reflector")
@@ -60,11 +65,21 @@ def _reflect(event, result, roots, launch=None):
     (launch or _detached_launch)(transcript_path, result.get("session_id", ""), _run_id(result), roots)
 
 
-def dispatch(event, *, roots=None, reflect=None):
+def _consolidate_launch(run_id, roots):
+    subprocess.Popen(  # host-detach: same fire-and-forget as reflection; the curator reads the library, not the transcript
+        [sys.executable, "-m", "autoharness.hook.spawn", "--curate", run_id,
+         str(roots[layer.PROJECT]), str(roots[layer.GLOBAL])],
+        start_new_session=True, stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+
+def dispatch(event, *, roots=None, reflect=None, consolidate=None):
     name = event.get("hook_event_name")
     roots = _roots(roots)
     proot = roots.get(layer.PROJECT)
     fire = reflect or _reflect
+    curate = consolidate or _consolidate_launch
     try:
         if name == "SessionStart":
             return {"handled": name, "result": on_session_start.on_session_start(event, roots=roots)}
@@ -72,10 +87,12 @@ def dispatch(event, *, roots=None, reflect=None):
             if os.environ.get(config.CHILD_SESSION_ENV):
                 return {"handled": name, "result": {"triggered": False, "reason": "recursion_guard"}}
             counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG denominator (per turn)
-            counters.bump_request(layer.PROJECT, proot)
+            pcount = counters.bump_request(layer.PROJECT, proot)
             result = on_stop.on_stop(event, root=proot)
             if result.get("triggered"):
                 fire(event, result, roots)
+            if config.CONSOLIDATE_EVERY_N and pcount % config.CONSOLIDATE_EVERY_N == 0:
+                curate(_curate_run_id(event, pcount), roots)  # periodic content-level merge pass (rarer than reflection)
             return {"handled": name, "result": result}
         if name == "SessionEnd":
             result = on_session_end.on_session_end(event, root=proot)

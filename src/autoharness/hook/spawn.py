@@ -17,19 +17,23 @@ from pathlib import Path
 
 from autoharness import config
 from autoharness.hook import capture, promoter
-from autoharness.lib import counters, layer, skill_store, validate
+from autoharness.lib import counters, layer, sidecar, skill_store, validate
 
 
-def description_index(roots=None):
+def description_index(roots=None, *, agent_only=False):
     roots = roots or {}
     lines = []
     for lyr in layer.LAYERS:
-        skills = layer.skills_dir(lyr, roots.get(lyr))
+        root = roots.get(lyr)
+        skills = layer.skills_dir(lyr, root)
         if not skills.exists():
             continue
         for path in sorted(skills.glob(f"*/{skill_store.SKILL_FILE}")):
+            symbol = path.parent.name
+            if agent_only and not sidecar.is_agent_created(lyr, symbol, root):
+                continue  # curator only ever sees its own skills; native/user stay out of the pool
             fm = validate._frontmatter(path.read_text()) or {}
-            name = fm.get("name") or path.parent.name
+            name = fm.get("name") or symbol
             desc = fm.get("description") or "(no description)"
             lines.append(f"- {name} [{lyr}]: {desc}")
     return "\n".join(lines) if lines else "(no live skills yet)"
@@ -45,6 +49,15 @@ def build_bundle(window, index, spec, digest=""):
         + "# Episode window (redacted)\n\n" + window
         + "\n\n# Existing skills (compare-first: dedupe / patch / where)\n\n" + index
         + "\n\n# Authoring + format spec (write to satisfy this)\n\n" + spec + "\n"
+    )
+
+
+def build_curator_bundle(index, spec):
+    # The curator consolidates the whole agent-authored library, not one episode — so no window.
+    return (
+        "# Agent-authored skills (consolidate: merge narrow siblings into class-level umbrellas)\n\n"
+        + index
+        + "\n\n# Authoring + format spec (merged skills must satisfy this)\n\n" + spec + "\n"
     )
 
 
@@ -84,8 +97,26 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     return promoter.drain(run_id, roots=roots, repo_name=repo_name)
 
 
+def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
+                spec_path=None, spawn_fn=None):
+    roots = roots or {}
+    spec = (spec_path or config.FORMAT_SPEC).read_text()
+    bundle = build_curator_bundle(description_index(roots, agent_only=True), spec)
+
+    argv = build_command(agent=agent or config.CURATOR_AGENT,
+                         claude_bin=claude_bin or config.CLAUDE_BIN)
+    env = child_env(run_id, roots.get(layer.PROJECT))
+    (spawn_fn or _detached_spawn)(argv, env, bundle)
+
+    return promoter.drain(run_id, roots=roots, repo_name=repo_name)
+
+
 def main(argv=None):
-    transcript_path, session_id, run_id, proot, groot = argv if argv is not None else sys.argv[1:]
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "--curate":
+        run_id, proot, groot = argv[1:]
+        return run_curator(run_id, roots={layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)})
+    transcript_path, session_id, run_id, proot, groot = argv
     roots = {layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)}
     offset = counters.session_offset(session_id, roots[layer.PROJECT])
     window_text, new_offset = capture.window(transcript_path, offset)

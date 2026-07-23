@@ -92,6 +92,41 @@ def test_real_onstop_triggers_at_cadence(tmp_path):
     assert len(seen) == 1 and seen[0]["window_n"] == config.REFLECT_EVERY_N
 
 
+def test_curate_run_id_sanitized_and_unique_per_count():
+    assert dispatch._curate_run_id({"session_id": "abc/1"}, 5) == "abc1-c5"
+
+
+def test_curator_fires_at_consolidate_cadence(tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatch.config, "CONSOLIDATE_EVERY_N", 3)
+    roots = _roots(tmp_path)
+    fired = []
+    for _ in range(3):
+        dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1", "transcript_path": "/t.jsonl"},
+                          roots=roots, reflect=lambda *a: None,
+                          consolidate=lambda run_id, r: fired.append(run_id))
+    assert fired == ["s1-c3"]  # once, on the turn the request counter hits a multiple of N
+
+
+def test_curator_not_fired_off_cadence(tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatch.config, "CONSOLIDATE_EVERY_N", 3)
+    roots = _roots(tmp_path)
+    fired = []
+    for _ in range(2):
+        dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"},
+                          roots=roots, reflect=lambda *a: None,
+                          consolidate=lambda run_id, r: fired.append(run_id))
+    assert fired == []
+
+
+def test_curator_not_fired_in_child_session(tmp_path, monkeypatch):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    monkeypatch.setattr(dispatch.config, "CONSOLIDATE_EVERY_N", 1)  # would fire every turn if unguarded
+    fired = []
+    dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"}, roots=_roots(tmp_path),
+                      reflect=lambda *a: None, consolidate=lambda run_id, r: fired.append(run_id))
+    assert fired == []  # recursion guard: a curator/reflector child never spawns another curator
+
+
 def test_untriggered_stop_does_not_reflect(tmp_path, monkeypatch):
     monkeypatch.setattr(dispatch.on_stop, "on_stop", lambda e, **k: {"triggered": False, "count": 1})
     calls = []

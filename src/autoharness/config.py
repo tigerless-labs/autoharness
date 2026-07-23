@@ -19,6 +19,7 @@ def _int_env(name, default):
 
 
 REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 10)  # trigger cadence; the window itself is watermark-delimited (capture)
+CONSOLIDATE_EVERY_N = _int_env("AUTOHARNESS_CONSOLIDATE_EVERY_N", 50)  # ponytail: placeholder, calibrate in experiments/; curator (content-level merge) beat, sparser than reflection (mirrors REFLECT_EVERY_N)
 
 # raw-capture byte caps (ponytail: placeholders, calibrate in experiments/): per transcript record,
 # and per handoff window (tail kept) — bound tool dumps / base64 away from the child context.
@@ -48,6 +49,7 @@ FORMAT_SPEC = _LIB / "format_spec.md"            # #416 single source for author
 CHILD_SESSION_ENV = "AUTOHARNESS_CHILD_SESSION"  # recursion-guard signal: set ONLY by spawn, read by CAP hooks (single source). Must be autoharness-owned: the host sets CLAUDE_CODE_CHILD_SESSION on every hook subprocess, so reusing it would gate every top-level turn.
 
 REFLECTOR_AGENT = "autoharness:reflector"  # the --agent reference for spawn (plugin namespace, Phase 0 resolution pending live test)
+CURATOR_AGENT = "autoharness:curator"      # the --agent reference for the periodic consolidation pass (same spawn chain as reflector)
 CLAUDE_BIN = "claude"                       # the child-session executable for spawn; PATH resolution, overridable in tests
 RUN_ID_ENV = "AUTOHARNESS_RUN_ID"           # spawn injects the intent-queue run_id into the child session via env (read by stage_skill)
 PROJECT_ROOT_ENV = "AUTOHARNESS_PROJECT_ROOT"  # same: repo root (where the queue is persisted)

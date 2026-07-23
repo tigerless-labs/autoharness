@@ -50,3 +50,7 @@ def test_marketplace_lists_this_plugin():
 
 def test_agents_reflector_present():
     assert (ROOT / "agents/reflector.md").exists()
+
+
+def test_agents_curator_present():
+    assert (ROOT / "agents/curator.md").exists()  # the periodic consolidation pass agent
