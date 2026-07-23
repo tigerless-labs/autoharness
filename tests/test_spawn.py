@@ -119,6 +119,78 @@ def test_run_feeds_bundle_and_drains_no_handoff_persisted(tmp_path):
     assert not (layer.state_dir(layer.PROJECT, roots["project"]) / "handoff").exists()  # bundle lives only in the pipe
 
 
+# --- curator: periodic consolidation pass (reuses the reflector spawn chain) ---
+
+def test_description_index_agent_only_filters_native(tmp_path):
+    roots = _roots(tmp_path)
+    skill_store.write_body("project", "native1", GOOD.format(n="native1", d="native"), roots["project"])
+    skill_store.write_body("project", "agent1", GOOD.format(n="agent1", d="agent made"), roots["project"])
+    sidecar.create("project", "agent1", 0, roots["project"])  # created_by:agent
+    idx = spawn.description_index(roots, agent_only=True)
+    assert "agent1" in idx
+    assert "native1" not in idx  # the curator only ever sees its own skills
+
+
+def test_curator_bundle_has_index_and_spec():
+    b = spawn.build_curator_bundle("INDEX_MARK", "SPEC_MARK")
+    assert "INDEX_MARK" in b and "SPEC_MARK" in b
+
+
+def test_curate_main_parses_argv_and_runs(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(spawn, "run_curator",
+                        lambda rid, **k: seen.update(rid=rid, roots=k["roots"]))
+    spawn.main(["--curate", "run-c9", str(tmp_path / "p"), str(tmp_path / "g")])
+    assert seen["rid"] == "run-c9"
+    assert seen["roots"][layer.PROJECT] == tmp_path / "p"
+    assert seen["roots"][layer.GLOBAL] == tmp_path / "g"
+
+
+def test_run_curator_lands_merge_and_archives_narrow(tmp_path):
+    roots = _roots(tmp_path)
+    root = roots["project"]
+    skill_store.write_body("project", "widgets", GOOD.format(n="widgets", d="widget umbrella"), root)
+    sidecar.create("project", "widgets", 0, root)
+    skill_store.write_body("project", "widget-delta", GOOD.format(n="widget-delta", d="narrow delta"), root)
+    sidecar.create("project", "widget-delta", 0, root)
+
+    def fake_curator(argv, env, bundle):
+        from autoharness.lib import intent_queue
+        rid = env[config.RUN_ID_ENV]
+        intent_queue.append(rid, {"action": "patch", "name": "widgets",
+                                  "old_string": "body", "new_string": "body\n## delta\nabsorbed",
+                                  "reason": "fold widget-delta into the widgets umbrella",
+                                  "evidence": "widgets [project] / widget-delta [project]"}, root)
+        intent_queue.append(rid, {"action": "delete", "name": "widget-delta",
+                                  "reason": "absorbed into widgets umbrella",
+                                  "evidence": "widgets [project] / widget-delta [project]"}, root)
+
+    verdicts = spawn.run_curator("run-c", roots=roots, spec_path=config.FORMAT_SPEC, spawn_fn=fake_curator)
+    assert [v["ok"] for v in verdicts] == [True, True]
+    assert "absorbed" in skill_store.read_body("project", "widgets", root)
+    assert skill_store.read_body("project", "widget-delta", root) is None  # moved out of the live tree
+    assert (layer.archive_dir("project", root) / "widget-delta").exists()  # archive is recoverable
+    assert any(e["action"] == "patch" for e in ledger.read("project", "widgets", root))
+
+
+def test_run_curator_cannot_touch_native_skill(tmp_path):
+    # red team: the shared promoter membership guard rejects any modify on a non-agent skill
+    roots = _roots(tmp_path)
+    root = roots["project"]
+    skill_store.write_body("project", "native", GOOD.format(n="native", d="native"), root)  # no sidecar
+
+    def fake_curator(argv, env, bundle):
+        from autoharness.lib import intent_queue
+        intent_queue.append(env[config.RUN_ID_ENV],
+                            {"action": "delete", "name": "native",
+                             "reason": "tried to prune a native skill", "evidence": "native [project]"}, root)
+
+    verdicts = spawn.run_curator("run-r", roots=roots, spec_path=config.FORMAT_SPEC, spawn_fn=fake_curator)
+    assert verdicts and verdicts[0]["ok"] is False
+    assert "self_produced" in str(verdicts[0]["findings"])
+    assert skill_store.read_body("project", "native", root) is not None  # native untouched
+
+
 def _fake_reflector_script(tmp_path):
     script = tmp_path / "fake_reflector.py"
     script.write_text(
@@ -154,3 +226,44 @@ def test_system_fake_reflector_cross_process_lands(tmp_path, monkeypatch):
     assert sidecar.is_agent_created("project", "learned", root)
     led = ledger.read("project", "learned", root)
     assert len(led) == 1 and led[0]["action"] == "create"
+
+
+def _fake_curator_script(tmp_path):
+    script = tmp_path / "fake_curator.py"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "from autoharness import config\n"
+        "from autoharness.stage_skill import server\n"
+        "sys.stdin.read()\n"  # consume the curator bundle (proves it arrived on stdin)
+        "run_id = os.environ[config.RUN_ID_ENV]\n"
+        "root = Path(os.environ[config.PROJECT_ROOT_ENV])\n"
+        "ev = 'widgets [project] / widget-delta [project]'\n"
+        "server.stage({'action': 'patch', 'name': 'widgets', 'old_string': 'body',\n"
+        "              'new_string': 'body\\n## delta\\nabsorbed', 'reason': 'fold into umbrella',\n"
+        "              'evidence': ev}, run_id=run_id, root=root)\n"
+        "server.stage({'action': 'delete', 'name': 'widget-delta',\n"
+        "              'reason': 'absorbed into widgets', 'evidence': ev}, run_id=run_id, root=root)\n"
+        "sys.exit(0)\n"
+    )
+    script.chmod(0o755)
+    return script
+
+
+def test_system_fake_curator_cross_process_merges(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHONPATH", _SRC)  # child subprocess must import autoharness
+    roots = _roots(tmp_path)
+    root = roots["project"]
+    for n, d in (("widgets", "widget umbrella"), ("widget-delta", "narrow delta")):
+        skill_store.write_body("project", n, GOOD.format(n=n, d=d), root)
+        sidecar.create("project", n, 0, root)
+    script = _fake_curator_script(tmp_path)
+
+    verdicts = spawn.run_curator("run-csys", roots=roots, repo_name="myrepo",
+                                 claude_bin=str(script), spec_path=config.FORMAT_SPEC)
+
+    assert [v["ok"] for v in verdicts] == [True, True]
+    assert "absorbed" in skill_store.read_body("project", "widgets", root)
+    assert skill_store.read_body("project", "widget-delta", root) is None  # archived out of the live tree
+    assert (layer.archive_dir("project", root) / "widget-delta").exists()

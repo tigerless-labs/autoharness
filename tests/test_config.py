@@ -8,6 +8,27 @@ def test_cadence_positive():
     assert isinstance(config.REFLECT_EVERY_N, int) and config.REFLECT_EVERY_N > 0
 
 
+def test_consolidate_cadence_sparser_than_reflect():
+    # curation runs periodically like reflection but rarer — merging the library is a coarser beat
+    assert isinstance(config.CONSOLIDATE_EVERY_N, int)
+    assert config.CONSOLIDATE_EVERY_N > config.REFLECT_EVERY_N
+
+
+def test_curator_agent_named_and_distinct():
+    assert config.CURATOR_AGENT and isinstance(config.CURATOR_AGENT, str)
+    assert config.CURATOR_AGENT != config.REFLECTOR_AGENT
+
+
+def test_env_overrides_consolidate_cadence(monkeypatch):
+    monkeypatch.setenv("AUTOHARNESS_CONSOLIDATE_EVERY_N", "7")
+    importlib.reload(config)
+    try:
+        assert config.CONSOLIDATE_EVERY_N == 7
+    finally:
+        monkeypatch.undo()
+        importlib.reload(config)
+
+
 def test_layered_knobs_cover_both_layers_and_positive():
     for knob in (config.MATURITY_THRESHOLD, config.CAPACITY):
         assert set(knob) == set(layer.LAYERS)
