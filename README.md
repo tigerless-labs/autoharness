@@ -47,8 +47,8 @@ Update from a terminal — refresh the catalog, then update with the **full `plu
 id**, then restart:
 
 ```
-claude plugin marketplace update autoharness       # pull the latest catalog
-claude plugin update autoharness@autoharness        # a bare `autoharness` fails "plugin not found"
+claude plugin marketplace update autoharness       
+claude plugin update autoharness@autoharness
 ```
 
 Then **restart Claude Code** to apply — a version bump is a fresh cached copy, not a hot reload.
