@@ -43,17 +43,18 @@ background. Cadence and lifecycle thresholds are tunable — see [Configuration]
 
 ### Update
 
-Update from a terminal — the command needs the **full `plugin@marketplace` id** (a bare
-`autoharness` fails with `Plugin "autoharness" not found`):
+Update from a terminal — refresh the catalog, then update with the **full `plugin@marketplace`
+id**, then restart:
 
 ```
-claude plugin update autoharness@autoharness
+claude plugin marketplace update autoharness       # pull the latest catalog
+claude plugin update autoharness@autoharness        # a bare `autoharness` fails "plugin not found"
 ```
 
 Then **restart Claude Code** to apply — a version bump is a fresh cached copy, not a hot reload.
 
-If it reports `already at the latest version` when a newer one shipped, your local catalog is
-stale; refresh it first with `claude plugin marketplace update autoharness`, then update again.
+The refresh is first on purpose: without it, `update` checks a stale local catalog and may report
+`already at the latest version` when a newer release actually shipped.
 
 Third-party marketplaces have auto-update **off** by default. To make future releases hands-off,
 enable it once: `/plugin` → **Marketplaces** → **autoharness** → **Enable auto-update**. The
