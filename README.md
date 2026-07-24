@@ -64,8 +64,8 @@ field is bumped.
 ### Uninstall
 
 ```
-claude plugin uninstall autoharness@autoharness     # stops the hooks + MCP server
-claude plugin marketplace remove autoharness        # optional — also drops the install source
+claude plugin uninstall autoharness@autoharness     
+claude plugin marketplace remove autoharness       
 ```
 
 Uninstalling only stops it from running — the skills it landed and its own state live **outside** the
