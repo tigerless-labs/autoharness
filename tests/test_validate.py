@@ -1,6 +1,6 @@
 from autoharness.lib import validate
 
-GOOD_BODY = "---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\nUse strftime.\n"
+GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
 GOOD_INTENT = {"action": "create", "name": "foo", "level": "project", "reason": "r", "evidence": "e"}
 
 
@@ -68,6 +68,67 @@ def test_delete_missing_led_rejected():
     assert "led" in _families(validate.validate(intent, None, target_is_agent_created=True))
 
 
+def _body(n):  # n non-blank content lines under the frontmatter
+    return "---\nname: foo\ndescription: d\n---\n" + "".join(f"line {i}\n" for i in range(n))
+
+
+def test_altitude_long_create_rejected():
+    from autoharness import config
+    v = validate.validate(GOOD_INTENT, _body(config.SKILL_BODY_MAX_LINES + 1))
+    assert not v["ok"] and "altitude" in _families(v)
+
+
+def test_altitude_tight_create_passes():
+    from autoharness import config
+    v = validate.validate(GOOD_INTENT, _body(config.SKILL_BODY_MAX_LINES))
+    assert "altitude" not in _families(v)
+
+
+def test_altitude_ignores_blank_lines():
+    from autoharness import config
+    padded = _body(5).rstrip("\n") + "\n\n\n" * config.SKILL_BODY_MAX_LINES  # many blanks, few real lines
+    assert "altitude" not in _families(validate.validate(GOOD_INTENT, padded))
+
+
+def test_altitude_patch_exempt():
+    # patch to a live skill is a delta; a long post-patch body must not be blocked (else long skills strand)
+    from autoharness import config
+    intent = {"action": "patch", "name": "foo", "reason": "r", "evidence": "e"}
+    v = validate.validate(intent, _body(config.SKILL_BODY_MAX_LINES + 20), target_is_agent_created=True)
+    assert "altitude" not in _families(v)
+
+
+def _desc_body(desc):
+    return f"---\nname: foo\ndescription: {desc}\n---\n# Foo\nUse strftime.\n"
+
+
+def test_trigger_bare_label_rejected():
+    v = validate.validate(GOOD_INTENT, _desc_body("Manages my project operations"))
+    assert not v["ok"] and "trigger" in _families(v)
+
+
+def test_trigger_when_clause_passes():
+    assert "trigger" not in _families(validate.validate(GOOD_INTENT, _desc_body("Use when auditing a repo.")))
+
+
+def test_trigger_quoted_phrase_passes():
+    # no "when", but lists a literal phrase the user would type
+    assert "trigger" not in _families(validate.validate(GOOD_INTENT, _desc_body("Fires on 'audit this repo'.")))
+
+
+def test_trigger_patch_exempt():
+    # patch to a live skill must not be blocked on a legacy cue-less description
+    intent = {"action": "patch", "name": "foo", "reason": "r", "evidence": "e"}
+    v = validate.validate(intent, _desc_body("Manages my project operations"), target_is_agent_created=True)
+    assert "trigger" not in _families(v)
+
+
+def test_description_over_length_rejected():
+    from autoharness import config
+    v = validate.validate(GOOD_INTENT, _desc_body("use when " + "x" * (config.SKILL_DESC_MAX_CHARS + 1)))
+    assert not v["ok"] and "description" in _families(v)
+
+
 def test_referenced_py_syntax_error_rejected(tmp_path):
     (tmp_path / "helper.py").write_text("def f(:\n")  # syntax error
     body = "---\nname: foo\ndescription: d\n---\nSee `helper.py` for details.\n"
@@ -76,7 +137,7 @@ def test_referenced_py_syntax_error_rejected(tmp_path):
 
 # --- folder-skill: files gate + referenced/pointer rules ---
 
-FILES_BODY = "---\nname: foo\ndescription: d\n---\n# Foo\nRun scripts/run.sh\n"
+FILES_BODY = "---\nname: foo\ndescription: Use when you need the helper.\n---\n# Foo\nRun scripts/run.sh\n"
 
 
 def test_check_files_empty_ok():

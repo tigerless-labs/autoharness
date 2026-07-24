@@ -30,6 +30,13 @@ DIGEST_MAX_RECORD_CHARS = 200
 DIGEST_MAX_BYTES = 20_000
 
 STAGE_MAX_BODY_BYTES = 100_000  # ponytail: placeholder, SKILL.md body cap; for instant feedback on stage_skill args
+# altitude gate: SKILL.md body must read as a rule, not a transcript. A deterministic proxy for the
+# reflector (the only LLM in the loop) actually distilling — non-blank body lines (ex-frontmatter)
+# over this reject create/update; detail belongs in references/. ponytail: crude proxy, calibrate in experiments/.
+SKILL_BODY_MAX_LINES = _int_env("AUTOHARNESS_SKILL_BODY_MAX_LINES", 25)
+# description is the trigger: the host preloads name+description and matches recall on it, so a skill
+# lives or dies here. Cap = Anthropic's documented 1024-char host limit (past it the host truncates).
+SKILL_DESC_MAX_CHARS = _int_env("AUTOHARNESS_SKILL_DESC_MAX_CHARS", 1024)
 
 # folder-skill subfile caps (ponytail: placeholders like STAGE_MAX_BODY_BYTES, calibrate in experiments/)
 STAGE_MAX_FILES = 8
