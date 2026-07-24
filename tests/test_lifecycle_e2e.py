@@ -14,8 +14,8 @@ from autoharness import config
 from autoharness.hook import capture, dispatch, spawn
 from autoharness.lib import counters, intent_queue, layer, ledger, sidecar, skill_store
 
-LEARNED = "---\nname: learned\ndescription: Does a specific repeatable thing.\n---\n# Learned\nSteps.\n"
-WEAK = "---\nname: weak\ndescription: Rarely useful side note.\n---\n# Weak\nx.\n"
+LEARNED = "---\nname: learned\ndescription: Use when doing a specific repeatable thing.\n---\n# Learned\nSteps.\n"
+WEAK = "---\nname: weak\ndescription: Use when the rare side note applies.\n---\n# Weak\nx.\n"
 
 
 @pytest.fixture(autouse=True)

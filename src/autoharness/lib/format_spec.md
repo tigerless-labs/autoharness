@@ -9,8 +9,25 @@ read this one file — keep them aligned.
 YAML frontmatter that parses, carrying at least:
 
 - `name` — short identifier for the skill.
-- `description` — one specific line; this is what the host matches on for recall, so vague
-  descriptions degrade recall and are rejected.
+- `description` — the trigger; see "Description is the trigger" below. This is what the host matches
+  recall on, so a cue-less label never fires and is rejected.
+
+## Description is the trigger — spend the effort here
+
+The host preloads every skill's `name` + `description` and decides recall by matching the user's
+request against the description. So the description, not the body, decides whether the skill ever
+fires — spend the writing effort here. A body only matters after the description has already fired.
+
+- **Name when to use it.** State the trigger: `use when …` plus the conditions/symptoms that should
+  fire it. An abstract topic-label ("Manages project operations", "Setup docs for agents") matches no
+  concrete request and never fires.
+- **List literal phrases the user would type.** Quote them (`"audit this"`, `"set up the project"`).
+  Concrete phrases match concrete requests; abstract summaries do not.
+- **One skill that wants to do five things → split into modes**, each with its own trigger phrases; a
+  bloated description covers too much and matches inconsistently.
+- **Enforced:** the promoter rejects a `create`/`update` whose description carries no trigger cue
+  (neither a `when` clause nor a quoted phrase), or exceeds `SKILL_DESC_MAX_CHARS`. The cue check is a
+  crude proxy; the real judgment (does this match how a user actually asks?) is the author's.
 
 ## Structure (#416)
 
@@ -55,6 +72,21 @@ pointer out first; both intents can ride the same run, they land in order.
 ## Content completeness
 
 - No `TODO`, no placeholder tokens (`FIXME`, `XXX`, `<...>`), no empty sections.
+
+## Altitude — the body is a rule, not a transcript
+
+A SKILL.md exists to hand the next session a *durable rule*, stated at the altitude of the class of
+work — not to replay the episode that produced it. So:
+
+- **Open with the rule itself.** The first content after the frontmatter is the reusable directive in
+  one or two lines. A reader who stops there already has the skill.
+- **A full explainer is a smell.** A body carrying the whole Pattern / Example / When-to-use /
+  Anti-patterns quartet inline is documentation, not a rule — hoist the bulk into `references/` and
+  leave a one-line pointer. The SKILL.md stays the rule; `references/` holds the backing detail.
+- **Hard cap (enforced):** the body (frontmatter excluded) must be at most `SKILL_BODY_MAX_LINES`
+  non-blank lines — the promoter rejects a `create`/`update` over the cap. The cap is a crude proxy
+  for altitude; the real judgment ("is this a rule or a retelling?") is the author's. `patch` is
+  exempt, so an existing over-long skill can still be amended and trimmed.
 
 ## Global is stricter (repo-agnostic)
 

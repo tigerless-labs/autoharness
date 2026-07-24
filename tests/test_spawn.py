@@ -106,7 +106,7 @@ def test_run_feeds_bundle_and_drains_no_handoff_persisted(tmp_path):
         from autoharness.lib import intent_queue
         intent_queue.append(env[config.RUN_ID_ENV],
                             {"action": "create", "name": "learned", "level": "project",
-                             "body": GOOD.format(n="learned", d="a specific thing"),
+                             "body": GOOD.format(n="learned", d="use when doing a specific thing"),
                              "reason": "compare-first new", "evidence": "window slice"},
                             roots["project"])
 
@@ -203,7 +203,7 @@ def _fake_reflector_script(tmp_path):
         "run_id = os.environ[config.RUN_ID_ENV]\n"
         "root = Path(os.environ[config.PROJECT_ROOT_ENV])\n"
         "params = {'action': 'create', 'name': 'learned', 'level': 'project',\n"
-        "          'body': '---\\nname: learned\\ndescription: Does a specific thing.\\n---\\n# x\\ny\\n',\n"
+        "          'body': '---\\nname: learned\\ndescription: Use when doing a specific thing.\\n---\\n# x\\ny\\n',\n"
         "          'reason': 'compare-first new', 'evidence': 'window slice'}\n"
         "res = server.stage(params, run_id=run_id, root=root)\n"
         "sys.exit(0 if res['ok'] else 1)\n"

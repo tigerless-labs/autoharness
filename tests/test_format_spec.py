@@ -19,3 +19,17 @@ def test_format_spec_states_subfile_contract():
     # subfile categories + the pointer rule are shared contract between validate and reflector authoring
     for token in ["scripts/", "templates/", "assets/", "references/", "Pointer rule"]:
         assert token in text
+
+
+def test_format_spec_states_altitude_cap():
+    text = config.FORMAT_SPEC.read_text()
+    # altitude rule is shared contract between validate's line cap and reflector authoring
+    for token in ["Altitude", "SKILL_BODY_MAX_LINES"]:
+        assert token in text
+
+
+def test_format_spec_states_description_trigger_contract():
+    text = config.FORMAT_SPEC.read_text()
+    # description-as-trigger is shared contract between validate's cue/length checks and reflector authoring
+    for token in ["trigger", "use when", "SKILL_DESC_MAX_CHARS"]:
+        assert token in text

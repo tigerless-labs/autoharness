@@ -31,6 +31,10 @@ _ABS_PATH = re.compile(r"(?:/home/|/Users/|/root/)[^\s`)\]]+|[A-Za-z]:\\[^\s`)\]
 _PY_REF = re.compile(r"[\w./-]+\.py")
 _SUBFILE_REF = re.compile(r"\b(?:{})/[A-Za-z0-9._/-]+".format("|".join(layer.SUBFILE_DIRS)))
 _MODIFY = ("update", "patch", "remove_file", "delete")
+# description-as-trigger proxy: a firing description names WHEN to use it ("use when …") or lists a
+# literal phrase the user would type (quoted). A bare topic-label has neither and never fires.
+_QUOTED_PHRASE = re.compile(r'"[^"]+"|\'[^\']+\'|`[^`]+`')
+_WHEN = re.compile(r"(?i)\bwhen")
 
 
 def _frontmatter(body):
@@ -45,6 +49,27 @@ def _frontmatter(body):
         key, value = line.split(":", 1)
         fm[key.strip()] = value.strip().strip('"').strip("'")
     return fm
+
+
+def _body_lines(body):
+    """Non-blank body lines, frontmatter excluded — the altitude proxy."""
+    m = _FRONTMATTER.match(body)
+    rest = body[m.end():] if m else body
+    return sum(1 for ln in rest.splitlines() if ln.strip())
+
+
+def _description_findings(desc):
+    """Description is the host's recall key. Over-length truncates; a cue-less label never fires."""
+    findings = []
+    if len(desc) > config.SKILL_DESC_MAX_CHARS:
+        findings.append(("description",
+                         f"description is {len(desc)} chars (> {config.SKILL_DESC_MAX_CHARS}); "
+                         "the host matches on it and truncates past the cap"))
+    if not (_WHEN.search(desc) or _QUOTED_PHRASE.search(desc)):
+        findings.append(("trigger",
+                         "description has no trigger cue: add 'use when …' and/or a literal phrase "
+                         "the user would type — an abstract topic-label never fires"))
+    return findings
 
 
 def _evidence_slice_denied(rel):
@@ -134,6 +159,18 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
 
         if _PLACEHOLDER.search(body):
             findings.append(("completeness", "contains TODO/placeholder"))
+
+        # altitude: create/update author the full body, so this is where rule-level is set. patch is a
+        # delta to a live skill -- capping it would strand existing over-long skills (can't even fix them).
+        if intent.get("action") in ("create", "update"):
+            n = _body_lines(body)
+            if n > config.SKILL_BODY_MAX_LINES:
+                findings.append(("altitude",
+                                 f"body is {n} non-blank lines (> {config.SKILL_BODY_MAX_LINES}); "
+                                 "state the rule, move detail to references/"))
+            desc = (_frontmatter(body) or {}).get("description")
+            if desc:  # absence is already caught by the structure check
+                findings += _description_findings(desc)
 
         contents = [v for v in (files or {}).values() if isinstance(v, str)]
         for content in contents:

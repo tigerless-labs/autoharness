@@ -3,7 +3,7 @@ import json
 from autoharness.hook import promoter
 from autoharness.lib import counters, intent_queue, layer, ledger, sidecar, skill_store
 
-GOOD_BODY = "---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\nUse strftime.\n"
+GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
 
 
 def _roots(tmp_path):
@@ -42,6 +42,26 @@ def test_reject_poison_zero_disk(tmp_path):
     assert not layer.symbol_dir("project", "foo", root).exists()  # zero on-disk change after reject
     assert sidecar.read("project", "foo", root) == {}             # not stamped
     assert ledger.read("project", "foo", root) == []              # not recorded
+
+
+def test_altitude_long_create_rejected_zero_disk(tmp_path):
+    from autoharness import config
+    roots = _roots(tmp_path)
+    long_body = "---\nname: foo\ndescription: d\n---\n" + "".join(
+        f"line {i}\n" for i in range(config.SKILL_BODY_MAX_LINES + 1))
+    v = promoter.promote(_create(body=long_body), roots=roots)
+    assert not v["ok"] and "altitude" in _families(v)
+    root = roots["project"]
+    assert not layer.symbol_dir("project", "foo", root).exists()  # over-cap body lands nothing
+    assert ledger.read("project", "foo", root) == []
+
+
+def test_trigger_bare_label_create_rejected_zero_disk(tmp_path):
+    roots = _roots(tmp_path)
+    body = "---\nname: foo\ndescription: Setup docs for agents\n---\n# Foo\nUse strftime.\n"
+    v = promoter.promote(_create(body=body), roots=roots)
+    assert not v["ok"] and "trigger" in _families(v)
+    assert not layer.symbol_dir("project", "foo", roots["project"]).exists()  # cue-less desc lands nothing
 
 
 def test_missing_led_rejected(tmp_path):
@@ -167,7 +187,7 @@ def test_drain_sweeps_orphan_tmp(tmp_path):
 
 # --- folder-skill: subfile landing + promoter-materialized evidence ---
 
-FILES_BODY = "---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\nRun scripts/run.sh\n"
+FILES_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nRun scripts/run.sh\n"
 
 
 def _sdir(roots, name="foo"):
@@ -271,7 +291,7 @@ def test_delete_materializes_evidence_and_archives_it(tmp_path):
 
 # --- remove_file: single-subfile deletion channel ---
 
-NO_REF_BODY = "---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\nUse strftime.\n"
+NO_REF_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
 
 
 def _remove(path="scripts/run.sh"):
