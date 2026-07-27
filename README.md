@@ -1,4 +1,5 @@
-<h1 align="center">autoharness</h1>
+<h1 align="center">AutoHarness</h1>
+<p align="center"><strong>Self-Learning Skills for Claude Code</strong></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftigerless-labs%2Fautoharness%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=release&prefix=v&color=brightgreen" alt="release" />
