@@ -12,22 +12,43 @@ YAML frontmatter that parses, carrying at least:
 - `description` — the trigger; see "Description is the trigger" below. This is what the host matches
   recall on, so a cue-less label never fires and is rejected.
 
-## Description is the trigger — spend the effort here
+## Description is the trigger — write it to this shape
 
-The host preloads every skill's `name` + `description` and decides recall by matching the user's
-request against the description. So the description, not the body, decides whether the skill ever
-fires — spend the writing effort here. A body only matters after the description has already fired.
+The host preloads every skill's `name` + `description` and picks among all of them by matching the
+user's request against the description. The description carries the whole selection signal; a body
+only matters after it has already fired. Write it to this shape:
 
-- **Name when to use it.** State the trigger: `use when …` plus the conditions/symptoms that should
-  fire it. An abstract topic-label ("Manages project operations", "Setup docs for agents") matches no
-  concrete request and never fires.
-- **List literal phrases the user would type.** Quote them (`"audit this"`, `"set up the project"`).
-  Concrete phrases match concrete requests; abstract summaries do not.
-- **One skill that wants to do five things → split into modes**, each with its own trigger phrases; a
-  bloated description covers too much and matches inconsistently.
-- **Enforced:** the promoter rejects a `create`/`update` whose description carries no trigger cue
-  (neither a `when` clause nor a quoted phrase), or exceeds `SKILL_DESC_MAX_CHARS`. The cue check is a
-  crude proxy; the real judgment (does this match how a user actually asks?) is the author's.
+    <verb phrase: what it does>. Use when <the situation>, or when the user mentions <the words
+    they would type, every alias for the same thing>.
+
+Four elements, all required:
+
+1. **What it does** — a third person verb phrase naming concrete actions and objects. The
+   description is injected into the host's system prompt, so a first- or second-person phrasing
+   ("I can help you…", "You can use this to…") reads as a different speaker and breaks recall.
+2. **When to use it** — the situation that should fire it (`use when …`), stated in the user's
+   frame, not the author's.
+3. **User-facing vocabulary** — the words the user would type: the nouns, verbs, file types and
+   extensions they would actually say, every alias listed. A term absent here can never be matched.
+4. **Nothing else** — no imperative step, no procedure, no file path standing in for a phrase; that
+   is body content. Stay under `SKILL_DESC_MAX_CHARS`, past which the host truncates.
+
+Good: `Generate descriptive commit messages by analyzing git diffs. Use when the user asks for help
+writing commit messages or reviewing staged changes.`
+
+Bad: `Manages project operations` — a topic label, no trigger at all.
+
+Bad: `Use when verifying a release PR has version bumps. Check that "a.json" and "b.json" match.` —
+no what-clause, an imperative lifted from the body, and the quoted strings are file paths rather than
+anything a user would type.
+
+One description straining to cover five distinct triggers → split into separate skills, each with
+its own.
+
+**Enforced (a floor, not the standard):** the promoter rejects a `create`/`update` whose description
+carries no trigger cue — neither a `when` clause nor a quoted phrase — or exceeds
+`SKILL_DESC_MAX_CHARS`. That check is a crude proxy; passing it is not the same as satisfying the
+four elements, and the judgment stays the author's.
 
 ## Structure (#416)
 
