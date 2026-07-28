@@ -33,3 +33,10 @@ def test_format_spec_states_description_trigger_contract():
     # description-as-trigger is shared contract between validate's cue/length checks and reflector authoring
     for token in ["trigger", "use when", "SKILL_DESC_MAX_CHARS"]:
         assert token in text
+
+
+def test_format_spec_states_description_recipe():
+    text = config.FORMAT_SPEC.read_text()
+    # the positive recipe is what REF authors against; validate's cue check is only its floor
+    for token in ["what it does", "third person", "the words the user would type"]:
+        assert token in text
