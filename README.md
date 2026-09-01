@@ -208,4 +208,4 @@ Built by Tigerless Labs.
 
 ---
 
-Built by [Tigerless Labs](https://github.com/tigerless-labs) at Tigerless — the company behind [tigerless.ai](https://tigerless.ai) and [tigerless.com](https://www.tigerless.com).
+Built by [Tigerless Labs](https://github.com/tigerless-labs). Our home is [tigerless.ai](https://tigerless.ai) — the same company as [tigerless.com](https://www.tigerless.com).
