@@ -25,8 +25,11 @@ Optional, and worth setting:
 The host preloads every skill's `name` + `description` and picks among all of them by matching the
 user's request against the description. The description carries the whole selection signal; a body
 only matters after it has already fired. It is read twice over: in full by the host's own recall, and
-truncated to `INDEX_DESC_MAX_CHARS` in the injected index — so the distinguishing cue must come
-early, before the truncation point, not in a trailing clause. Write it to this shape:
+truncated to `INDEX_DESC_MAX_CHARS` in the injected index. **The trigger cue must fall inside that
+truncated prefix** — a `when` clause or a quoted phrase within the first `INDEX_DESC_MAX_CHARS`
+characters — or the promoter rejects the `create`/`update`: past the cut the description is half a
+sentence on the very recall surface this system builds. Lead with the cue, then the detail.
+(`patch` is exempt, so an existing description can still be repaired.) Write it to this shape:
 
     <verb phrase: what it does>. Use when <the situation>, or when the user mentions <the words
     they would type, every alias for the same thing>.
