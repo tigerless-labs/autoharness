@@ -16,6 +16,8 @@ def scan(docs_root):
     docs_root = Path(docs_root)
     dangling = []
     for md in sorted(docs_root.rglob("*.md")):
+        if ".archive" in md.parts:
+            continue  # retired docs keep their own internal links; they are a snapshot, not live prose
         for lineno, line in enumerate(md.read_text(encoding="utf-8").splitlines(), 1):
             for target in local_md_targets(line):
                 if not (md.parent / target).resolve().exists():
@@ -24,9 +26,17 @@ def scan(docs_root):
 
 
 def selftest():
+    import tempfile
+
     assert list(local_md_targets("see [x](a/b.md) and [ext](https://h.md)")) == ["a/b.md"]
     assert list(local_md_targets("anchor [y](../c/d.md#sec) ok")) == ["../c/d.md"]
     assert list(local_md_targets("plain `path.md` backtick, [[wiki]] prose")) == []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / ".archive").mkdir()
+        (root / ".archive" / "old.md").write_text("[gone](nowhere.md)")
+        (root / "live.md").write_text("[gone](nowhere.md)")
+        assert [d[0].name for d in scan(root)] == ["live.md"]
     print("selftest: ok")
 
 
