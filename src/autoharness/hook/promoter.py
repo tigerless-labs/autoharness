@@ -128,6 +128,8 @@ def _land(action, intent, body, level, name, root):
     skill_store.write_body(level, name, body, root)
     if action == "create":
         sidecar.create(level, name, counters.request_count(level, root), root)
+    else:
+        sidecar.bump_patch(level, name, root)  # update/patch: feeds the reuse-after-improvement pair
     ledger.append(level, name, _led(intent, evidence_ref), root)
 
 

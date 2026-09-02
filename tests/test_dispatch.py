@@ -144,7 +144,7 @@ def test_pretooluse_skill_counts_numerator(tmp_path):
     out = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Skill",
                              "tool_input": {"name": "foo"}}, roots=roots)
     assert out["result"]["counted"]
-    assert sidecar.read("project", "foo", root)["calls"] == 1
+    assert sidecar.read("project", "foo", root)["use"] == 1
 
 
 def test_pretooluse_read_of_skill_counts_numerator(tmp_path):
@@ -156,7 +156,7 @@ def test_pretooluse_read_of_skill_counts_numerator(tmp_path):
                              "tool_input": {"file_path": str(root / "skills" / "foo" / "SKILL.md")}},
                             roots=roots)
     assert out["result"]["counted"]
-    assert sidecar.read("project", "foo", root)["calls"] == 1
+    assert sidecar.read("project", "foo", root)["view"] == 1
 
 
 def test_reflector_read_not_counted(tmp_path):
@@ -169,7 +169,7 @@ def test_reflector_read_not_counted(tmp_path):
                              "tool_input": {"file_path": str(root / "skills" / "foo" / "SKILL.md")}},
                             roots=roots)
     assert not out["result"]["counted"]
-    assert sidecar.read("project", "foo", root)["calls"] == 0
+    assert sidecar.read("project", "foo", root).get("view", 0) == 0
 
 
 def test_reflector_write_is_denied(tmp_path):

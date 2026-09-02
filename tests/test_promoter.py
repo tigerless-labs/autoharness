@@ -374,3 +374,19 @@ def test_remove_file_symlink_escape_rejected(tmp_path):
     v = promoter.promote(_remove(path="scripts/victim.sh"), roots=roots)
     assert not v["ok"] and "landing" in _families(v)
     assert victim.read_text() == "keep me"  # nothing outside the skill dir was touched
+
+
+# --- land update/patch bumps the sidecar patch counter (Phase 10, direction C) ---
+
+def test_update_land_bumps_patch_counter(tmp_path):
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    root = roots["project"]
+    body = "---\nname: pc\ndescription: use when pc\n---\nrule"
+    r = promoter.promote({"action": "create", "name": "pc", "level": "project",
+                          "body": body, "reason": "r", "evidence": "e"}, roots=roots)
+    assert r["ok"]
+    assert sidecar.read("project", "pc", root).get("patch", 0) == 0
+    r = promoter.promote({"action": "update", "name": "pc",
+                          "body": body + "2", "reason": "r", "evidence": "e"}, roots=roots)
+    assert r["ok"]
+    assert sidecar.read("project", "pc", root)["patch"] == 1

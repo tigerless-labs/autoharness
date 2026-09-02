@@ -61,7 +61,8 @@ def _members(lyr, root):
         if not sidecar.is_agent_created(lyr, name, root):
             continue
         s = sidecar.read(lyr, name, root)
-        members.append({"name": name, "calls": s.get("calls", 0), "anchor": s.get("anchor", 0)})
+        members.append({"name": name, "use": s.get("use", 0), "view": s.get("view", 0),
+                        "anchor": s.get("anchor", 0)})
     return members
 
 
@@ -73,6 +74,7 @@ def on_session_start(event=None, *, roots=None):
         names = lifecycle.evaluate(
             _members(lyr, root), counters.request_count(lyr, root),
             maturity=config.MATURITY_THRESHOLD[lyr], capacity=config.CAPACITY[lyr],
+            review_suspended=config.GRADUATION_REVIEW_SUSPENDED,
         )
         for name in names:
             skill_store.archive(lyr, name, root)

@@ -51,6 +51,9 @@ MATURITY_THRESHOLD = {layer.GLOBAL: _int_env("AUTOHARNESS_MATURITY_GLOBAL", 300)
                       layer.PROJECT: _int_env("AUTOHARNESS_MATURITY_PROJECT", 100)}
 CAPACITY = {layer.GLOBAL: _int_env("AUTOHARNESS_CAPACITY_GLOBAL", 20),
             layer.PROJECT: _int_env("AUTOHARNESS_CAPACITY_PROJECT", 50)}
+# graduation-review suspend gate (direction C): while the recall surface is known-broken, archiving
+# for zero use buries surfacing's failure — flip on to park the review, capacity contention unaffected.
+GRADUATION_REVIEW_SUSPENDED = bool(_int_env("AUTOHARNESS_GRADUATION_SUSPENDED", 0))
 
 _LIB = Path(__file__).parent / "lib"
 REDACTION_RULES = _LIB / "redaction_rules.toml"  # secret/PII rule set, single source for CAP egress + LED

@@ -1,4 +1,4 @@
-"""MNG numerator instrumentation: at `PreToolUse(Skill)` and `PreToolUse(Read)` into a managed symbol directory, +1 the used symbol's sidecar calls, pure observation, no interception.
+"""Three-way usage instrumentation: `PreToolUse(Skill)` bumps `use` (the only rate numerator); a main-session `PreToolUse(Read)` into a managed symbol directory bumps `view` (observation-only). Pure observation, no interception.
 
 mng.md: the rate numerator = number of uses, stored in the used symbol's sidecar, layer-agnostic
 (identity decides which layer). Measured (experiments/E8_numerator_capture): the model's dominant
@@ -44,7 +44,7 @@ def _name_from_read_path(event, roots):
     return None
 
 
-def _count(name, roots):
+def _count(name, roots, kind):
     if not name:
         return {"counted": False, "reason": "no_skill"}
     try:
@@ -56,18 +56,19 @@ def _count(name, roots):
     root = roots.get(lyr)
     if not sidecar.is_agent_created(lyr, name, root):
         return {"counted": False, "reason": "not_agent_created"}
-    calls = sidecar.bump_calls(lyr, name, root)
-    return {"counted": True, "level": lyr, "name": name, "calls": calls}
+    bump = sidecar.bump_use if kind == "use" else sidecar.bump_view
+    count = bump(lyr, name, root)
+    return {"counted": True, "kind": kind, "level": lyr, "name": name, "count": count}
 
 
 def on_skill_call(event, *, roots=None):
     if os.environ.get(config.CHILD_SESSION_ENV):
         return {"counted": False, "reason": "recursion_guard"}
-    return _count(_skill_name(event), roots or {})
+    return _count(_skill_name(event), roots or {}, "use")
 
 
 def on_skill_read(event, *, roots=None):
     if os.environ.get(config.CHILD_SESSION_ENV):
         return {"counted": False, "reason": "recursion_guard"}
     roots = roots or {}
-    return _count(_name_from_read_path(event, roots), roots)
+    return _count(_name_from_read_path(event, roots), roots, "view")

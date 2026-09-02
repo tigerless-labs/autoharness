@@ -69,8 +69,8 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
     for _ in range(2):
         dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Skill",
                            "tool_input": {"name": "learned"}}, roots=roots)
-    assert sidecar.read("project", "learned", proot)["calls"] == 2
-    print(f"[use]    learned calls={sidecar.read('project', 'learned', proot)['calls']}")
+    assert sidecar.read("project", "learned", proot)["use"] + sidecar.read("project", "learned", proot)["view"] == 2
+    print(f"[use]    learned use={sidecar.read('project', 'learned', proot)['use']} view={sidecar.read('project', 'learned', proot)['view']}")
 
     # BEAT 3 — compete: a weak unused peer; MNG recompute (SessionStart) archives the loser.
     # learned landed with a real anchor (=2), so two more turns first to graduate it out of probation.
@@ -82,7 +82,7 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
     mat = config.MATURITY_THRESHOLD[layer.PROJECT]
     for name in ("learned", "weak"):                                    # monitor MNG numerator/denominator
         sc = sidecar.read("project", name, proot)
-        num, den = sc["calls"], req - sc["anchor"]
+        num, den = sc.get("use", 0), req - sc["anchor"]
         print(f"[mng]    {name}: numerator(calls)={num} denominator(reqs)={den} "
               f"rate={num / den:.2f} mature={den >= mat}")
     out = dispatch.dispatch({"hook_event_name": "SessionStart"}, roots=roots)
