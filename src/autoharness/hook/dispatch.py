@@ -101,14 +101,22 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
             return {"handled": name, "result": result}
         if name == "PreToolUse":
             tool = event.get("tool_name")
+            child = bool(os.environ.get(config.CHILD_SESSION_ENV))
+            if tool in _WRITE_TOOLS and (child or _is_reflector(event)):
+                return {"deny": True, "reason": "reflector may only stage intents, not write files"}
+            if not child:  # direction H: every main-session tool call advances the activity numerator
+                sid = event.get("session_id")
+                if isinstance(sid, str) and sid:
+                    try:
+                        counters.bump_session(sid, proot)
+                    except ValueError:
+                        pass  # unsafe session id: skip counting, never crash the host hook
             if tool == "Skill":
                 return {"handled": name, "result": on_skill_call.on_skill_call(event, roots=roots)}
             if tool == "Read":
                 if _is_reflector(event):
                     return {"handled": name, "result": {"counted": False, "reason": "reflector_read"}}
                 return {"handled": name, "result": on_skill_call.on_skill_read(event, roots=roots)}
-            if tool in _WRITE_TOOLS and _is_reflector(event):
-                return {"deny": True, "reason": "reflector may only stage intents, not write files"}
             return {"ignored": True, "reason": "untracked PreToolUse"}
     except Exception as exc:  # fail-safe: a buggy handler must never crash the host hook
         return {"error": f"{type(exc).__name__}: {exc}"}

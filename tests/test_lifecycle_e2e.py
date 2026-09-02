@@ -55,10 +55,13 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
         spawn.run(capture.window(event["transcript_path"])[0],
                   dispatch._run_id(result), roots=rts, spawn_fn=fake_spawn)
 
-    # BEAT 1 — birth: drive Stops until the cadence triggers reflection
-    dispatch.dispatch(stop, roots=roots, reflect=land_learned)            # Stop 1: count<N, no trigger
+    # BEAT 1 — birth: tool calls accumulate activity; the Stop at threshold triggers reflection
+    act = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "session_id": "s1"}
+    dispatch.dispatch(act, roots=roots)
+    dispatch.dispatch(stop, roots=roots, reflect=land_learned)            # Stop 1: activity 1 < N, no trigger
     assert skill_store.read_body("project", "learned", proot) is None
-    dispatch.dispatch(stop, roots=roots, reflect=land_learned)            # Stop 2: trigger → land
+    dispatch.dispatch(act, roots=roots)
+    dispatch.dispatch(stop, roots=roots, reflect=land_learned)            # Stop 2: activity 2 ≥ N → land
     assert skill_store.read_body("project", "learned", proot) is not None
     assert sidecar.is_agent_created("project", "learned", proot)
     assert ledger.read("project", "learned", proot)[0]["action"] == "create"

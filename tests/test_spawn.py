@@ -267,3 +267,50 @@ def test_system_fake_curator_cross_process_merges(tmp_path, monkeypatch):
     assert "absorbed" in skill_store.read_body("project", "widgets", root)
     assert skill_store.read_body("project", "widget-delta", root) is None  # archived out of the live tree
     assert (layer.archive_dir("project", root) / "widget-delta").exists()
+
+
+# --- fork carrier (hermes-parity Phase 11, direction G): same-model fork rides the parent's warm
+# prefix cache; the reflect instruction arrives as the -p prompt (no --agent: swapping the system
+# prompt would invalidate the prefix). Default carrier stays "bundle" until the G-spike passes. ---
+
+def test_build_fork_command_shape():
+    argv = spawn.build_fork_command(session_id="sess-9", claude_bin="claude")
+    assert argv[:5] == ["claude", "-p", "--resume", "sess-9", "--fork-session"]
+    assert "--agent" not in argv  # prefix constraint: keep the parent's system prompt
+
+
+def test_run_fork_carrier_sends_instruction_not_window(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.config, "REFLECTOR_CARRIER", "fork")
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    seen = {}
+
+    def fake(argv, env, payload):
+        seen.update(argv=argv, env=env, payload=payload)
+
+    spawn.run("WINDOW-TEXT", "r1", roots=roots, session_id="sess-9", spawn_fn=fake)
+    assert "--fork-session" in seen["argv"]
+    assert "WINDOW-TEXT" not in seen["payload"]  # fork replays the transcript; no materialized window
+    assert "stage_skill" in seen["payload"]      # the reflect instruction rides the prompt
+    assert seen["env"][spawn.config.CHILD_SESSION_ENV] == "1"  # recursion guard still set
+
+
+def test_run_bundle_carrier_unchanged(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.config, "REFLECTOR_CARRIER", "bundle")
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    seen = {}
+
+    def fake(argv, env, payload):
+        seen.update(argv=argv, payload=payload)
+
+    spawn.run("WINDOW-TEXT", "r1", roots=roots, session_id="sess-9", spawn_fn=fake)
+    assert "--fork-session" not in seen["argv"]
+    assert "WINDOW-TEXT" in seen["payload"]  # bundle fallback still materializes the window
+
+
+def test_fork_without_session_falls_back_to_bundle(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.config, "REFLECTOR_CARRIER", "fork")
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    seen = {}
+    spawn.run("WINDOW-TEXT", "r1", roots=roots, session_id=None,
+              spawn_fn=lambda argv, env, payload: seen.update(argv=argv, payload=payload))
+    assert "--fork-session" not in seen["argv"]  # no session to fork -> bundle chain

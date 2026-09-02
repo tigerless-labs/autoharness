@@ -61,6 +61,31 @@ def build_curator_bundle(index, spec):
     )
 
 
+# Fork-carrier reflect instruction (direction G): arrives as the -p prompt (a fresh user turn on the
+# forked conversation) — never as --agent/--system-prompt, which would invalidate the parent prefix.
+# Carries the F1 reconcile duty: a new rule must supersede contradicting old statements.
+FORK_INSTRUCTION = (
+    "Autoharness reflection pass (forked session: the conversation above is your evidence source).\n"
+    "Compare-first against the skill index below: prefer patching an existing skill over creating a\n"
+    "new one; distill only class-level reusable lessons, never session narratives. When you distill\n"
+    "a new rule or preference, search the managed skill trees for overlapping or contradicting\n"
+    "statements and stage updates so the new supersedes the old. Propose every change exclusively\n"
+    "via the stage_skill tool — never write files directly. Evidence must quote this session\n"
+    "verbatim. If nothing is worth keeping, stage nothing.\n"
+)
+
+
+def build_fork_command(*, session_id, claude_bin):
+    return [claude_bin, "-p", "--resume", str(session_id), "--fork-session",
+            "--dangerously-skip-permissions"]
+
+
+def build_fork_prompt(index, spec):
+    return (FORK_INSTRUCTION
+            + "\n# Existing skills (compare-first: dedupe / patch / where)\n\n" + index
+            + "\n\n# Authoring + format spec (write to satisfy this)\n\n" + spec + "\n")
+
+
 def build_command(*, agent, claude_bin):
     # Reflection is an unattended background job — nobody is there to approve tool calls, so skip the
     # permission prompt. The security boundary is held by the agent's tools allowlist
@@ -83,16 +108,22 @@ def _detached_spawn(argv, env, bundle):
 
 
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
-        spec_path=None, digest="", spawn_fn=None):
+        spec_path=None, digest="", session_id=None, carrier=None, spawn_fn=None):
     roots = roots or {}
     proot = roots.get(layer.PROJECT)
     spec = (spec_path or config.FORMAT_SPEC).read_text()
-    bundle = build_bundle(window_text, description_index(roots), spec, digest=digest)
 
-    argv = build_command(agent=agent or config.REFLECTOR_AGENT,
-                         claude_bin=claude_bin or config.CLAUDE_BIN)
+    carrier = carrier or config.REFLECTOR_CARRIER
+    if carrier == "fork" and session_id:  # no session to fork -> bundle chain (fail-safe)
+        argv = build_fork_command(session_id=session_id, claude_bin=claude_bin or config.CLAUDE_BIN)
+        payload = build_fork_prompt(description_index(roots), spec)  # -p reads the prompt from stdin
+    else:
+        argv = build_command(agent=agent or config.REFLECTOR_AGENT,
+                             claude_bin=claude_bin or config.CLAUDE_BIN)
+        payload = build_bundle(window_text, description_index(roots), spec, digest=digest)
+
     env = child_env(run_id, proot)
-    (spawn_fn or _detached_spawn)(argv, env, bundle)
+    (spawn_fn or _detached_spawn)(argv, env, payload)
 
     return promoter.drain(run_id, roots=roots, repo_name=repo_name)
 
@@ -120,7 +151,7 @@ def main(argv=None):
     roots = {layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)}
     offset = counters.session_offset(session_id, roots[layer.PROJECT])
     window_text, new_offset = capture.window(transcript_path, offset)
-    result = run(window_text, run_id, roots=roots,
+    result = run(window_text, run_id, roots=roots, session_id=session_id,
                  digest=capture.digest(transcript_path, offset))
     counters.write_session_offset(session_id, new_offset, roots[layer.PROJECT])
     return result

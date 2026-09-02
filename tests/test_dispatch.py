@@ -85,7 +85,7 @@ def test_triggered_stop_fires_reflect(tmp_path, monkeypatch):
 
 def test_real_onstop_triggers_at_cadence(tmp_path):
     roots = _roots(tmp_path)
-    for _ in range(config.REFLECT_EVERY_N - 1):
+    for _ in range(config.REFLECT_EVERY_N):  # activity accumulated by PreToolUse; Stop only judges
         counters.bump_session("s1", roots[layer.PROJECT])
     seen = []
     dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1", "transcript_path": "/t.jsonl"},
@@ -224,3 +224,36 @@ def test_emit_session_start_additional_context(capsys):
 def test_emit_session_start_no_context_prints_nothing(capsys):
     dispatch._emit({"handled": "SessionStart", "result": {"context": None, "archived": {}}})
     assert capsys.readouterr().out == ""
+
+
+# --- Phase 11 (H): every PreToolUse advances the activity counter; Stop no longer bumps it ---
+
+def test_pretooluse_advances_activity_counter(tmp_path):
+    roots = _roots(tmp_path)
+    dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                       "session_id": "s7"}, roots=roots)
+    assert counters.session_count("s7", roots["project"]) == 1
+
+
+def test_child_session_pretooluse_does_not_advance(tmp_path, monkeypatch):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    roots = _roots(tmp_path)
+    dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                       "session_id": "s7"}, roots=roots)
+    assert counters.session_count("s7", roots["project"]) == 0
+
+
+def test_stop_does_not_advance_activity(tmp_path):
+    roots = _roots(tmp_path)
+    dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s7",
+                       "transcript_path": "x"}, roots=roots)
+    assert counters.session_count("s7", roots["project"]) == 0  # denominator yes, activity no
+
+
+# --- Phase 11 (G): child-session (fork) write tools are denied ---
+
+def test_child_session_write_denied(tmp_path, monkeypatch):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    v = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Write",
+                           "session_id": "s7"}, roots=_roots(tmp_path))
+    assert v.get("deny")

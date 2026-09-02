@@ -61,6 +61,11 @@ FORMAT_SPEC = _LIB / "format_spec.md"            # #416 single source for author
 
 CHILD_SESSION_ENV = "AUTOHARNESS_CHILD_SESSION"  # recursion-guard signal: set ONLY by spawn, read by CAP hooks (single source). Must be autoharness-owned: the host sets CLAUDE_CODE_CHILD_SESSION on every hook subprocess, so reusing it would gate every top-level turn.
 
+# reflection carrier (direction G): "fork" resumes+forks the just-finished session — same model,
+# parent's warm prefix cache, full-transcript replay, no materialized window. Stays "bundle"
+# (window+digest via stdin to the registered subagent) until the fork cache-hit spike passes.
+REFLECTOR_CARRIER = os.environ.get("AUTOHARNESS_CARRIER", "bundle")
+
 REFLECTOR_AGENT = "autoharness:reflector"  # the --agent reference for spawn (plugin namespace, Phase 0 resolution pending live test)
 CURATOR_AGENT = "autoharness:curator"      # the --agent reference for the periodic consolidation pass (same spawn chain as reflector)
 CLAUDE_BIN = "claude"                       # the child-session executable for spawn; PATH resolution, overridable in tests
