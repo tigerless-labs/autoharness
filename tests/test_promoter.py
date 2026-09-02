@@ -412,12 +412,9 @@ def test_delete_with_live_umbrella_lands_and_ledgers(tmp_path):
     r = promoter.promote({"action": "delete", "name": "narrow", "reason": "merged",
                           "evidence": "e", "absorbed_into": "umbrella"}, roots=roots)
     assert r["ok"]
-    entries = ledger.read("project", "narrow", roots["project"], archived=True) \
-        if "archived" in ledger.read.__code__.co_varnames else None
-    # the ledger travels with the archived dir; read it from the archive location
-    import json as _json
-    led = (roots["project"] / "skills" / ".archive" / "narrow" / ".ledger.jsonl").read_text()
-    assert "umbrella" in led  # absorbed_into recorded -> consolidated vs pruned distinguishable
+    # the ledger travels with the archived dir, so retirement provenance stays readable
+    led = ledger.read("project", "narrow", roots["project"], archived=True)[-1]
+    assert led["absorbed_into"] == "umbrella"  # consolidated vs pruned, distinguishable
 
 
 def test_delete_with_hallucinated_umbrella_rejected(tmp_path):

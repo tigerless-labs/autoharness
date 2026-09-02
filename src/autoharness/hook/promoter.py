@@ -198,9 +198,9 @@ def _account(run_id, intents, verdicts, proot):
     last_run.json feeds the one-line SessionStart summary and is consumed after one injection."""
     rows = [{"action": v.get("action"), "name": i.get("name"), "ok": v["ok"],
              "findings": [f[0] for f in v.get("findings", [])]}
-            for i, v in zip(intents, verdicts)]
+            for i, v in zip(intents, verdicts, strict=True)]
     landed = sum(1 for r in rows if r["ok"])
-    absorbed = sum(1 for i, v in zip(intents, verdicts)
+    absorbed = sum(1 for i, v in zip(intents, verdicts, strict=True)
                    if v["ok"] and i.get("action") == "delete" and i.get("absorbed_into"))
     families = sorted({f for r in rows if not r["ok"] for f in r["findings"]})
     state = layer.state_dir(layer.PROJECT, proot)

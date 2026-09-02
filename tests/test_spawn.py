@@ -320,7 +320,7 @@ def test_fork_without_session_falls_back_to_bundle(tmp_path, monkeypatch):
 
 def _snap_roots(tmp_path):
     roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
-    for lyr, root in roots.items():
+    for root in roots.values():
         d = root / "skills" / "x"
         d.mkdir(parents=True)
         (d / "SKILL.md").write_text("---\nname: x\ndescription: d\n---\nb")
