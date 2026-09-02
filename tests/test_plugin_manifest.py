@@ -54,3 +54,8 @@ def test_agents_reflector_present():
 
 def test_agents_curator_present():
     assert (ROOT / "agents/curator.md").exists()  # the periodic consolidation pass agent
+
+
+def test_learn_skill_ships_with_the_plugin():
+    # user-invocable entry (direction B1): must live in the plugin's skills/ tree to be offered
+    assert (ROOT / "skills" / "learn" / "SKILL.md").is_file()
