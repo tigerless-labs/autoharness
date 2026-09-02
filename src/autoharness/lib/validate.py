@@ -62,22 +62,20 @@ def _body_lines(body):
     return sum(1 for ln in rest.splitlines() if ln.strip())
 
 
-def _description_findings(desc):
+def description_findings(desc):
     """Description is the host's recall key. Over-length truncates; a cue-less label never fires."""
     findings = []
-    if len(desc) > config.SKILL_DESC_MAX_CHARS:
+    if len(desc) > config.INDEX_DESC_MAX_CHARS:
         findings.append(("description",
-                         f"description is {len(desc)} chars (> {config.SKILL_DESC_MAX_CHARS}); "
-                         "the host matches on it and truncates past the cap"))
+                         f"description is {len(desc)} chars — a new skill must fit the "
+                         f"{config.INDEX_DESC_MAX_CHARS}-char index budget (one sentence, trigger "
+                         f"first, ends with a period). The session-start index truncates longer "
+                         f"descriptions to {config.INDEX_DESC_MAX_CHARS - 3} chars + '...', which "
+                         "destroys the routing signal. Move the detail into the body"))
     if not _has_cue(desc):
         findings.append(("trigger",
                          "description has no trigger cue: add 'use when …' and/or a literal phrase "
                          "the user would type — an abstract topic-label never fires"))
-    elif not _has_cue(desc[:config.INDEX_DESC_MAX_CHARS]):
-        findings.append(("trigger",
-                         f"the trigger cue lands past char {config.INDEX_DESC_MAX_CHARS}, where the "
-                         "session-start index truncates every line — on our own recall surface this "
-                         "description is half a sentence. Lead with the cue, then the detail"))
     return findings
 
 
@@ -184,7 +182,7 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
                                  "state the rule, move detail to references/"))
             desc = (_frontmatter(body) or {}).get("description")
             if desc:  # absence is already caught by the structure check
-                findings += _description_findings(desc)
+                findings += description_findings(desc)
 
         contents = [v for v in (files or {}).values() if isinstance(v, str)]
         for content in contents:

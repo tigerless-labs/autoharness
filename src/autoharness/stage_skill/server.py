@@ -125,6 +125,14 @@ def _content_errors(params):
     files = params.get("files")
     errors += validate.check_files(files)
     errors += validate.structure(body, files)
+    if params.get("action") in ("create", "update"):
+        # The promoter is the authority, but it runs after this session is gone: a description gate
+        # enforced only there is one the model can never learn from — it stages, exits, and the
+        # verdict lands in a file nobody reads back to it. Checking here hands the error to the
+        # author while it can still rewrite (hermes validates inside skill_manage for the same reason).
+        desc = (validate._frontmatter(body) or {}).get("description")
+        if desc:
+            errors += validate.description_findings(desc)
     return errors
 
 

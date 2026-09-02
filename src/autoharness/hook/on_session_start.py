@@ -33,6 +33,16 @@ def _sanitize(text, limit):
     return " ".join(str(text).split())[:limit]  # line-based surface: newlines are forgery, collapse them
 
 
+def _fit(text, limit):
+    """Truncate with an ellipsis so a cut line reads as cut (hermes' index does the same).
+
+    New descriptions are held inside the budget by the promoter, so this only fires on skills that
+    predate the gate — and there it matters that the reader can tell the line was severed rather
+    than take a fragment for the whole trigger."""
+    flat = " ".join(str(text).split())
+    return flat if len(flat) <= limit else flat[:limit - 3] + "..."
+
+
 def _demoted(groups, budget):
     """Which categories collapse to a names-only line so the index fits its budget.
 
@@ -65,7 +75,7 @@ def recall_index(roots):
             if not sidecar.is_agent_created(lyr, name, root):
                 continue
             fm = validate._frontmatter(path.read_text()) or {}
-            desc = _sanitize(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
+            desc = _fit(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
             entry = f"- {_sanitize(name, 64)} [{lyr}]: {desc}"
             groups.setdefault(cat, []).append((entry, sidecar.read(lyr, name, root).get("use", 0)))
