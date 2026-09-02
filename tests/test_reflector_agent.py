@@ -86,3 +86,12 @@ def test_reflector_picks_category_from_the_injected_index():
     assert "category" in body and "index" in body
     i = body.index("`category:`")
     assert "index" in body[i - 400:i + 400]
+
+
+def test_reflector_may_not_claim_the_promoter_verdict():
+    # E11: with the promoter running after the child exits, one replay had the reflector report
+    # "both accepted by the promoter with no errors" while nothing had been written at all. It
+    # cannot observe the verdict, so the prompt must forbid asserting one.
+    body = AGENT.read_text().lower()
+    assert "cannot know" in body or "do not claim" in body
+    assert "promoter" in body

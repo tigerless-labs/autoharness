@@ -60,7 +60,7 @@ To drop a subfile that is stale or wrong, stage a `remove_file` intent carrying 
 
 ## Emitting intents (call the `stage_skill` tool)
 
-**You act by calling the `stage_skill` tool — not by writing text.** Do not output the SKILL.md, the action, or the fields as prose in your reply; a textual description creates nothing. The *only* thing that records a change is an actual invocation of the `stage_skill` tool. Stage one intent per distinct lesson — several lessons, several calls. After they return, briefly confirm what you staged.
+**You act by calling the `stage_skill` tool — not by writing text.** Do not output the SKILL.md, the action, or the fields as prose in your reply; a textual description creates nothing. The *only* thing that records a change is an actual invocation of the `stage_skill` tool. Stage one intent per distinct lesson — several lessons, several calls. After they return, briefly confirm **what you staged, and nothing beyond that**: the promoter validates and writes only after this session has ended, so you **cannot know** whether an intent landed, was rejected, or why. Report the staging, never the outcome — a confident claim about a verdict you did not see is worse than silence, because it reads as evidence the pipeline worked.
 
 Tool arguments:
 
