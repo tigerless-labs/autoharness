@@ -32,8 +32,10 @@ def append(lyr, name, entry, root=None):
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
-def read(lyr, name, root=None):
-    p = path(lyr, name, root)
+def read(lyr, name, root=None, *, archived=False):
+    """archived=True reads the ledger that travelled with the symbol into .archive/ (whole-dir
+    rename carries it), so retirement provenance stays readable after eviction."""
+    p = (layer.archive_dir(lyr, root) / name / FILENAME) if archived else path(lyr, name, root)
     if not p.exists():
         return []
     return [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
