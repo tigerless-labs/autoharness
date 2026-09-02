@@ -10,6 +10,8 @@ zero intrusion).
 
 ponytail: GC of orphan session counts (residue from crashed sessions) needs a session-liveness signal to sweep safely (a naive sweep would wrongly delete a concurrent session's live count), so it is deferred until that signal exists — the clear_session primitive is ready (Phase 4), policy left open in cap.md/mng.md.
 """
+import json
+
 from autoharness import config
 from autoharness.lib import counters, layer, lifecycle, sidecar, skill_store, validate
 
@@ -51,6 +53,30 @@ def recall_index(roots):
     return "\n".join(lines)
 
 
+def last_run_summary(roots):
+    """One-line anti-silence digest of the previous drain (validate-store §verdict visibility):
+    read once, then consume — the account file under runs/ keeps the durable record."""
+    p = layer.state_dir(layer.PROJECT, roots.get(layer.PROJECT)) / "last_run.json"
+    if not p.exists():
+        return None
+    try:
+        last = json.loads(p.read_text())
+    except (ValueError, OSError):
+        return None
+    finally:
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    line = (f"autoharness last run: landed {last.get('landed', 0)}, "
+            f"rejected {last.get('rejected', 0)}")
+    if last.get("families"):
+        line += f" ({', '.join(last['families'])})"
+    if last.get("absorbed"):
+        line += f"; merged {last['absorbed']} into umbrellas"
+    return line
+
+
 def _members(lyr, root):
     skills = layer.skills_dir(lyr, root)
     if not skills.exists():
@@ -79,4 +105,6 @@ def on_session_start(event=None, *, roots=None):
         for name in names:
             skill_store.archive(lyr, name, root)
         archived[lyr] = names
-    return {"archived": archived, "context": recall_index(roots)}  # index built after archiving
+    parts = [last_run_summary(roots), recall_index(roots)]  # index built after archiving
+    context = "\n\n".join(p for p in parts if p) or None
+    return {"archived": archived, "context": context}

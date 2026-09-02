@@ -59,3 +59,9 @@ def test_reflector_can_consolidate_existing_overlap():
     # is that it deletes a *redundant existing* skill the episode never touched.
     assert "redundant" in body
     assert "delete" in body
+
+
+def test_prompt_carries_reconcile_duty():
+    # F1 (new-supersedes-old): a distilled new rule must hunt down contradicting old statements
+    body = AGENT.read_text().lower()
+    assert "supersede" in body or "contradict" in body

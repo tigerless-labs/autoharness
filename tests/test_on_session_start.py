@@ -153,3 +153,28 @@ def test_index_runs_after_archiving(tmp_path, monkeypatch):
     out = on_session_start.on_session_start(roots=roots)
     assert "dead" in out["archived"]["project"]
     assert out["context"] is None  # archived before the index was built
+
+
+def test_last_run_summary_injected_once(tmp_path):
+    roots = _roots(tmp_path)
+    _seed_desc(roots, "s1", "use when s1")
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    (state / "last_run.json").write_text(_json.dumps(
+        {"run_id": "r9", "landed": 2, "rejected": 1, "families": ["altitude"], "absorbed": 1}))
+    out = on_session_start.on_session_start(roots=roots)
+    assert "landed 2" in out["context"] and "rejected 1" in out["context"]
+    out2 = on_session_start.on_session_start(roots=roots)
+    assert "landed 2" not in out2["context"]  # consumed after one injection
+
+
+def test_summary_shown_even_with_empty_library(tmp_path):
+    roots = _roots(tmp_path)
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    (state / "last_run.json").write_text(_json.dumps({"run_id": "r", "landed": 0, "rejected": 3,
+                                                      "families": ["safety"], "absorbed": 0}))
+    out = on_session_start.on_session_start(roots=roots)
+    assert out["context"] and "rejected 3" in out["context"]  # anti-silence beats empty-index None

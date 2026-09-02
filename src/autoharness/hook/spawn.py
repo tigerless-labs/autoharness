@@ -13,6 +13,7 @@ ponytail: run() is the body of the "detached background job" (synchronous spawnâ
 import os
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 from autoharness import config
@@ -128,9 +129,30 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     return promoter.drain(run_id, roots=roots, repo_name=repo_name)
 
 
+def _snapshot_skills(run_id, roots):
+    """Pre-run library snapshot (direction E, mirrors Hermes): covers the one risk atomic landing
+    and reversible archiving cannot â€” a whole curator run writing the library wrong. Recovery is a
+    manual unpack; rotation keeps SNAPSHOT_KEEP per layer."""
+    snapdir = layer.state_dir(layer.PROJECT, roots.get(layer.PROJECT)) / "snapshots"
+    snapdir.mkdir(parents=True, exist_ok=True)
+    for lyr in layer.LAYERS:
+        skills = layer.skills_dir(lyr, roots.get(lyr))
+        if not skills.exists():
+            continue
+        with tarfile.open(snapdir / f"{run_id}-{lyr}.tar.gz", "w:gz") as tar:
+            tar.add(skills, arcname="skills")
+        kept = sorted(snapdir.glob(f"*-{lyr}.tar.gz"), key=lambda p: p.stat().st_mtime)
+        for old in kept[: max(0, len(kept) - config.SNAPSHOT_KEEP)]:
+            old.unlink()
+
+
 def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
                 spec_path=None, spawn_fn=None):
     roots = roots or {}
+    try:
+        _snapshot_skills(run_id, roots)
+    except Exception:
+        pass  # a transient disk issue must not silently disable curation (Hermes's exact trade-off)
     spec = (spec_path or config.FORMAT_SPEC).read_text()
     bundle = build_curator_bundle(description_index(roots, agent_only=True), spec)
 

@@ -314,3 +314,40 @@ def test_fork_without_session_falls_back_to_bundle(tmp_path, monkeypatch):
     spawn.run("WINDOW-TEXT", "r1", roots=roots, session_id=None,
               spawn_fn=lambda argv, env, payload: seen.update(argv=argv, payload=payload))
     assert "--fork-session" not in seen["argv"]  # no session to fork -> bundle chain
+
+
+# --- curator pre-run snapshot (Phase 12, direction E): library-level tail risk only ---
+
+def _snap_roots(tmp_path):
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    for lyr, root in roots.items():
+        d = root / "skills" / "x"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("---\nname: x\ndescription: d\n---\nb")
+    return roots
+
+
+def test_run_curator_snapshots_before_spawn(tmp_path):
+    roots = _snap_roots(tmp_path)
+    order = []
+    spawn.run_curator("c1", roots=roots,
+                      spawn_fn=lambda a, e, b: order.append("spawned"))
+    snaps = list((roots["project"] / "autoharness" / "snapshots").glob("*.tar.gz"))
+    assert snaps and order == ["spawned"]
+
+
+def test_snapshot_rotation_keeps_newest(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.config, "SNAPSHOT_KEEP", 2)
+    roots = _snap_roots(tmp_path)
+    for i in range(4):
+        spawn.run_curator(f"c{i}", roots=roots, spawn_fn=lambda a, e, b: None)
+    snaps = (roots["project"] / "autoharness" / "snapshots").glob("*.tar.gz")
+    assert len(list(snaps)) <= 2 * 2  # per-layer keep
+
+
+def test_snapshot_failure_never_blocks_the_run(tmp_path, monkeypatch):
+    roots = _snap_roots(tmp_path)
+    monkeypatch.setattr(spawn, "_snapshot_skills", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
+    called = []
+    spawn.run_curator("c1", roots=roots, spawn_fn=lambda a, e, b: called.append(1))
+    assert called  # a transient disk issue must not silently disable curation

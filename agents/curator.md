@@ -43,8 +43,9 @@ Before you fold a skill, inspect it as a **complete directory**, not just SKILL.
 - `patch` the umbrella: `old_string` → `new_string` (the `old_string` must match the live body uniquely). Add one labeled subsection per absorbed sibling.
 - `create` a new umbrella: the **full** `SKILL.md` body satisfying the spec, plus `level` — repo-specific (this codebase, its paths, stack) → `project`; a user preference or general technique → `global`; unsure → `project`. A `global` skill and its subfiles must carry no repo-local identifiers.
 - Carry demoted detail as `files` (`references/…` / `templates/…` / `scripts/…`); every subfile must be pointed at from the body or the promoter rejects it. Drop a stale subfile with `remove_file` after patching its pointer out of the body.
-- `delete` each absorbed sibling to archive it.
-- `reason` and `evidence` are required on every intent. `evidence` must be a verbatim slice — cite the overlapping index entries that triggered the merge (that citation is the absorbed-into signal; the LED records the provenance).
+- `delete` each absorbed sibling to archive it — **always with `absorbed_into` set to the umbrella's name** (leave it empty only for a true retirement that nothing absorbed). The promoter verifies that umbrella is a live self-produced skill and rejects the whole intent if it is not, so a name you did not actually create or patch this run will fail closed.
+- When the umbrella's instructions contradict something an absorbed sibling said, resolve it in the `patch` rather than carrying both — a merged skill that argues with itself is worse than the two it replaced.
+- `reason` and `evidence` are required on every intent. `evidence` must be a verbatim slice — cite the overlapping index entries that triggered the merge.
 
 ## Keep, and iterate
 
