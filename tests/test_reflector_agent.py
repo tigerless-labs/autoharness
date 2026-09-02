@@ -61,6 +61,18 @@ def test_reflector_can_consolidate_existing_overlap():
     assert "delete" in body
 
 
+def test_reflector_requires_absorbed_into_on_delete():
+    # the reflector deletes too (folding pre-existing overlap), so it needs the same fail-closed
+    # merge accounting as the curator — otherwise a fold is booked as a plain pruning
+    assert "absorbed_into" in AGENT.read_text()
+
+
+def test_reflector_authors_category():
+    # category groups the self-injected recall index; never emitted, the index is one flat group.
+    # the frontmatter form (`category:`) is what distinguishes authoring the field from the word.
+    assert "category:" in AGENT.read_text()
+
+
 def test_prompt_carries_reconcile_duty():
     # F1 (new-supersedes-old): a distilled new rule must hunt down contradicting old statements
     body = AGENT.read_text().lower()

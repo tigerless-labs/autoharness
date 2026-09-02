@@ -18,8 +18,11 @@ def _int_env(name, default):
         return default
 
 
-REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 10)  # trigger cadence; the window itself is watermark-delimited (capture)
-CONSOLIDATE_EVERY_N = _int_env("AUTOHARNESS_CONSOLIDATE_EVERY_N", 50)  # ponytail: placeholder, calibrate in experiments/; curator (content-level merge) beat, sparser than reflection (mirrors REFLECT_EVERY_N)
+# trigger cadence, counted in the activity quantum (main-session tool calls, direction H) — not turns.
+# Recalibrated with the numerator: the old turn-based 10 lands near 30-50 tool calls, and the standing
+# ruling is to err sparse (precipitation is maintenance, and SessionEnd flushes the tail).
+REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 50)  # the window itself is watermark-delimited (capture)
+CONSOLIDATE_EVERY_N = _int_env("AUTOHARNESS_CONSOLIDATE_EVERY_N", 250)  # ponytail: placeholder, calibrate in experiments/; curator (content-level merge) beat, same quantum as REFLECT_EVERY_N and held sparser than it
 
 # raw-capture byte caps (ponytail: placeholders, calibrate in experiments/): per transcript record,
 # and per handoff window (tail kept) — bound tool dumps / base64 away from the child context.

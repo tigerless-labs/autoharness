@@ -35,6 +35,14 @@ def test_format_spec_states_description_trigger_contract():
         assert token in text
 
 
+def test_format_spec_states_category_field():
+    text = config.FORMAT_SPEC.read_text()
+    # category is validated frontmatter and the grouping key of the self-injected recall index;
+    # unstated here, REF never emits it and every skill collapses into one group
+    for token in ["category", "INDEX_DESC_MAX_CHARS"]:
+        assert token in text
+
+
 def test_format_spec_states_description_recipe():
     text = config.FORMAT_SPEC.read_text()
     # the positive recipe is what REF authors against; validate's cue check is only its floor
