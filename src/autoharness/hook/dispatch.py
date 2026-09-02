@@ -122,6 +122,13 @@ def _emit(verdict):
             "permissionDecision": "deny",
             "permissionDecisionReason": verdict.get("reason", "denied"),
         }}))
+        return
+    result = verdict.get("result") or {}
+    if verdict.get("handled") == "SessionStart" and result.get("context"):
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": result["context"],
+        }}))
 
 
 def main():

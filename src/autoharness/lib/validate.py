@@ -124,6 +124,11 @@ def _structure(body, base_dir, files=None):
         findings.append(("structure", "missing name"))
     if not fm.get("description"):
         findings.append(("structure", "missing description"))
+    if "category" in fm:  # open set; single safe segment; grouping key for the self-injected index only
+        cat = fm["category"]
+        if "/" in cat or not layer._SAFE_NAME.match(cat or ""):
+            findings.append(("category",
+                             f"category {cat!r} must be a single safe segment (letters/digits/._-)"))
     if base_dir is not None:
         for ref in set(_PY_REF.findall(body)):
             f = base_dir / ref

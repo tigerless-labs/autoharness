@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -207,3 +208,19 @@ def test_default_roots_resolve_both_layers():
     roots = dispatch._roots(None)
     assert set(roots) == set(layer.LAYERS)
     assert all(isinstance(p, Path) for p in roots.values())
+
+
+# --- SessionStart context emission (hermes-parity Phase 9) ---
+
+def test_emit_session_start_additional_context(capsys):
+    dispatch._emit({"handled": "SessionStart", "result": {"context": "INDEX", "archived": {}}})
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    hso = payload["hookSpecificOutput"]
+    assert hso["hookEventName"] == "SessionStart"
+    assert hso["additionalContext"] == "INDEX"
+
+
+def test_emit_session_start_no_context_prints_nothing(capsys):
+    dispatch._emit({"handled": "SessionStart", "result": {"context": None, "archived": {}}})
+    assert capsys.readouterr().out == ""
