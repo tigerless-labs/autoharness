@@ -200,3 +200,65 @@ def test_summary_line_silent_when_all_categorized(tmp_path):
     (state / "last_run.json").write_text(json.dumps(
         {"run_id": "r1", "landed": 2, "rejected": 0, "absorbed": 0, "families": [], "uncategorized": 0}))
     assert "categor" not in on_session_start.last_run_summary(roots).lower()
+
+
+def _seed_used(roots, name, category, use, lvl="project"):
+    _seed_desc(roots, name, f"use when {name}", lvl=lvl, category=category)
+    s = sidecar.read(lvl, name, roots[lvl])
+    s["use"] = use
+    sidecar.write(lvl, name, s, roots[lvl])
+
+
+def test_index_budget_off_by_default_leaves_output_untouched(tmp_path):
+    # the safety net: shipping the budget must not change a single injected line until it is turned on
+    roots = _roots(tmp_path)
+    for i in range(6):
+        _seed_used(roots, f"s{i}", "ops", use=0)
+    assert config.INDEX_MAX_LINES == 0  # 0 = no budget
+    ctx = on_session_start.recall_index(roots)
+    assert ctx.count("\n- ") == 6 and "names only" not in ctx
+
+
+def test_index_over_budget_demotes_the_least_used_category(tmp_path, monkeypatch):
+    roots = _roots(tmp_path)
+    _seed_used(roots, "hot-a", "hot", use=50)
+    _seed_used(roots, "hot-b", "hot", use=40)
+    _seed_used(roots, "cold-a", "cold", use=0)
+    _seed_used(roots, "cold-b", "cold", use=0)
+    monkeypatch.setattr(config, "INDEX_MAX_LINES", 5)  # 2 headers + 4 entries = 6 > 5
+    ctx = on_session_start.recall_index(roots)
+    assert "names only" in ctx
+    # the cold category lost its descriptions; the hot one kept them
+    assert "use when cold-a" not in ctx
+    assert "use when hot-a" in ctx
+
+
+def test_demotion_never_removes_a_skill_name(tmp_path, monkeypatch):
+    # hermes' own comment records this as an incident: pruning entries caused silent capability loss,
+    # because models do not go looking for what the index stopped showing them
+    roots = _roots(tmp_path)
+    for i in range(4):
+        _seed_used(roots, f"cold-{i}", "cold", use=0)
+    _seed_used(roots, "hot", "hot", use=99)
+    monkeypatch.setattr(config, "INDEX_MAX_LINES", 3)
+    ctx = on_session_start.recall_index(roots)
+    for i in range(4):
+        assert f"cold-{i}" in ctx  # names survive demotion, always
+    assert "hot" in ctx
+
+
+def test_demotion_ranks_general_like_any_other_category(tmp_path, monkeypatch):
+    # general is not privileged: a used general beats an unused named category
+    roots = _roots(tmp_path)
+    _seed_used(roots, "unfiled", None, use=30)
+    _seed_used(roots, "named-a", "named", use=0)
+    _seed_used(roots, "named-b", "named", use=0)
+    monkeypatch.setattr(config, "INDEX_MAX_LINES", 4)
+    ctx = on_session_start.recall_index(roots)
+    assert "use when unfiled" in ctx
+    assert "use when named-a" not in ctx
+
+
+def test_budget_does_not_resurrect_an_empty_library(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "INDEX_MAX_LINES", 1)
+    assert on_session_start.recall_index(_roots(tmp_path)) is None
