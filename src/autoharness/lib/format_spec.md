@@ -24,48 +24,37 @@ YAML frontmatter that parses, carrying at least:
   all, while a missing category only files the skill badly. The curator backfills what lands without
   one.
 
-## Description is the trigger — write it to this shape
+## Description is the trigger — one sentence, inside the index budget
 
-The host preloads every skill's `name` + `description` and picks among all of them by matching the
-user's request against the description. The description carries the whole selection signal; a body
-only matters after it has already fired. It is read twice over: in full by the host's own recall, and
-truncated to `INDEX_DESC_MAX_CHARS` in the injected index. **The trigger cue must fall inside that
-truncated prefix** — a `when` clause or a quoted phrase within the first `INDEX_DESC_MAX_CHARS`
-characters — or the promoter rejects the `create`/`update`: past the cut the description is half a
-sentence on the very recall surface this system builds. Lead with the cue, then the detail.
-(`patch` is exempt, so an existing description can still be repaired.) Write it to this shape:
+The description is the routing signal, and it **is the index line**: the session-start index renders
+one line per skill from it, and the host preloads it too. So it has exactly one job — make the right
+task match — and one budget: `INDEX_DESC_MAX_CHARS`. Over budget, the index truncates to
+`INDEX_DESC_MAX_CHARS - 3` + `...` and the routing signal dies mid-clause, so a `create`/`update`
+over it is **rejected**. `patch` is exempt, so a legacy over-long description stays fixable.
 
-    <verb phrase: what it does>. Use when <the situation>, or when the user mentions <the words
-    they would type, every alias for the same thing>.
+Write **one sentence, trigger first, ending in a period**. Name the concrete objects and the words a
+user would actually type — the nouns, verbs, tools and file types. Detail goes in the body; the
+description is not a summary of the skill, it is the thing that decides whether the skill is even
+read.
 
-Four elements, all required:
+Good, all inside the budget:
 
-1. **What it does** — a third person verb phrase naming concrete actions and objects. The
-   description is injected into the host's system prompt, so a first- or second-person phrasing
-   ("I can help you…", "You can use this to…") reads as a different speaker and breaks recall.
-2. **When to use it** — the situation that should fire it (`use when …`), stated in the user's
-   frame, not the author's.
-3. **User-facing vocabulary** — the words the user would type: the nouns, verbs, file types and
-   extensions they would actually say, every alias listed. A term absent here can never be matched.
-4. **Nothing else** — no imperative step, no procedure, no file path standing in for a phrase; that
-   is body content. Stay under `SKILL_DESC_MAX_CHARS`, past which the host truncates.
+    Use when a fetch fails: 403/429, paywall, WAF, bot wall.
+    Search arXiv papers by keyword, author, category, or ID.
+    4-phase root cause debugging: understand bugs before fixing.
 
-Good: `Generate descriptive commit messages by analyzing git diffs. Use when the user asks for help
-writing commit messages or reviewing staged changes.`
+Bad: `Manages project operations` — a topic label with no trigger at all; nothing a user types
+matches it.
 
-Bad: `Manages project operations` — a topic label, no trigger at all.
+Bad: a 300-char paragraph opening with a verb phrase and reaching `Use when …` only halfway through.
+It reads well in a file and is a fragment in the index, which is where recall actually happens.
 
-Bad: `Use when verifying a release PR has version bumps. Check that "a.json" and "b.json" match.` —
-no what-clause, an imperative lifted from the body, and the quoted strings are file paths rather than
-anything a user would type.
-
-One description straining to cover five distinct triggers → split into separate skills, each with
-its own.
+One sentence straining to cover five distinct triggers → split into separate skills, each with its
+own.
 
 **Enforced (a floor, not the standard):** the promoter rejects a `create`/`update` whose description
-carries no trigger cue — neither a `when` clause nor a quoted phrase — whose cue falls past
-`INDEX_DESC_MAX_CHARS`, or which exceeds `SKILL_DESC_MAX_CHARS`. That check is a crude proxy; passing it is not the same as satisfying the
-four elements, and the judgment stays the author's.
+exceeds `INDEX_DESC_MAX_CHARS`, or carries no trigger cue at all — neither a `when` clause nor a
+quoted phrase. Passing is not the same as routing well; that judgment stays the author's.
 
 ## Structure (#416)
 

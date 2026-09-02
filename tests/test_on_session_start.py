@@ -262,3 +262,22 @@ def test_demotion_ranks_general_like_any_other_category(tmp_path, monkeypatch):
 def test_budget_does_not_resurrect_an_empty_library(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "INDEX_MAX_LINES", 1)
     assert on_session_start.recall_index(_roots(tmp_path)) is None
+
+
+def test_index_marks_a_truncated_description_as_cut(tmp_path):
+    # legacy descriptions predate the budget gate; the reader must be able to tell a line was severed
+    # rather than read a fragment as the whole trigger
+    roots = _roots(tmp_path)
+    long = "Use when auditing " + "x" * config.INDEX_DESC_MAX_CHARS
+    _seed_desc(roots, "legacy", long)
+    ctx = on_session_start.recall_index(roots)
+    line = next(ln for ln in ctx.splitlines() if "legacy" in ln)
+    assert line.endswith("...")
+    assert len(line.split(": ", 1)[1]) == config.INDEX_DESC_MAX_CHARS
+
+
+def test_index_leaves_a_fitting_description_alone(tmp_path):
+    roots = _roots(tmp_path)
+    _seed_desc(roots, "modern", "Use when auditing a repo.")
+    ctx = on_session_start.recall_index(roots)
+    assert "Use when auditing a repo." in ctx and "..." not in ctx

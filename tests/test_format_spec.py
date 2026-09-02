@@ -30,9 +30,9 @@ def test_format_spec_states_altitude_cap():
 
 def test_format_spec_states_description_trigger_contract():
     text = config.FORMAT_SPEC.read_text()
-    # description-as-trigger is shared contract between validate's cue/length checks and reflector authoring
-    for token in ["trigger", "use when", "SKILL_DESC_MAX_CHARS"]:
-        assert token in text
+    # description-as-trigger is shared contract between validate's cue/budget checks and reflector authoring
+    for token in ["trigger", "use when", "INDEX_DESC_MAX_CHARS"]:
+        assert token.lower() in text.lower()
 
 
 def test_format_spec_states_category_field():
@@ -43,8 +43,10 @@ def test_format_spec_states_category_field():
         assert token in text
 
 
-def test_format_spec_states_description_recipe():
+def test_format_spec_states_the_one_sentence_rule():
     text = config.FORMAT_SPEC.read_text()
-    # the positive recipe is what REF authors against; validate's cue check is only its floor
-    for token in ["what it does", "third person", "the words the user would type"]:
+    # adopted from hermes: the description IS the index line, so the rule is one sentence inside the
+    # budget with the trigger first — the old four-element recipe produced 385-char descriptions that
+    # the index cut mid-clause (E11, first real replay)
+    for token in ["one sentence", "trigger first", "words a", "body"]:
         assert token in text

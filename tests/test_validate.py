@@ -123,48 +123,36 @@ def test_trigger_patch_exempt():
     assert "trigger" not in _families(v)
 
 
-def test_trigger_cue_must_survive_index_truncation():
-    # the self-injected index truncates each line to INDEX_DESC_MAX_CHARS, so a cue that only
-    # appears after that point leaves the skill as half a sentence on our own recall surface
+def test_description_over_the_index_budget_rejected():
+    # hermes' rule, adopted whole: the description IS the index line, so a new skill that cannot fit
+    # the budget is refused rather than silently truncated to a fragment. All 58 of its own bundled
+    # skills fit; ours were running 385 chars and getting cut mid-clause.
     from autoharness import config
-    late = "Handles the whole of the repository maintenance story " * 3 + "use when auditing."
-    assert len(late) > config.INDEX_DESC_MAX_CHARS
-    v = validate.validate(GOOD_INTENT, _desc_body(late))
-    assert not v["ok"] and "trigger" in _families(v)
+    long = "Diagnoses responsive CSS bugs in embedded iframe widgets on mobile. Use when a widget clips."
+    assert len(long) > config.INDEX_DESC_MAX_CHARS
+    v = validate.validate(GOOD_INTENT, _desc_body(long))
+    assert not v["ok"] and "description" in _families(v)
 
 
-def test_trigger_cue_inside_the_index_prefix_passes():
+def test_description_inside_the_budget_passes():
     from autoharness import config
-    early = "Use when auditing a repo. " + "Background detail that runs past the index budget. " * 3
-    assert len(early) > config.INDEX_DESC_MAX_CHARS  # long overall, cue still up front
-    assert "trigger" not in _families(validate.validate(GOOD_INTENT, _desc_body(early)))
+    short = "Use when an iframe widget clips on mobile."
+    assert len(short) <= config.INDEX_DESC_MAX_CHARS
+    assert validate.validate(GOOD_INTENT, _desc_body(short))["ok"]
 
 
-def test_trigger_cue_straddling_the_truncation_point_rejected():
-    # a cue the truncation cuts in half is not readable in the index either
-    from autoharness import config
-    pad = "x" * (config.INDEX_DESC_MAX_CHARS - 2) + " "  # the cue word starts one char before the cut
-    v = validate.validate(GOOD_INTENT, _desc_body(f"{pad}when auditing a repo."))
-    assert not v["ok"] and "trigger" in _families(v)
-
-
-def test_trigger_prefix_gate_exempts_patch():
-    # same reason the altitude cap exempts patch: an existing over-long description must stay fixable
-    from autoharness import config
-    late = "y" * config.INDEX_DESC_MAX_CHARS + " use when auditing a repo."
+def test_description_budget_exempts_patch():
+    # same carve-out hermes makes on its edit/patch path: a legacy over-long description stays fixable
+    long = "x" * 300 + " use when auditing."
     intent = {"action": "patch", "name": "foo", "reason": "r", "evidence": "e"}
-    v = validate.validate(intent, _desc_body(late), target_is_agent_created=True)
-    assert "trigger" not in _families(v)
+    v = validate.validate(intent, _desc_body(long), target_is_agent_created=True)
+    assert "description" not in _families(v)
 
 
-def test_trigger_prefix_gate_is_not_a_length_gate():
-    # the two description gates are independent: a long description with an early cue passes the
-    # prefix gate and is still bounded by SKILL_DESC_MAX_CHARS alone
-    from autoharness import config
-    ok_long = "Use when auditing. " + "z" * (config.SKILL_DESC_MAX_CHARS - 30)
-    assert "description" not in _families(validate.validate(GOOD_INTENT, _desc_body(ok_long)))
-    too_long = "Use when auditing. " + "z" * config.SKILL_DESC_MAX_CHARS
-    assert "description" in _families(validate.validate(GOOD_INTENT, _desc_body(too_long)))
+def test_cue_check_still_applies_inside_the_budget():
+    # the budget does not replace the cue rule — a short topic-label is still unroutable
+    v = validate.validate(GOOD_INTENT, _desc_body("Manages project operations"))
+    assert not v["ok"] and "trigger" in _families(v)
 
 
 def test_description_over_length_rejected():
