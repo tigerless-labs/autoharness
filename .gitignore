@@ -27,3 +27,6 @@ docs/plans/
 docs/TODO.md
 docs/testing.md
 experiments/
+# dev-internal agent tooling (Open Knowledge), same reason as CLAUDE.md above
+AGENTS.md
+opencode.json

@@ -2,12 +2,16 @@ flowchart LR
     host["host agent"]
     cap["CAP<br/>capture"]
     ref["REF<br/>reflect"]
+    cur["curator<br/>consolidate"]
     prom["promoter<br/>validate & store"]
     skills[(".claude/skills")]
+    idx["IDX<br/>index"]
     mng["MNG"]
     led[("LED")]
 
     host -->|hooks| cap --> ref -->|intent| prom -->|pass| skills
+    cur -->|intent| prom
     skills -->|recall| host
+    skills --> idx -->|session start| host
     mng --> skills
     skills -.-> led

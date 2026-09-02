@@ -1,7 +1,7 @@
 """MNG lazy recompute: at SessionStart, compute over the accumulated ledger now → archive inactive symbols, running before this session's recall.
 
 mng.md: a non-resident host has no background sweep, so eviction rides SessionStart — read the sidecar
-(calls numerator + anchor) + the layer request counters (denominator) accumulated watermark, run the
+(use/view counters + anchor) + the layer request counters (denominator) accumulated watermark, run the
 lifecycle decision, and move the to-archive list out of the live tree one by one (archiving = moving the
 directory out of recall, reversible). The decision reads only accumulated quantities (not what this
 session happened to see) → any repo's SessionStart reaches the same conclusion. Once per session, no

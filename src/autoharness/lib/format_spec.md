@@ -12,11 +12,21 @@ YAML frontmatter that parses, carrying at least:
 - `description` — the trigger; see "Description is the trigger" below. This is what the host matches
   recall on, so a cue-less label never fires and is rejected.
 
+Optional, and worth setting:
+
+- `category` — one lowercase word or hyphenated phrase naming the class of work the skill serves
+  (`testing`, `git-workflow`, `deployment`). An open set: reuse a category already present in the
+  index rather than minting a near-synonym. It groups the injected recall index — omitted, the skill
+  lands in `general`, and a library where everything is `general` is a flat list again. A single safe
+  segment (letters, digits, `.`, `_`, `-`); anything else is rejected.
+
 ## Description is the trigger — write it to this shape
 
 The host preloads every skill's `name` + `description` and picks among all of them by matching the
 user's request against the description. The description carries the whole selection signal; a body
-only matters after it has already fired. Write it to this shape:
+only matters after it has already fired. It is read twice over: in full by the host's own recall, and
+truncated to `INDEX_DESC_MAX_CHARS` in the injected index — so the distinguishing cue must come
+early, before the truncation point, not in a trailing clause. Write it to this shape:
 
     <verb phrase: what it does>. Use when <the situation>, or when the user mentions <the words
     they would type, every alias for the same thing>.
