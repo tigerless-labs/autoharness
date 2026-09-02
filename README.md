@@ -16,9 +16,10 @@ hand every model generation. autoharness bets one slice of it — the skill laye
 
 | | |
 |---|---|
-| **Learns from real work** | Each episode is distilled into a skill from the session you were already having — no separate data-collection or replay loop. |
-| **Groups, doesn't just pile up** | A new episode doesn't always add a skill — the reflector compares it against what's there and folds same-scenario skills into one, so the layer consolidates by category instead of accreting near-duplicates. |
-| **Validated in use, not on a benchmark** | A skill survives by being adhered to in later turns (usage rate), not a held-out score. No oracle on the active path, and no tokens spent on a dedicated eval. |
+| **Learns from real work** | Each episode is distilled into a skill from the session you were already having — no separate data-collection or replay loop. It fires on its own once a session has done enough work; `/learn` distills on demand when you want a lesson kept now. |
+| **Groups, doesn't just pile up** | A new episode doesn't always add a skill — the reflector compares it against what's there and folds same-scenario skills into one, so the layer consolidates by category instead of accreting near-duplicates. A fold records which skill absorbed which, so a merge is never mistaken for a death. |
+| **Keeps its own library in view** | Every session opens with a grouped index of the skills it wrote, so recall doesn't depend on the host happening to surface them. The host's native recall is left exactly as it was; the index is added on top. |
+| **Validated in use, not on a benchmark** | A skill survives by being adhered to in later turns (loads over the requests it was available for), not a held-out score. No oracle on the active path, and no tokens spent on a dedicated eval. |
 | **Only its own skills** | Touches only the skills it generated through this plugin — everything else, whether you wrote it or installed it, is left completely alone. |
 | **Evidence kept for later** | Every create/update logs its scenario and decision to a per-skill ledger — the raw material to build a benchmark from real usage if you ever want one. |
 
@@ -38,6 +39,10 @@ Then run `/reload-plugins` (or restart Claude Code).
 
 Zero config. It now watches your sessions and lands learned skills into `.claude/skills/` in the
 background. Cadence and lifecycle thresholds are tunable — see [Configuration](#configuration).
+
+Nothing to invoke, but one entry point exists when you want it: **`/learn`** distills the session
+you're in right now — say it after working something out and the lesson goes through the same
+proposal-and-validation chain the background pass uses.
 
 ### Update
 
@@ -77,41 +82,64 @@ never touched.
 Every knob is an `AUTOHARNESS_*` environment variable with a built-in default — nothing to
 configure unless you want to change the pace.
 
+**Cadence — when it learns**
+
 | Variable | Default | What it does |
 |---|---|---|
-| `AUTOHARNESS_REFLECT_EVERY_N` | `10` | Reflection cadence: a background reflection run fires every N host turns, and each run receives that full N-turn window. Lower = learns faster, spawns more child sessions. |
-| `AUTOHARNESS_DIGEST_EXCHANGES` | `20` | How many exchanges *before* the episode window are compressed into the reflector's prior-context digest (text + tool names only). |
-| `AUTOHARNESS_MATURITY_PROJECT` | `100` | Probation gate, project layer: after this many requests have arrived in its layer since a skill landed, it faces graduation review — never used across the whole probation → archived; used at least once → graduates into the mature pool. Until then it's recalled as usual but can't be archived. |
+| `AUTOHARNESS_REFLECT_EVERY_N` | `50` | Reflection cadence, counted in **tool calls**, not turns: every main-session tool call advances a counter, and the turn that pushes it past N ends with a background reflection. A working stretch triggers; a conversation that only talks never does. Lower = learns faster and spawns more child sessions. |
+| `AUTOHARNESS_CONSOLIDATE_EVERY_N` | `250` | Same quantum for the curator, the periodic pass that merges the library as a whole. Held well above the reflection cadence — consolidation is rarer than distillation. |
+| `AUTOHARNESS_DIGEST_EXCHANGES` | `20` | How many exchanges *before* the episode window are compressed into the reflector's prior-context digest (text + tool names only). Unused by the fork carrier, which replays the real conversation instead. |
+| `AUTOHARNESS_CARRIER` | `bundle` | What carries the reflection. `bundle` hands a redacted window + digest to a fresh subagent. `fork` resumes and forks the session that just ended, so the reflector reads the real conversation on the parent's warm cache. Stays `bundle` until the cache-hit measurement is in. |
+
+**Recall — what the model sees**
+
+| Variable | Default | What it does |
+|---|---|---|
+| `AUTOHARNESS_INDEX_DESC_MAX_CHARS` | `60` | Per-line description budget in the session-start index. The index is a scan surface, not the full trigger text — raise it for longer lines, at the cost of context on every session. |
+| `AUTOHARNESS_SKILL_DESC_MAX_CHARS` | `1024` | Hard cap on a skill's own description, matching the host's documented limit; a longer one is rejected rather than silently truncated at load. |
+| `AUTOHARNESS_SKILL_BODY_MAX_LINES` | `25` | Altitude cap: a `SKILL.md` body over this many non-blank lines is rejected as a transcript rather than a rule. Backing detail belongs in the skill's `references/`. |
+
+**Lifecycle — what survives**
+
+| Variable | Default | What it does |
+|---|---|---|
+| `AUTOHARNESS_MATURITY_PROJECT` | `100` | Probation gate, project layer: after this many requests have arrived in its layer since a skill landed, it faces graduation review. Until then it's recalled as usual but can't be archived. |
 | `AUTOHARNESS_MATURITY_GLOBAL` | `300` | Same gate for the global layer — higher because a global skill loads in every project. |
 | `AUTOHARNESS_CAPACITY_PROJECT` | `50` | Cap on *mature* skills in the project layer. For graduates, capacity contention is the only death: nothing is archived until the mature pool exceeds this, then the lowest usage rates go first. |
 | `AUTOHARNESS_CAPACITY_GLOBAL` | `20` | Same cap for the global layer — smaller because its blast radius is every project. |
+| `AUTOHARNESS_GRADUATION_SUSPENDED` | `0` | Set to `1` to park graduation review entirely, so nothing is archived for going unused. Meant for when you have reason to doubt the recall surface: archiving on zero use would then be punishing skills for never having been offered. Capacity contention still applies. |
+| `AUTOHARNESS_SNAPSHOT_KEEP` | `5` | How many pre-run snapshots of each skill tree the curator keeps before merging. A merge is the one operation a single atomic rename can't undo. |
 
 Set them in the environment Claude Code launches with — either the shell
-(`export AUTOHARNESS_REFLECT_EVERY_N=3`) or the `env` map in `.claude/settings.json`:
+(`export AUTOHARNESS_REFLECT_EVERY_N=10`) or the `env` map in `.claude/settings.json`:
 
 ```json
-{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "3" } }
+{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "10" } }
 ```
 
 Hooks read the environment on every event, so a change applies from the next session. The defaults
-are deliberate placeholders pending empirical calibration (tracked under `experiments/`); size caps
-on captured windows and staged skill bodies are fixed constants, not env knobs.
+are deliberate placeholders pending empirical calibration (tracked under `experiments/`); byte caps
+on captured windows and staged files are fixed constants, not env knobs.
 
 ## How it works
 
-A learning pipeline runs beside the host and stays off its recall path — symbols are plain native
-skills, recalled by the host's own name-and-description mechanism as if a human had written them.
+A learning pipeline runs beside the host. Skills are plain native files, recalled by the host's own
+name-and-description mechanism as if a human had written them — that path is left untouched. On top
+of it, each session opens with an index of the skills autoharness wrote, so whether its own library
+gets offered is a property of this plugin rather than a hope about host behavior.
 
-<p align="center"><img src="docs/assets/pipeline.svg" alt="autoharness pipeline: host → CAP → REF → promoter → .claude/skills → host, with MNG and LED beside" width="760" /></p>
+<p align="center"><img src="docs/assets/pipeline.svg" alt="autoharness pipeline: host → CAP → REF → promoter → .claude/skills → host, with the curator feeding the promoter, IDX injecting the index at session start, and MNG and LED beside" width="760" /></p>
 
 <sub>Diagram source: [`docs/assets/pipeline.mmd`](docs/assets/pipeline.mmd) — re-render to `pipeline.svg` after editing.</sub>
 
 | Component | Role |
 |---|---|
-| **CAP** · capture | Hook-driven dumb pipe: grabs each turn (user input, agent output, tool I/O), redacts at egress, points back at the host log instead of copying it. |
-| **REF** · reflect | At an episode boundary, receives the current episode window in full detail (the last N turns, tool I/O included) plus a compressed digest of the exchanges before it (text and tool names only), reads the existing skill index, and decides add / merge / patch / drop a support file / delete — emits an intent (body, delta, or path, plus reason and evidence). Proposes only; no write tools. |
-| **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. |
-| **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by usage rate — uses over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). A use is counted whenever the host consumes the skill: a Skill-tool invocation or a read of any file in the skill's directory (measured to be the dominant path). New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. At maturity, graduation review: zero use across the whole probation → archived, never enters the pool. For graduates, capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
+| **CAP** · capture | Hook-driven dumb pipe: grabs each turn (user input, agent output, tool I/O), redacts at egress, points back at the host log instead of copying it. It also holds the trigger, which is deterministic and counts one thing — tool calls. The turn that crosses the threshold ends with a reflection; nothing about the content is judged here. |
+| **REF** · reflect | Reads the episode, compares it against the existing skill index, and decides add / merge / patch / drop a support file / delete — emitting an intent (body, delta, or path, plus reason and evidence). Where a new lesson contradicts an older skill, it must rewrite the stale one in the same run rather than leave the library arguing with itself. Proposes only; it has no write tools, and a fork carrier's inherited ones are denied at the hook. |
+| **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. A fold must name the skill that absorbed the deleted one, and the umbrella has to be a live skill autoharness manages — an invented name fails the whole intent rather than losing the content. Each run leaves an account of what landed and what was rejected. |
+| **IDX** · surface | Builds the session-start index: the skills autoharness wrote, grouped by category, one truncated description per line, tagged by layer. Archived and hand-written skills are excluded, an empty library injects nothing, and the previous run's landed/rejected line rides along — so a rejected proposal is visible instead of silent. |
+| **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by usage rate — loads over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). Three signals are kept apart: a **load** (the model invoked the skill) is the only thing the rate counts; a **view** (a session read into the skill's directory) is evidence it had recall value, but not adherence; a **patch** marks the skill being improved, so a load after one reads as reuse-after-improvement. New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. At maturity, graduation review archives only a symbol that was never loaded *and* never viewed — no evidence of use is not the same as evidence of no use. For graduates, capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
+| **curator** · consolidate | The rarer whole-library pass: reads the library as one thing and folds near-duplicates under umbrellas, which is the judgment a single episode can't make. Snapshots both skill trees before it starts, since a merge is the one operation an atomic rename can't undo. |
 | **LED** · ledger | Per-symbol append-only sidecar: why each symbol was born or changed, with evidence and a reflection watermark. Kept out of the skill body so recall stays clean. |
 
 ## Walkthrough: watching it learn
@@ -120,21 +148,24 @@ Everything autoharness does lands on disk as plain files — a demo is just open
 right order. For a fast-paced run, speed up the loop first (see [Configuration](#configuration)):
 
 ```json
-{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "1",
+{ "env": { "AUTOHARNESS_REFLECT_EVERY_N": "3",
            "AUTOHARNESS_MATURITY_PROJECT": "5",
            "AUTOHARNESS_CAPACITY_PROJECT": "2" } }
 ```
 
 **1 · The pipeline running.** Work a few normal turns on anything non-trivial (debug something,
-figure out a workflow). Every Nth turn a background reflection fires — nothing blocks your session.
-Its bookkeeping is visible in the state dir:
+figure out a workflow). Once a turn pushes the tool-call count past N, a background reflection
+fires as that turn ends — nothing blocks your session. Its bookkeeping is visible in the state dir:
 
 ```
 ls .claude/autoharness/        # per project — ~/.claude/autoharness/ for the global layer
   requests                     # layer request counter (MNG's denominator)
-  session-<id>                 # per-session turn count toward the next reflection
+  session-<id>                 # tool calls counted toward the next reflection
   offset-<id>                  # byte watermark: where the last captured window ended
   intents/                     # queued skill proposals awaiting the promoter
+  runs/<run-id>.json           # what that run proposed, landed, and rejected — with reasons
+  last_run.json                # the summary line awaiting the next session start
+  snapshots/                   # skill-tree tarballs the curator takes before merging
 ```
 
 **2 · A skill is born.** After a reflection lands, a new folder appears under `.claude/skills/`
@@ -166,19 +197,26 @@ a step") and let the next reflection run. The skill layer does **not** grow a ne
 the existing skill's `SKILL.md` changes and its ledger appends a `patch`/`update` line — the
 two-line ledger above is a real example. `git diff` on a project-layer skill shows the edit.
 
-**5 · Recall is the host's, untouched.** Landed skills load like hand-written ones — same
-name-and-description recall, no autoharness code on that path. When one is used — invoked as a
-skill or read from its directory — `calls` in its `.sidecar.json` ticks up: that adherence count
-is the validation signal.
+**5 · The next session opens knowing.** Start a new session and the first thing it receives is a
+grouped index of these skills — plus a one-line report of the last run, so a proposal that got
+rejected says so instead of vanishing. The host's own recall still runs untouched underneath;
+the index only makes sure the library is in front of the model either way.
 
-**6 · Retirement is an archive, not a delete.** Two paths out, both a folder move to
-`.claude/skills/.archive/<name>/` — ledger, evidence and all, out of recall. A skill never used
-across its whole probation is archived at graduation review; after graduation, once a layer's
-mature pool exceeds capacity the lowest-usage-rate skills go. Moving the folder back revives it,
-history intact. With the shrunk knobs above this fires within one session; at defaults it takes
-hundreds of turns.
+**6 · Use is counted three ways.** `cat .sidecar.json`: `use` ticks when the model actually loads
+the skill and is the only thing the survival rate counts; `view` ticks when a session reads into
+the skill's directory — recall value, but not adherence; `patch` ticks when the promoter lands an
+improvement, so a `use` after one is reuse-after-improvement. Keeping them apart is what stops a
+skill that was merely browsed from looking like one that was followed.
 
-**7 · Yours are never touched.** Every autoharness-authored skill carries the ledger marker;
+**7 · Retirement is an archive, not a delete.** Two paths out, both a folder move to
+`.claude/skills/.archive/<name>/` — ledger, evidence and all, out of recall. Graduation review
+archives a skill only if its whole probation passed with no use *and* no view; after graduation,
+once a layer's mature pool exceeds capacity the lowest-usage-rate skills go. Moving the folder
+back revives it, history intact. With the shrunk knobs above this fires within one session; at
+defaults it takes hundreds of requests. A skill merged into another is archived the same way, but
+its ledger names the umbrella that absorbed it — a fold and a pruning stay distinguishable.
+
+**8 · Yours are never touched.** Every autoharness-authored skill carries the ledger marker;
 anything without it — skills you wrote or installed — is invisible to the promoter and MNG.
 
 ## How it compares
@@ -191,6 +229,8 @@ benchmark exists.
 | --- | --- | --- | --- | --- |
 | Bounds the skill layer | No | Yes | Yes | Yes |
 | Validation signal | None | Held-out benchmark score | Wall-clock inactivity | Adherence in use |
+| What starts a learning pass | — | An offline batch | Idle time and elapsed days | Work done in the session |
+| Puts its own library in front of the model | No | No | Yes | Yes |
 | Needs a benchmark / oracle | No | Yes | No | No |
 | Needs a resident daemon | No | No | Yes | No |
 
