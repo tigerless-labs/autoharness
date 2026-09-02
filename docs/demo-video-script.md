@@ -4,6 +4,8 @@
 > 所有命令和 prompt **照英文原样输入**;台词为中文口播稿(括号内为英文版)。
 > 目录约定:`$DEMO = ~/autoharness-walkthrough-demo`,演示仓库 = `$DEMO/repo`(镜头里唯一出现的目录)。
 > 本文是录屏工作稿,验证记录见 `~/autoharness-walkthrough-demo/REPRO.md`(sandbox 全流程 4/4 通过,v0.3.0)。
+> **v0.4.0 起需重跑一遍再开录**:触发分子从「轮次」改成「工具调用数」,阈值语义变了;新会话开头会多出
+> 一段自注入 skill 索引和上轮沉淀摘要——这两样都会进画面。
 
 ## 0. 环境说明(为什么这样搭)
 
@@ -26,7 +28,7 @@
 
 ```bash
 export HOME=~/autoharness-walkthrough-demo/sandbox-home   # 用户层隔离进 sandbox
-export AUTOHARNESS_REFLECT_EVERY_N=2                      # 纠正那轮立即触发反思(默认 10,录屏等不起)
+export AUTOHARNESS_REFLECT_EVERY_N=5                      # 计的是工具调用数(默认 50,录屏等不起):写一个测试文件就够跨过阈值,纠正那轮结束即触发
 ```
 
 **铁律:每个要跑 `claude` 的终端,先 `source demo-env.sh`,再用 `echo $HOME` 确认指向 sandbox-home。**
@@ -143,6 +145,9 @@ Good. One more repo convention to fold in: error-path cases must be asserted wit
 Add unit tests for src/ratelimit.py covering window_key and remaining. Just write the test file; do not run anything.
 ```
 
+**开场先给一眼索引:** 新会话一开头就带着自注入的 skill 索引(按 category 分组、每行一句截断描述),
+上一轮如果有沉淀,还会多一行「landed N, rejected M」。这是模型据以加载的东西,值得停一拍。
+
 **盯工具日志:** 它自己加载那个 skill(日志里能看到 Skill 调用),然后写文件。打开 `tests/test_ratelimit.py`。
 
 **台词:** "全新会话、同类任务,我一个字没提约定。看:parametrize 全部自带 ids,错误断言自带 match——两次纠正它都记住了,第一次就做对。这就是回报:不再重复自己,把时间花在交付上。"
@@ -159,7 +164,7 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/ -q
 ## 6. 场景 5 — 有时间才录(≈30 秒)
 
 ```bash
-grep -n "AUTOHARNESS_" ~/autoharness-walkthrough-demo/sandbox-home/.claude/plugins/cache/autoharness/autoharness/0.3.0/src/autoharness/config.py
+grep -n "AUTOHARNESS_" ~/autoharness-walkthrough-demo/sandbox-home/.claude/plugins/cache/autoharness/autoharness/*/src/autoharness/config.py
 ```
 
 **台词:** "反思节奏、成熟阈值、容量上限,全部环境变量可调。默认开箱即用,想要控制权时旋钮都在。"
@@ -179,7 +184,9 @@ grep -n "AUTOHARNESS_" ~/autoharness-walkthrough-demo/sandbox-home/.claude/plugi
 echo $HOME                                   # 1. 不是 sandbox-home → 白拍了,回 RESET
 pgrep -af autoharness.hook.spawn             # 2. 有进程 → 反思还在跑,再等等
 ls .claude/autoharness/                      # 3. 目录不存在 → hooks 没生效(插件没装/没重启 claude)
-claude plugin list                           # 4. 确认 autoharness 已安装且 enabled
+cat .claude/autoharness/session-*            # 4. 工具调用计数没到阈值 → 多干一点活,或调小 REFLECT_EVERY_N
+cat .claude/autoharness/runs/*.json          # 5. 跑了但没落地 → 看 rejected 与原因(下次会话开头也会报一行)
+claude plugin list                           # 6. 确认 autoharness 已安装且 enabled
 ```
 
 **已知坑(排练均踩过):**
