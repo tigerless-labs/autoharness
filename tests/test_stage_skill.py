@@ -4,7 +4,7 @@ from autoharness import config
 from autoharness.lib import intent_queue, layer
 from autoharness.stage_skill import server
 
-GOOD_BODY = "---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\nUse strftime.\n"
+GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
 RUN = "run1"
 
 
@@ -147,7 +147,7 @@ def test_stage_never_writes_skill_tree_any_action(tmp_path):
 
 # --- files (folder-skill subfiles) ---
 
-FILES_BODY = ("---\nname: foo\ndescription: Formats dates as ISO.\n---\n# Foo\n"
+FILES_BODY = ("---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\n"
               "Run scripts/run.sh; details in references/notes.md\n")
 GOOD_FILES = {"scripts/run.sh": "echo hi\n", "references/notes.md": "notes\n"}
 
@@ -363,3 +363,24 @@ def test_absorbed_into_rejected_on_non_delete(tmp_path):
         r = server.stage({"action": action, "name": "n", "reason": "r", "evidence": "e",
                           "absorbed_into": "u", **extra}, run_id="r1", root=tmp_path)
         assert not r["ok"], action
+
+
+def test_stage_rejects_an_over_budget_description_on_the_spot(tmp_path):
+    # the promoter runs after the child session exits, so a gate enforced only there is one the model
+    # can never learn from. hermes validates inside skill_manage and hands the error back; the same
+    # rule has to hold at our tool boundary or every over-long description is silently lost.
+    long = "Use when an iframe widget's rounded corners look wrong against the host container " * 2
+    assert len(long) > config.INDEX_DESC_MAX_CHARS
+    body = f"---\nname: foo\ndescription: {long}\n---\n# Foo\nRule.\n"
+    out = server.stage({"action": "create", "name": "foo", "level": "project", "body": body,
+                        "reason": "r", "evidence": "e"}, run_id="rb1", root=tmp_path)
+    assert not out["ok"]
+    assert any(f[0] == "description" for f in out["errors"])
+    assert not list(intent_queue.read("rb1", tmp_path))  # nothing queued
+
+
+def test_stage_accepts_a_description_inside_the_budget(tmp_path):
+    body = "---\nname: foo\ndescription: Use when an iframe widget clips on mobile.\n---\n# Foo\nRule.\n"
+    out = server.stage({"action": "create", "name": "foo", "level": "project", "body": body,
+                        "reason": "r", "evidence": "e"}, run_id="rb2", root=tmp_path)
+    assert out["ok"] and len(list(intent_queue.read("rb2", tmp_path))) == 1
