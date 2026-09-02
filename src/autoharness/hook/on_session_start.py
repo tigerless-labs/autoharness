@@ -74,6 +74,8 @@ def last_run_summary(roots):
         line += f" ({', '.join(last['families'])})"
     if last.get("absorbed"):
         line += f"; merged {last['absorbed']} into umbrellas"
+    if last.get("uncategorized"):
+        line += f"; {last['uncategorized']} landed with no category (grouped under general)"
     return line
 
 

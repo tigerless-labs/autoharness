@@ -12,13 +12,17 @@ YAML frontmatter that parses, carrying at least:
 - `description` — the trigger; see "Description is the trigger" below. This is what the host matches
   recall on, so a cue-less label never fires and is rejected.
 
-Optional, and worth setting:
-
 - `category` — one lowercase word or hyphenated phrase naming the class of work the skill serves
-  (`testing`, `git-workflow`, `deployment`). An open set: reuse a category already present in the
-  index rather than minting a near-synonym. It groups the injected recall index — omitted, the skill
-  lands in `general`, and a library where everything is `general` is a flat list again. A single safe
-  segment (letters, digits, `.`, `_`, `-`); anything else is rejected.
+  (`testing`, `git-workflow`, `deployment`). An open set: **pick one already visible in the injected
+  index**, and mint a new one only when nothing existing fits — the index is the candidate list, and
+  a library of near-synonym categories groups no better than none. It is what the session-start index
+  groups by, so a skill without one lands in `general`.
+
+  Enforcement is deliberately asymmetric with the description gate: an illegal value (anything but a
+  single safe segment of letters, digits, `.`, `_`, `-`) is **rejected**, but a *missing* one is
+  **allowed through** and noted in the run account — a cue-less description can never be recalled at
+  all, while a missing category only files the skill badly. The curator backfills what lands without
+  one.
 
 ## Description is the trigger — write it to this shape
 

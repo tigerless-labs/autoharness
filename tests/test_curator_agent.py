@@ -58,3 +58,12 @@ def test_curator_judges_by_maintainer_bar_not_pairwise():
 def test_curator_requires_absorbed_into_on_delete():
     body = AGENT.read_text()
     assert "absorbed_into" in body  # field is mandatory language for the curator (fail-closed downstream)
+
+
+def test_curator_carries_the_category_duties():
+    # the curator is the only organ that can move both levers: fold content into an umbrella, and
+    # re-file the label. Without these three it never writes a category and the index stays flat.
+    body = AGENT.read_text().lower()
+    assert "category" in body
+    assert "backfill" in body or "back-fill" in body  # (b) existing skills get a category over time
+    assert "same category is not a reason" in body   # (c) labelling must not substitute for merging

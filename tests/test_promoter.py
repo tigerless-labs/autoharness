@@ -459,3 +459,44 @@ def test_drain_writes_run_account_and_last_run(tmp_path):
     assert [v["ok"] for v in run["verdicts"]] == [True, False]
     last = json.loads((state / "last_run.json").read_text())
     assert last["landed"] == 1 and last["rejected"] == 1
+
+
+CATEGORIZED_BODY = ("---\nname: foo\ndescription: Use when formatting a date as ISO.\n"
+                    "category: dates\n---\n# Foo\nUse strftime.\n")
+
+
+def test_missing_category_lands_but_is_noted(tmp_path):
+    # fail-open, unlike the description gate: a missing category only groups the skill badly,
+    # so rejecting real content over it is out of proportion — but it must not be silent
+    roots = _roots(tmp_path)
+    v = promoter.promote(_create(), roots=roots)
+    assert v["ok"] and "category" in v["notes"]
+    assert skill_store.exists("project", "foo", roots["project"])
+
+
+def test_present_category_is_not_noted(tmp_path):
+    roots = _roots(tmp_path)
+    v = promoter.promote(_create(body=CATEGORIZED_BODY), roots=roots)
+    assert v["ok"] and not v.get("notes")
+
+
+def test_illegal_category_still_rejected(tmp_path):
+    # format stays fail-closed: a path-shaped category would break index grouping and path safety
+    roots = _roots(tmp_path)
+    body = CATEGORIZED_BODY.replace("category: dates", "category: dates/iso")
+    v = promoter.promote(_create(body=body), roots=roots)
+    assert not v["ok"] and "category" in _families(v)
+    assert not skill_store.exists("project", "foo", roots["project"])
+
+
+def test_run_account_carries_uncategorized_count(tmp_path):
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    intent_queue.append("run-cat", _create(name="uncat"), proot)
+    intent_queue.append("run-cat", _create(name="cat", body=CATEGORIZED_BODY.replace("name: foo", "name: cat")),
+                        proot)
+    promoter.drain("run-cat", roots=roots)
+    last = json.loads((layer.state_dir("project", proot) / "last_run.json").read_text())
+    assert last["uncategorized"] == 1  # only the one that landed without a category
+    rows = json.loads((layer.state_dir("project", proot) / "runs" / "run-cat.json").read_text())["verdicts"]
+    assert {r["name"]: r.get("notes") for r in rows}["uncat"] == ["category"]

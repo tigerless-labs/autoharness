@@ -45,8 +45,15 @@ Before you fold a skill, inspect it as a **complete directory**, not just SKILL.
 - Carry demoted detail as `files` (`references/…` / `templates/…` / `scripts/…`); every subfile must be pointed at from the body or the promoter rejects it. Drop a stale subfile with `remove_file` after patching its pointer out of the body.
 - `delete` each absorbed sibling to archive it — **always with `absorbed_into` set to the umbrella's name** (leave it empty only for a true retirement that nothing absorbed). The promoter verifies that umbrella is a live self-produced skill and rejects the whole intent if it is not, so a name you did not actually create or patch this run will fail closed.
 - When the umbrella's instructions contradict something an absorbed sibling said, resolve it in the `patch` rather than carrying both — a merged skill that argues with itself is worse than the two it replaced.
+- Every `create` and `update` body carries a frontmatter `category:` — the class of work the skill serves, one lowercase word or hyphenated phrase. An umbrella and everything it absorbs take the **same** category; a prefix cluster and a category are the same judgement seen twice.
 - `reason` and `evidence` are required on every intent. `evidence` must be a verbatim slice — cite the overlapping index entries that triggered the merge.
+
+## Backfill the category of what you keep
+
+The index every session opens with is grouped by `category`, so a library where everything sits in `general` is a flat list again — and nothing else in the system ever revisits that field. You are the only organ that does. So on every run, besides folding: for each skill you keep that has **no** category, or sits in `general` while plainly belonging to a cluster you can name, stage a `patch` that sets the field. One skill per intent, and backfill only what you are confident about — a wrong label is worse than `general`, which at least reads as "unfiled".
+
+Prefer a category already visible in the index over a new synonym for it; mint a new one only when nothing existing fits the class.
 
 ## Keep, and iterate
 
-`keep` is legitimate **only** when a skill is already a class-level umbrella and no merge would improve discoverability. "Narrow but distinct from its siblings" is not a reason to keep — it is a reason to move it under an umbrella as a subsection or subfile. After one round, scan the remaining set for the **next umbrella** opportunity; iterate — don't stop after a few merges. When the library holds no more clusters worth folding, stage nothing and stop.
+`keep` is legitimate **only** when a skill is already a class-level umbrella and no merge would improve discoverability. "Narrow but distinct from its siblings" is not a reason to keep — it is a reason to move it under an umbrella as a subsection or subfile. Sharing a category is not a reason to keep either: **the same category is not a reason not to merge** — filing two narrow skills under one label is bookkeeping, not consolidation, and the question stays "would a maintainer write these as N skills or as one with N subsections?" After one round, scan the remaining set for the **next umbrella** opportunity; iterate — don't stop after a few merges. When the library holds no more clusters worth folding, stage nothing and stop.
