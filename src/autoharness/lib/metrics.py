@@ -18,7 +18,7 @@ window is deferred with the same open question in mng.md.
 """
 import json
 
-from autoharness.lib import layer, ledger, sidecar, skill_store
+from autoharness.lib import layer, ledger, sidecar, skill_store, validate
 
 
 def _live_symbols(lyr, root):
@@ -69,6 +69,35 @@ def _funnel(lyr, root):
     return {"proposed": proposed, "landed": landed, "rejected": proposed - landed}, families
 
 
+def _category(lyr, name, root):
+    body = skill_store.read_body(lyr, name, root) or ""
+    return (validate._frontmatter(body) or {}).get("category") or "general"
+
+
+def _by_category(lyr, root, live, cards, requests):
+    """Per-category recall, on the layer's own denominator.
+
+    Answers the one question the library-level number cannot: which classes of work are actually
+    being pulled and which are dead weight — the only evidence that says whether to keep depositing
+    into a category. A category with no uses stays in the report at zero; dropping it would read as
+    "no such category" rather than "this one is dead".
+
+    Not the same statistic as the index's demotion ranking (mng.md), which divides by entries rather
+    than requests: that one asks what a category earns for the lines it costs, this one asks how
+    often it is reached for.
+    """
+    groups = {}
+    for name, card in zip(live, cards, strict=True):
+        g = groups.setdefault(_category(lyr, name, root), {"live_symbols": 0, "use_total": 0, "view_total": 0})
+        g["live_symbols"] += 1
+        g["use_total"] += card.get("use", 0)
+        g["view_total"] += card.get("view", 0)
+    for g in groups.values():
+        g["recall_rate"] = g["use_total"] / requests if requests else 0
+        g["view_rate"] = g["view_total"] / requests if requests else 0
+    return dict(sorted(groups.items()))
+
+
 def _layer_metrics(lyr, root):
     from autoharness.lib import counters
 
@@ -94,6 +123,7 @@ def _layer_metrics(lyr, root):
         "funnel": funnel,
         "reject_families": families,
         "reuse_after_patch": len(reused) / len(patched) if patched else 0,
+        "by_category": _by_category(lyr, root, live, cards, requests),
     }
 
 
