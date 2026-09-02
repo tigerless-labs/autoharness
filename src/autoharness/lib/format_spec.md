@@ -59,8 +59,8 @@ One description straining to cover five distinct triggers → split into separat
 its own.
 
 **Enforced (a floor, not the standard):** the promoter rejects a `create`/`update` whose description
-carries no trigger cue — neither a `when` clause nor a quoted phrase — or exceeds
-`SKILL_DESC_MAX_CHARS`. That check is a crude proxy; passing it is not the same as satisfying the
+carries no trigger cue — neither a `when` clause nor a quoted phrase — whose cue falls past
+`INDEX_DESC_MAX_CHARS`, or which exceeds `SKILL_DESC_MAX_CHARS`. That check is a crude proxy; passing it is not the same as satisfying the
 four elements, and the judgment stays the author's.
 
 ## Structure (#416)
