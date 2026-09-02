@@ -55,10 +55,13 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
         spawn.run(capture.window(event["transcript_path"])[0],
                   dispatch._run_id(result), roots=rts, spawn_fn=fake_spawn)
 
-    # BEAT 1 — birth: drive Stops until the cadence triggers reflection
-    dispatch.dispatch(stop, roots=roots, reflect=land_learned)            # Stop 1: count<N, no trigger
+    # BEAT 1 — birth: tool calls accumulate activity; the Stop at threshold triggers reflection
+    act = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "session_id": "s1"}
+    dispatch.dispatch(act, roots=roots)
+    dispatch.dispatch(stop, roots=roots, reflect=land_learned)            # Stop 1: activity 1 < N, no trigger
     assert skill_store.read_body("project", "learned", proot) is None
-    dispatch.dispatch(stop, roots=roots, reflect=land_learned)            # Stop 2: trigger → land
+    dispatch.dispatch(act, roots=roots)
+    dispatch.dispatch(stop, roots=roots, reflect=land_learned)            # Stop 2: activity 2 ≥ N → land
     assert skill_store.read_body("project", "learned", proot) is not None
     assert sidecar.is_agent_created("project", "learned", proot)
     assert ledger.read("project", "learned", proot)[0]["action"] == "create"
@@ -69,8 +72,8 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
     for _ in range(2):
         dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Skill",
                            "tool_input": {"name": "learned"}}, roots=roots)
-    assert sidecar.read("project", "learned", proot)["calls"] == 2
-    print(f"[use]    learned calls={sidecar.read('project', 'learned', proot)['calls']}")
+    assert sidecar.read("project", "learned", proot)["use"] + sidecar.read("project", "learned", proot)["view"] == 2
+    print(f"[use]    learned use={sidecar.read('project', 'learned', proot)['use']} view={sidecar.read('project', 'learned', proot)['view']}")
 
     # BEAT 3 — compete: a weak unused peer; MNG recompute (SessionStart) archives the loser.
     # learned landed with a real anchor (=2), so two more turns first to graduate it out of probation.
@@ -82,7 +85,7 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
     mat = config.MATURITY_THRESHOLD[layer.PROJECT]
     for name in ("learned", "weak"):                                    # monitor MNG numerator/denominator
         sc = sidecar.read("project", name, proot)
-        num, den = sc["calls"], req - sc["anchor"]
+        num, den = sc.get("use", 0), req - sc["anchor"]
         print(f"[mng]    {name}: numerator(calls)={num} denominator(reqs)={den} "
               f"rate={num / den:.2f} mature={den >= mat}")
     out = dispatch.dispatch({"hook_event_name": "SessionStart"}, roots=roots)

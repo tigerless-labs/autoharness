@@ -267,3 +267,87 @@ def test_system_fake_curator_cross_process_merges(tmp_path, monkeypatch):
     assert "absorbed" in skill_store.read_body("project", "widgets", root)
     assert skill_store.read_body("project", "widget-delta", root) is None  # archived out of the live tree
     assert (layer.archive_dir("project", root) / "widget-delta").exists()
+
+
+# --- fork carrier (hermes-parity Phase 11, direction G): same-model fork rides the parent's warm
+# prefix cache; the reflect instruction arrives as the -p prompt (no --agent: swapping the system
+# prompt would invalidate the prefix). Default carrier stays "bundle" until the G-spike passes. ---
+
+def test_build_fork_command_shape():
+    argv = spawn.build_fork_command(session_id="sess-9", claude_bin="claude")
+    assert argv[:5] == ["claude", "-p", "--resume", "sess-9", "--fork-session"]
+    assert "--agent" not in argv  # prefix constraint: keep the parent's system prompt
+
+
+def test_run_fork_carrier_sends_instruction_not_window(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.config, "REFLECTOR_CARRIER", "fork")
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    seen = {}
+
+    def fake(argv, env, payload):
+        seen.update(argv=argv, env=env, payload=payload)
+
+    spawn.run("WINDOW-TEXT", "r1", roots=roots, session_id="sess-9", spawn_fn=fake)
+    assert "--fork-session" in seen["argv"]
+    assert "WINDOW-TEXT" not in seen["payload"]  # fork replays the transcript; no materialized window
+    assert "stage_skill" in seen["payload"]      # the reflect instruction rides the prompt
+    assert seen["env"][spawn.config.CHILD_SESSION_ENV] == "1"  # recursion guard still set
+
+
+def test_run_bundle_carrier_unchanged(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.config, "REFLECTOR_CARRIER", "bundle")
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    seen = {}
+
+    def fake(argv, env, payload):
+        seen.update(argv=argv, payload=payload)
+
+    spawn.run("WINDOW-TEXT", "r1", roots=roots, session_id="sess-9", spawn_fn=fake)
+    assert "--fork-session" not in seen["argv"]
+    assert "WINDOW-TEXT" in seen["payload"]  # bundle fallback still materializes the window
+
+
+def test_fork_without_session_falls_back_to_bundle(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.config, "REFLECTOR_CARRIER", "fork")
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    seen = {}
+    spawn.run("WINDOW-TEXT", "r1", roots=roots, session_id=None,
+              spawn_fn=lambda argv, env, payload: seen.update(argv=argv, payload=payload))
+    assert "--fork-session" not in seen["argv"]  # no session to fork -> bundle chain
+
+
+# --- curator pre-run snapshot (Phase 12, direction E): library-level tail risk only ---
+
+def _snap_roots(tmp_path):
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    for root in roots.values():
+        d = root / "skills" / "x"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("---\nname: x\ndescription: d\n---\nb")
+    return roots
+
+
+def test_run_curator_snapshots_before_spawn(tmp_path):
+    roots = _snap_roots(tmp_path)
+    order = []
+    spawn.run_curator("c1", roots=roots,
+                      spawn_fn=lambda a, e, b: order.append("spawned"))
+    snaps = list((roots["project"] / "autoharness" / "snapshots").glob("*.tar.gz"))
+    assert snaps and order == ["spawned"]
+
+
+def test_snapshot_rotation_keeps_newest(tmp_path, monkeypatch):
+    monkeypatch.setattr(spawn.config, "SNAPSHOT_KEEP", 2)
+    roots = _snap_roots(tmp_path)
+    for i in range(4):
+        spawn.run_curator(f"c{i}", roots=roots, spawn_fn=lambda a, e, b: None)
+    snaps = (roots["project"] / "autoharness" / "snapshots").glob("*.tar.gz")
+    assert len(list(snaps)) <= 2 * 2  # per-layer keep
+
+
+def test_snapshot_failure_never_blocks_the_run(tmp_path, monkeypatch):
+    roots = _snap_roots(tmp_path)
+    monkeypatch.setattr(spawn, "_snapshot_skills", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
+    called = []
+    spawn.run_curator("c1", roots=roots, spawn_fn=lambda a, e, b: called.append(1))
+    assert called  # a transient disk issue must not silently disable curation

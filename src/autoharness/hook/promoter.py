@@ -27,6 +27,7 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
 ponytail: a single synchronous process already satisfies "serial single writer"; cross-process locking see mng open. LED watermark still pends true values from CAP; the create anchor reads the layer request counter at land time (probation is fiction without a true anchor). Whole-run clear, the tiny crash window (between land and clear) may re-append the LED — per-item idempotent watermark pending the intent-queue granularity being finalized (validate-store open).
 """
 import hashlib
+import json
 
 from autoharness.lib import (
     atomic,
@@ -76,6 +77,8 @@ def _led(intent, evidence_ref):
              "evidence": evidence_ref}
     if intent.get("path"):
         entry["path"] = intent["path"]
+    if intent.get("absorbed_into"):
+        entry["absorbed_into"] = intent["absorbed_into"]  # consolidated vs pruned, distinguishable in the account
     return entry
 
 
@@ -128,6 +131,8 @@ def _land(action, intent, body, level, name, root):
     skill_store.write_body(level, name, body, root)
     if action == "create":
         sidecar.create(level, name, counters.request_count(level, root), root)
+    else:
+        sidecar.bump_patch(level, name, root)  # update/patch: feeds the reuse-after-improvement pair
     ledger.append(level, name, _led(intent, evidence_ref), root)
 
 
@@ -152,6 +157,19 @@ def promote(intent, *, roots=None, repo_name=None):
 
     target_created = sidecar.is_agent_created(level, name, root) if action in _MODIFY else None
 
+    absorbed = intent.get("absorbed_into")
+    if action == "delete" and absorbed:
+        # fail-closed absorption claim (direction D, Hermes trust-chain tier 1): the umbrella must be
+        # a live, self-produced skill distinct from the target — a hallucinated name rejects the intent.
+        try:
+            alevel = skill_store.find(absorbed, roots)
+        except ValueError as exc:
+            return _reject(action, level, [("absorbed_into", str(exc))])
+        if alevel is None or absorbed == name \
+                or not sidecar.is_agent_created(alevel, absorbed, roots.get(alevel)):
+            return _reject(action, level,
+                           [("absorbed_into", f"umbrella {absorbed!r} is not a live self-produced skill")])
+
     verdict = validate.validate(
         {**intent, "level": level}, body,
         target_is_agent_created=target_created, repo_name=repo_name, base_dir=base_dir,
@@ -174,11 +192,35 @@ def sweep(roots=None):
     return removed
 
 
+def _account(run_id, intents, verdicts, proot):
+    """Run-level verdict account (direction B, anti-silence): the per-symbol LED records only landed
+    facts, so a rejected create would vanish without trace — this account is where verdicts live.
+    last_run.json feeds the one-line SessionStart summary and is consumed after one injection."""
+    rows = [{"action": v.get("action"), "name": i.get("name"), "ok": v["ok"],
+             "findings": [f[0] for f in v.get("findings", [])]}
+            for i, v in zip(intents, verdicts, strict=True)]
+    landed = sum(1 for r in rows if r["ok"])
+    absorbed = sum(1 for i, v in zip(intents, verdicts, strict=True)
+                   if v["ok"] and i.get("action") == "delete" and i.get("absorbed_into"))
+    families = sorted({f for r in rows if not r["ok"] for f in r["findings"]})
+    state = layer.state_dir(layer.PROJECT, proot)
+    runs = state / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    atomic.write_text(runs / f"{run_id}.json",
+                      json.dumps({"run_id": run_id, "verdicts": rows}, ensure_ascii=False, indent=2))
+    atomic.write_text(state / "last_run.json",
+                      json.dumps({"run_id": run_id, "landed": landed,
+                                  "rejected": len(rows) - landed, "absorbed": absorbed,
+                                  "families": families}, ensure_ascii=False))
+
+
 def drain(run_id, *, roots=None, repo_name=None):
     roots = roots or {}
     sweep(roots)
     proot = roots.get(layer.PROJECT)
-    verdicts = [promote(i, roots=roots, repo_name=repo_name)
-                for i in intent_queue.read(run_id, proot)]
+    intents = intent_queue.read(run_id, proot)
+    verdicts = [promote(i, roots=roots, repo_name=repo_name) for i in intents]
+    if intents:
+        _account(run_id, intents, verdicts, proot)
     intent_queue.clear(run_id, proot)
     return verdicts

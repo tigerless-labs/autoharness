@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -84,7 +85,7 @@ def test_triggered_stop_fires_reflect(tmp_path, monkeypatch):
 
 def test_real_onstop_triggers_at_cadence(tmp_path):
     roots = _roots(tmp_path)
-    for _ in range(config.REFLECT_EVERY_N - 1):
+    for _ in range(config.REFLECT_EVERY_N):  # activity accumulated by PreToolUse; Stop only judges
         counters.bump_session("s1", roots[layer.PROJECT])
     seen = []
     dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1", "transcript_path": "/t.jsonl"},
@@ -143,7 +144,7 @@ def test_pretooluse_skill_counts_numerator(tmp_path):
     out = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Skill",
                              "tool_input": {"name": "foo"}}, roots=roots)
     assert out["result"]["counted"]
-    assert sidecar.read("project", "foo", root)["calls"] == 1
+    assert sidecar.read("project", "foo", root)["use"] == 1
 
 
 def test_pretooluse_read_of_skill_counts_numerator(tmp_path):
@@ -155,7 +156,7 @@ def test_pretooluse_read_of_skill_counts_numerator(tmp_path):
                              "tool_input": {"file_path": str(root / "skills" / "foo" / "SKILL.md")}},
                             roots=roots)
     assert out["result"]["counted"]
-    assert sidecar.read("project", "foo", root)["calls"] == 1
+    assert sidecar.read("project", "foo", root)["view"] == 1
 
 
 def test_reflector_read_not_counted(tmp_path):
@@ -168,7 +169,7 @@ def test_reflector_read_not_counted(tmp_path):
                              "tool_input": {"file_path": str(root / "skills" / "foo" / "SKILL.md")}},
                             roots=roots)
     assert not out["result"]["counted"]
-    assert sidecar.read("project", "foo", root)["calls"] == 0
+    assert sidecar.read("project", "foo", root).get("view", 0) == 0
 
 
 def test_reflector_write_is_denied(tmp_path):
@@ -207,3 +208,52 @@ def test_default_roots_resolve_both_layers():
     roots = dispatch._roots(None)
     assert set(roots) == set(layer.LAYERS)
     assert all(isinstance(p, Path) for p in roots.values())
+
+
+# --- SessionStart context emission (hermes-parity Phase 9) ---
+
+def test_emit_session_start_additional_context(capsys):
+    dispatch._emit({"handled": "SessionStart", "result": {"context": "INDEX", "archived": {}}})
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    hso = payload["hookSpecificOutput"]
+    assert hso["hookEventName"] == "SessionStart"
+    assert hso["additionalContext"] == "INDEX"
+
+
+def test_emit_session_start_no_context_prints_nothing(capsys):
+    dispatch._emit({"handled": "SessionStart", "result": {"context": None, "archived": {}}})
+    assert capsys.readouterr().out == ""
+
+
+# --- Phase 11 (H): every PreToolUse advances the activity counter; Stop no longer bumps it ---
+
+def test_pretooluse_advances_activity_counter(tmp_path):
+    roots = _roots(tmp_path)
+    dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                       "session_id": "s7"}, roots=roots)
+    assert counters.session_count("s7", roots["project"]) == 1
+
+
+def test_child_session_pretooluse_does_not_advance(tmp_path, monkeypatch):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    roots = _roots(tmp_path)
+    dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                       "session_id": "s7"}, roots=roots)
+    assert counters.session_count("s7", roots["project"]) == 0
+
+
+def test_stop_does_not_advance_activity(tmp_path):
+    roots = _roots(tmp_path)
+    dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s7",
+                       "transcript_path": "x"}, roots=roots)
+    assert counters.session_count("s7", roots["project"]) == 0  # denominator yes, activity no
+
+
+# --- Phase 11 (G): child-session (fork) write tools are denied ---
+
+def test_child_session_write_denied(tmp_path, monkeypatch):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    v = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Write",
+                           "session_id": "s7"}, roots=_roots(tmp_path))
+    assert v.get("deny")

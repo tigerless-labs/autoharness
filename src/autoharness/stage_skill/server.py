@@ -50,6 +50,11 @@ TOOL_SCHEMA = {
         "path": {"type": "string",
                  "description": "remove_file only: relative path of the subfile to remove; the live "
                                 "SKILL.md must no longer reference it (patch the pointer out first)"},
+        "absorbed_into": {"type": "string",
+                          "description": "delete only: the umbrella skill that absorbed this one's "
+                                         "content (empty/omitted = pure retirement). The promoter "
+                                         "verifies the umbrella actually exists — a hallucinated "
+                                         "name rejects the whole intent"},
     },
     "required": ["action", "name", "reason", "evidence"],
 }
@@ -75,6 +80,8 @@ def _schema_errors(params):
     has_files = params.get("files") is not None
     if action != "remove_file" and params.get("path") is not None:
         errors.append(("schema", f"{action} takes no path (path is remove_file only)"))
+    if action != "delete" and params.get("absorbed_into") is not None:
+        errors.append(("schema", f"{action} takes no absorbed_into (delete only)"))
     if action in _BODY_ACTIONS:
         if not has_body:
             errors.append(("schema", f"{action} requires body"))

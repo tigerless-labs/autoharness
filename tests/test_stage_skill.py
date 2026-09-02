@@ -346,3 +346,20 @@ def test_files_carrying_evidence_slice_denied(tmp_path):
     v = server.stage(_params(body=body, files=files), run_id=RUN, root=tmp_path)
     assert not v["ok"] and "files" in _errs(v)
     assert _queue(tmp_path) == []
+
+
+# --- absorbed_into (Phase 12, direction D): delete-only field, fail-closed at the promoter ---
+
+def test_delete_accepts_absorbed_into(tmp_path):
+    r = server.stage({"action": "delete", "name": "n", "reason": "r", "evidence": "e",
+                      "absorbed_into": "umbrella"}, run_id="r1", root=tmp_path)
+    assert r["ok"]
+
+
+def test_absorbed_into_rejected_on_non_delete(tmp_path):
+    for action, extra in (("create", {"body": "b", "level": "project"}),
+                          ("patch", {"old_string": "a", "new_string": "b"}),
+                          ("remove_file", {"path": "references/x.md"})):
+        r = server.stage({"action": action, "name": "n", "reason": "r", "evidence": "e",
+                          "absorbed_into": "u", **extra}, run_id="r1", root=tmp_path)
+        assert not r["ok"], action

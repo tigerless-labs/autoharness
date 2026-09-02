@@ -37,6 +37,9 @@ SKILL_BODY_MAX_LINES = _int_env("AUTOHARNESS_SKILL_BODY_MAX_LINES", 25)
 # description is the trigger: the host preloads name+description and matches recall on it, so a skill
 # lives or dies here. Cap = Anthropic's documented 1024-char host limit (past it the host truncates).
 SKILL_DESC_MAX_CHARS = _int_env("AUTOHARNESS_SKILL_DESC_MAX_CHARS", 1024)
+# self-injected recall index (SessionStart additionalContext): per-line description truncation,
+# mirroring Hermes's tier-0 index discipline — the index is a scan surface, not the full trigger text.
+INDEX_DESC_MAX_CHARS = _int_env("AUTOHARNESS_INDEX_DESC_MAX_CHARS", 60)
 
 # folder-skill subfile caps (ponytail: placeholders like STAGE_MAX_BODY_BYTES, calibrate in experiments/)
 STAGE_MAX_FILES = 8
@@ -48,12 +51,21 @@ MATURITY_THRESHOLD = {layer.GLOBAL: _int_env("AUTOHARNESS_MATURITY_GLOBAL", 300)
                       layer.PROJECT: _int_env("AUTOHARNESS_MATURITY_PROJECT", 100)}
 CAPACITY = {layer.GLOBAL: _int_env("AUTOHARNESS_CAPACITY_GLOBAL", 20),
             layer.PROJECT: _int_env("AUTOHARNESS_CAPACITY_PROJECT", 50)}
+# graduation-review suspend gate (direction C): while the recall surface is known-broken, archiving
+# for zero use buries surfacing's failure — flip on to park the review, capacity contention unaffected.
+GRADUATION_REVIEW_SUSPENDED = bool(_int_env("AUTOHARNESS_GRADUATION_SUSPENDED", 0))
+SNAPSHOT_KEEP = _int_env("AUTOHARNESS_SNAPSHOT_KEEP", 5)  # curator pre-run library snapshots per layer (mirrors Hermes)
 
 _LIB = Path(__file__).parent / "lib"
 REDACTION_RULES = _LIB / "redaction_rules.toml"  # secret/PII rule set, single source for CAP egress + LED
 FORMAT_SPEC = _LIB / "format_spec.md"            # #416 single source for authoring + lint
 
 CHILD_SESSION_ENV = "AUTOHARNESS_CHILD_SESSION"  # recursion-guard signal: set ONLY by spawn, read by CAP hooks (single source). Must be autoharness-owned: the host sets CLAUDE_CODE_CHILD_SESSION on every hook subprocess, so reusing it would gate every top-level turn.
+
+# reflection carrier (direction G): "fork" resumes+forks the just-finished session — same model,
+# parent's warm prefix cache, full-transcript replay, no materialized window. Stays "bundle"
+# (window+digest via stdin to the registered subagent) until the fork cache-hit spike passes.
+REFLECTOR_CARRIER = os.environ.get("AUTOHARNESS_CARRIER", "bundle")
 
 REFLECTOR_AGENT = "autoharness:reflector"  # the --agent reference for spawn (plugin namespace, Phase 0 resolution pending live test)
 CURATOR_AGENT = "autoharness:curator"      # the --agent reference for the periodic consolidation pass (same spawn chain as reflector)

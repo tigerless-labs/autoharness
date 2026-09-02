@@ -26,7 +26,7 @@ def test_agent_created_call_bumps_numerator(tmp_path):
     root = _seed_agent_skill(roots)
     r = on_skill_call.on_skill_call({"skill_name": "foo"}, roots=roots)
     assert r["counted"] and r["level"] == "project"
-    assert sidecar.read("project", "foo", root)["calls"] == 1
+    assert sidecar.read("project", "foo", root)["use"] == 1
 
 
 def test_nested_tool_input_name(tmp_path):
@@ -64,7 +64,7 @@ def test_read_of_skill_file_bumps_numerator(tmp_path):
     root = _seed_agent_skill(roots)
     r = on_skill_call.on_skill_read(_read_event(root / "skills" / "foo" / "SKILL.md"), roots=roots)
     assert r["counted"] and r["level"] == "project"
-    assert sidecar.read("project", "foo", root)["calls"] == 1
+    assert sidecar.read("project", "foo", root)["view"] == 1
 
 
 def test_read_of_skill_subfile_bumps_numerator(tmp_path):
@@ -73,7 +73,7 @@ def test_read_of_skill_subfile_bumps_numerator(tmp_path):
     r = on_skill_call.on_skill_read(
         _read_event(root / "skills" / "foo" / "references" / "evidence-1.md"), roots=roots)
     assert r["counted"]
-    assert sidecar.read("project", "foo", root)["calls"] == 1
+    assert sidecar.read("project", "foo", root)["view"] == 1
 
 
 def test_read_outside_skills_not_counted(tmp_path):
@@ -89,7 +89,7 @@ def test_read_of_archived_skill_not_counted(tmp_path):
     r = on_skill_call.on_skill_read(
         _read_event(root / "skills" / ".archive" / "foo" / "SKILL.md"), roots=roots)
     assert not r["counted"]
-    assert sidecar.read("project", "foo", root)["calls"] == 0
+    assert sidecar.read("project", "foo", root)["view"] == 0
 
 
 def test_read_of_non_agent_skill_never_touched(tmp_path):
@@ -111,7 +111,7 @@ def test_read_recursion_guard_does_not_count(tmp_path, monkeypatch):
     root = _seed_agent_skill(roots)
     r = on_skill_call.on_skill_read(_read_event(root / "skills" / "foo" / "SKILL.md"), roots=roots)
     assert not r["counted"] and r["reason"] == "recursion_guard"
-    assert sidecar.read("project", "foo", root)["calls"] == 0
+    assert sidecar.read("project", "foo", root)["view"] == 0
 
 
 def test_recursion_guard_does_not_count(tmp_path, monkeypatch):
@@ -120,7 +120,7 @@ def test_recursion_guard_does_not_count(tmp_path, monkeypatch):
     root = _seed_agent_skill(roots)
     r = on_skill_call.on_skill_call({"skill_name": "foo"}, roots=roots)
     assert not r["counted"] and r["reason"] == "recursion_guard"
-    assert sidecar.read("project", "foo", root)["calls"] == 0  # reflector's own calls excluded
+    assert sidecar.read("project", "foo", root)["use"] == 0  # reflector's own calls excluded
 
 
 def test_platform_child_var_does_not_gate_counting(tmp_path, monkeypatch):
@@ -128,4 +128,25 @@ def test_platform_child_var_does_not_gate_counting(tmp_path, monkeypatch):
     roots = _roots(tmp_path)
     root = _seed_agent_skill(roots)
     r = on_skill_call.on_skill_call({"skill_name": "foo"}, roots=roots)
-    assert r["counted"] and sidecar.read("project", "foo", root)["calls"] == 1
+    assert r["counted"] and sidecar.read("project", "foo", root)["use"] == 1
+
+
+# --- three-way split: Skill -> use, Read -> view (Phase 10, direction C) ---
+
+def test_skill_call_bumps_use_not_view(tmp_path):
+    roots = _roots(tmp_path)
+    root = _seed_agent_skill(roots)
+    r = on_skill_call.on_skill_call({"skill_name": "foo"}, roots=roots)
+    assert r["counted"] and r["kind"] == "use"
+    d = sidecar.read("project", "foo", root)
+    assert d["use"] == 1 and d.get("view", 0) == 0
+
+
+def test_skill_read_bumps_view_not_use(tmp_path):
+    roots = _roots(tmp_path)
+    root = _seed_agent_skill(roots)
+    p = root / "skills" / "foo" / "SKILL.md"
+    r = on_skill_call.on_skill_read({"tool_input": {"file_path": str(p)}}, roots=roots)
+    assert r["counted"] and r["kind"] == "view"
+    d = sidecar.read("project", "foo", root)
+    assert d.get("use", 0) == 0 and d["view"] == 1

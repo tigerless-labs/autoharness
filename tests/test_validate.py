@@ -226,3 +226,29 @@ def test_remove_file_missing_led_rejected():
     v = validate.validate({**REMOVE_INTENT, "reason": "", "evidence": ""},
                           None, target_is_agent_created=True)
     assert not v["ok"] and "led" in _families(v)
+
+
+# --- category field (hermes-parity Phase 9, A2): index-grouping only, open set, single safe segment ---
+
+def _body_with_category(cat):
+    return f"---\nname: x\ndescription: use when x\ncategory: {cat}\n---\nrule"
+
+
+def test_category_valid_single_segment_passes():
+    v = validate.validate({"action": "create", "level": "project", "name": "x",
+                           "reason": "r", "evidence": "e"}, _body_with_category("ops-notes"))
+    assert not [f for f in v["findings"] if f[0] == "category"]
+
+
+def test_category_absent_is_fine():
+    v = validate.validate({"action": "create", "level": "project", "name": "x",
+                           "reason": "r", "evidence": "e"},
+                          "---\nname: x\ndescription: use when x\n---\nrule")
+    assert not [f for f in v["findings"] if f[0] == "category"]
+
+
+def test_category_rejects_path_and_unsafe_segments():
+    for bad in ("a/b", "..", "a b", ""):
+        v = validate.validate({"action": "create", "level": "project", "name": "x",
+                               "reason": "r", "evidence": "e"}, _body_with_category(bad))
+        assert [f for f in v["findings"] if f[0] == "category"], bad

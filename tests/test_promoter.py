@@ -374,3 +374,88 @@ def test_remove_file_symlink_escape_rejected(tmp_path):
     v = promoter.promote(_remove(path="scripts/victim.sh"), roots=roots)
     assert not v["ok"] and "landing" in _families(v)
     assert victim.read_text() == "keep me"  # nothing outside the skill dir was touched
+
+
+# --- land update/patch bumps the sidecar patch counter (Phase 10, direction C) ---
+
+def test_update_land_bumps_patch_counter(tmp_path):
+    roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
+    root = roots["project"]
+    body = "---\nname: pc\ndescription: use when pc\n---\nrule"
+    r = promoter.promote({"action": "create", "name": "pc", "level": "project",
+                          "body": body, "reason": "r", "evidence": "e"}, roots=roots)
+    assert r["ok"]
+    assert sidecar.read("project", "pc", root).get("patch", 0) == 0
+    r = promoter.promote({"action": "update", "name": "pc",
+                          "body": body + "2", "reason": "r", "evidence": "e"}, roots=roots)
+    assert r["ok"]
+    assert sidecar.read("project", "pc", root)["patch"] == 1
+
+
+# --- absorbed_into fail-closed + run-level verdict account (Phase 12, directions D/B) ---
+
+def _mk_agent(roots, name):
+    body = f"---\nname: {name}\ndescription: use when {name}\n---\nrule"
+    r = promoter.promote({"action": "create", "name": name, "level": "project",
+                          "body": body, "reason": "r", "evidence": "e"}, roots=roots)
+    assert r["ok"]
+
+
+def _roots12(tmp_path):
+    return {"project": tmp_path / "p", "global": tmp_path / "g"}
+
+
+def test_delete_with_live_umbrella_lands_and_ledgers(tmp_path):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "umbrella")
+    _mk_agent(roots, "narrow")
+    r = promoter.promote({"action": "delete", "name": "narrow", "reason": "merged",
+                          "evidence": "e", "absorbed_into": "umbrella"}, roots=roots)
+    assert r["ok"]
+    # the ledger travels with the archived dir, so retirement provenance stays readable
+    led = ledger.read("project", "narrow", roots["project"], archived=True)[-1]
+    assert led["absorbed_into"] == "umbrella"  # consolidated vs pruned, distinguishable
+
+
+def test_delete_with_hallucinated_umbrella_rejected(tmp_path):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    r = promoter.promote({"action": "delete", "name": "narrow", "reason": "merged",
+                          "evidence": "e", "absorbed_into": "ghost"}, roots=roots)
+    assert not r["ok"] and any(f[0] == "absorbed_into" for f in r["findings"])
+    assert skill_store.exists("project", "narrow", roots["project"])  # fail-closed: nothing archived
+
+
+def test_delete_absorbed_into_non_agent_target_rejected(tmp_path):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    skill_store.write_body("project", "usermade", "---\nname: usermade\ndescription: d\n---\nb",
+                           roots["project"])  # no sidecar -> not agent-created
+    r = promoter.promote({"action": "delete", "name": "narrow", "reason": "m",
+                          "evidence": "e", "absorbed_into": "usermade"}, roots=roots)
+    assert not r["ok"] and any(f[0] == "absorbed_into" for f in r["findings"])
+
+
+def test_delete_absorbed_into_traversal_rejected(tmp_path):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    r = promoter.promote({"action": "delete", "name": "narrow", "reason": "m",
+                          "evidence": "e", "absorbed_into": "../../etc"}, roots=roots)
+    assert not r["ok"]
+    assert skill_store.exists("project", "narrow", roots["project"])
+
+
+def test_drain_writes_run_account_and_last_run(tmp_path):
+    roots = _roots12(tmp_path)
+    intent_queue.append("acct", {"action": "create", "name": "ok1", "level": "project",
+                                 "body": "---\nname: ok1\ndescription: use when ok\n---\nr",
+                                 "reason": "r", "evidence": "e"}, roots["project"])
+    intent_queue.append("acct", {"action": "create", "name": "bad", "level": "project",
+                                 "body": "no frontmatter", "reason": "r", "evidence": "e"},
+                        roots["project"])
+    promoter.drain("acct", roots=roots)
+    state = layer.state_dir("project", roots["project"])
+    run = json.loads((state / "runs" / "acct.json").read_text())
+    assert [v["ok"] for v in run["verdicts"]] == [True, False]
+    last = json.loads((state / "last_run.json").read_text())
+    assert last["landed"] == 1 and last["rejected"] == 1

@@ -53,3 +53,8 @@ def test_curator_is_iterative():
 def test_curator_judges_by_maintainer_bar_not_pairwise():
     body = AGENT.read_text().lower()
     assert "maintainer" in body  # "would a maintainer write N skills or one with N subsections?"
+
+
+def test_curator_requires_absorbed_into_on_delete():
+    body = AGENT.read_text()
+    assert "absorbed_into" in body  # field is mandatory language for the curator (fail-closed downstream)
