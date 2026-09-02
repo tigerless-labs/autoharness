@@ -1,6 +1,6 @@
 ---
 name: learn
-description: Distill a reusable skill from the current session on demand. Use when the user says "/learn", "learn this", "记住这个做法", or asks to save/capture the workflow or lesson just worked through.
+description: Distills this session into a reusable skill. Use when the user says "/learn", "learn this", "记住这个做法", or asks to save or capture the workflow or lesson just worked through.
 category: general
 ---
 # Learn: distill this session into the skill library

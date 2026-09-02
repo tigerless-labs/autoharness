@@ -37,6 +37,10 @@ _QUOTED_PHRASE = re.compile(r'"[^"]+"|\'[^\']+\'|`[^`]+`')
 _WHEN = re.compile(r"(?i)\bwhen")
 
 
+def _has_cue(text):
+    return bool(_WHEN.search(text) or _QUOTED_PHRASE.search(text))
+
+
 def _frontmatter(body):
     m = _FRONTMATTER.match(body)
     if not m:
@@ -65,10 +69,15 @@ def _description_findings(desc):
         findings.append(("description",
                          f"description is {len(desc)} chars (> {config.SKILL_DESC_MAX_CHARS}); "
                          "the host matches on it and truncates past the cap"))
-    if not (_WHEN.search(desc) or _QUOTED_PHRASE.search(desc)):
+    if not _has_cue(desc):
         findings.append(("trigger",
                          "description has no trigger cue: add 'use when …' and/or a literal phrase "
                          "the user would type — an abstract topic-label never fires"))
+    elif not _has_cue(desc[:config.INDEX_DESC_MAX_CHARS]):
+        findings.append(("trigger",
+                         f"the trigger cue lands past char {config.INDEX_DESC_MAX_CHARS}, where the "
+                         "session-start index truncates every line — on our own recall surface this "
+                         "description is half a sentence. Lead with the cue, then the detail"))
     return findings
 
 
