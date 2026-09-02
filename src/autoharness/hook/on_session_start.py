@@ -23,10 +23,34 @@ INDEX_HEADER = (
     "Self-accumulated skills (autoharness-managed). When the task at hand matches a "
     "description below, you MUST consider loading that skill before proceeding."
 )
+DEMOTION_NOTE = (
+    "(Categories marked [names only] are outside this session's budget, so their descriptions are "
+    "omitted — the skills still load normally by name.)"
+)
 
 
 def _sanitize(text, limit):
     return " ".join(str(text).split())[:limit]  # line-based surface: newlines are forgery, collapse them
+
+
+def _demoted(groups, budget):
+    """Which categories collapse to a names-only line so the index fits its budget.
+
+    Ranked by use per entry — what a category earns for the lines it costs — ascending, so the
+    coldest give up their descriptions first. Demotion is the only lever: an entry is never dropped
+    (mng.md), so the floor is one line per category and a budget below that simply demotes all.
+    """
+    cost = sum(1 + len(v) for v in groups.values())
+    if not budget or cost <= budget:
+        return frozenset()
+    ranked = sorted(groups, key=lambda c: (sum(u for _, u in groups[c]) / len(groups[c]), c))
+    demoted = set()
+    for cat in ranked:
+        if cost <= budget:
+            break
+        demoted.add(cat)
+        cost -= len(groups[cat])  # the header line stays, its entries fold into it
+    return frozenset(demoted)
 
 
 def recall_index(roots):
@@ -43,13 +67,22 @@ def recall_index(roots):
             fm = validate._frontmatter(path.read_text()) or {}
             desc = _sanitize(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
-            groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]: {desc}")
+            entry = f"- {_sanitize(name, 64)} [{lyr}]: {desc}"
+            groups.setdefault(cat, []).append((entry, sidecar.read(lyr, name, root).get("use", 0)))
     if not groups:
         return None  # empty library -> zero injection
+    demoted = _demoted(groups, config.INDEX_MAX_LINES)
     lines = [INDEX_HEADER, ""]
+    if demoted:
+        lines += [DEMOTION_NOTE, ""]
     for cat in sorted(groups):
+        entries = sorted(e for e, _ in groups[cat])
+        if cat in demoted:
+            names = ", ".join(e.split(" [", 1)[0][2:] for e in entries)
+            lines.append(f"## {cat} [names only]: {names}")
+            continue
         lines.append(f"## {cat}")
-        lines.extend(sorted(groups[cat]))
+        lines.extend(entries)
     return "\n".join(lines)
 
 
