@@ -1,3 +1,5 @@
+import json
+
 from autoharness import config
 from autoharness.hook import on_session_start
 from autoharness.lib import layer, sidecar, skill_store
@@ -178,3 +180,23 @@ def test_summary_shown_even_with_empty_library(tmp_path):
                                                       "families": ["safety"], "absorbed": 0}))
     out = on_session_start.on_session_start(roots=roots)
     assert out["context"] and "rejected 3" in out["context"]  # anti-silence beats empty-index None
+
+
+def test_summary_line_reports_uncategorized_landings(tmp_path):
+    # fail-open still has to be visible: a run that landed skills without a category says so
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "last_run.json").write_text(json.dumps(
+        {"run_id": "r1", "landed": 2, "rejected": 0, "absorbed": 0, "families": [], "uncategorized": 2}))
+    line = on_session_start.last_run_summary(roots)
+    assert "2" in line and "categor" in line.lower()
+
+
+def test_summary_line_silent_when_all_categorized(tmp_path):
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "last_run.json").write_text(json.dumps(
+        {"run_id": "r1", "landed": 2, "rejected": 0, "absorbed": 0, "families": [], "uncategorized": 0}))
+    assert "categor" not in on_session_start.last_run_summary(roots).lower()

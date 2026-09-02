@@ -181,7 +181,19 @@ def promote(intent, *, roots=None, repo_name=None):
         _land(action, intent, body, level, name, root)
     except ValueError as exc:
         return _reject(action, level, [("landing", str(exc))])
-    return {"ok": True, "action": action, "level": level, "findings": []}
+    return {"ok": True, "action": action, "level": level, "findings": [], "notes": _notes(action, body)}
+
+
+def _notes(action, body):
+    """Fail-open observations on a landed intent: not a rejection, not silence either.
+
+    A missing category only groups the skill badly (the index falls back to `general`), so refusing
+    real content over it is out of proportion — the opposite call from the description gate, where a
+    cue-less description can never be recalled at all. It still has to reach the account, or the
+    library drifts into one flat group with nobody noticing."""
+    if action not in ("create", "update"):
+        return []
+    return [] if (validate._frontmatter(body) or {}).get("category") else ["category"]
 
 
 def sweep(roots=None):
@@ -197,7 +209,7 @@ def _account(run_id, intents, verdicts, proot):
     facts, so a rejected create would vanish without trace — this account is where verdicts live.
     last_run.json feeds the one-line SessionStart summary and is consumed after one injection."""
     rows = [{"action": v.get("action"), "name": i.get("name"), "ok": v["ok"],
-             "findings": [f[0] for f in v.get("findings", [])]}
+             "findings": [f[0] for f in v.get("findings", [])], "notes": v.get("notes", [])}
             for i, v in zip(intents, verdicts, strict=True)]
     landed = sum(1 for r in rows if r["ok"])
     absorbed = sum(1 for i, v in zip(intents, verdicts, strict=True)
@@ -211,7 +223,9 @@ def _account(run_id, intents, verdicts, proot):
     atomic.write_text(state / "last_run.json",
                       json.dumps({"run_id": run_id, "landed": landed,
                                   "rejected": len(rows) - landed, "absorbed": absorbed,
-                                  "families": families}, ensure_ascii=False))
+                                  "families": families,
+                                  "uncategorized": sum(1 for r in rows if "category" in r["notes"])},
+                                 ensure_ascii=False))
 
 
 def drain(run_id, *, roots=None, repo_name=None):

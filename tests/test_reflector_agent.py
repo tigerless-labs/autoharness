@@ -77,3 +77,12 @@ def test_prompt_carries_reconcile_duty():
     # F1 (new-supersedes-old): a distilled new rule must hunt down contradicting old statements
     body = AGENT.read_text().lower()
     assert "supersede" in body or "contradict" in body
+
+
+def test_reflector_picks_category_from_the_injected_index():
+    # our defence against category inflation: hermes gets it free (categories are directories the
+    # model already sees); we have to say it, because the field is free text
+    body = AGENT.read_text().lower()
+    assert "category" in body and "index" in body
+    i = body.index("`category:`")
+    assert "index" in body[i - 400:i + 400]
