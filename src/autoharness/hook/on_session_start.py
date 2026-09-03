@@ -64,6 +64,8 @@ def _demoted(groups, budget):
 
 
 def recall_index(roots):
+    if config.INDEX_SUSPENDED:
+        return None
     groups = {}
     for lyr in layer.LAYERS:
         root = roots.get(lyr)

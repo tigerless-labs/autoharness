@@ -95,6 +95,7 @@ configure unless you want to change the pace.
 
 | Variable | Default | What it does |
 |---|---|---|
+| `AUTOHARNESS_INDEX_SUSPENDED` | `0` | Set to `1` to stop injecting the index entirely. Everything else keeps running — the lifecycle pass, the use/view counters, the last-run summary — so this is the switch for measuring what the index is actually worth, and for anyone unwilling to spend the context on it. |
 | `AUTOHARNESS_INDEX_MAX_LINES` | `0` | Budget for the session-start index, counted in rendered lines. Over it, whole categories collapse to a single names-only line — least-used first, and never removed, because a name that leaves the index is a capability the model stops reaching for. `0` disables the budget, which is the shipping default until there is a measured recall baseline: the ranking reads use counts, and a low count today may only mean the skill was never offered. |
 | `AUTOHARNESS_INDEX_DESC_MAX_CHARS` | `60` | Per-line description budget in the session-start index. The index is a scan surface, not the full trigger text — raise it for longer lines, at the cost of context on every session. |
 | `AUTOHARNESS_SKILL_DESC_MAX_CHARS` | `1024` | Hard cap on a skill's own description, matching the host's documented limit; a longer one is rejected rather than silently truncated at load. |

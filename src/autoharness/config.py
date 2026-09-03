@@ -49,6 +49,11 @@ INDEX_DESC_MAX_CHARS = _int_env("AUTOHARNESS_INDEX_DESC_MAX_CHARS", 60)
 # recall baseline exists: the ranking eats use counts, and while surfacing itself is unverified a low
 # count may only mean "never offered".
 INDEX_MAX_LINES = _int_env("AUTOHARNESS_INDEX_MAX_LINES", 0)
+# self-injection off switch: the index stops being emitted, everything else (lifecycle pass,
+# use/view counters, the last-run summary) is untouched. Needed because the only other way to run
+# without the index is to run without the plugin — which also removes the counters that measure the
+# result. Also a legitimate operator knob for anyone unwilling to spend the context every session.
+INDEX_SUSPENDED = bool(_int_env("AUTOHARNESS_INDEX_SUSPENDED", 0))
 
 # folder-skill subfile caps (ponytail: placeholders like STAGE_MAX_BODY_BYTES, calibrate in experiments/)
 STAGE_MAX_FILES = 8
