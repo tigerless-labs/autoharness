@@ -281,3 +281,28 @@ def test_index_leaves_a_fitting_description_alone(tmp_path):
     _seed_desc(roots, "modern", "Use when auditing a repo.")
     ctx = on_session_start.recall_index(roots)
     assert "Use when auditing a repo." in ctx and "..." not in ctx
+
+
+def test_index_suspended_injects_nothing_but_keeps_counting(tmp_path, monkeypatch):
+    # the A/B arm E9 needs: the recall index off while every other part of the pipeline — the
+    # lifecycle pass, the use/view counters, the last-run summary — behaves identically. Without it
+    # the only way to get a no-index arm is to run without the plugin, which also removes the
+    # instrument measuring the result.
+    roots = _roots(tmp_path)
+    _seed_desc(roots, "a-skill", "use when a", category="ops")
+    monkeypatch.setattr(config, "INDEX_SUSPENDED", True)
+    assert on_session_start.recall_index(roots) is None
+    out = on_session_start.on_session_start(roots=roots)
+    assert out["context"] is None
+    assert "project" in out["archived"]  # lifecycle still ran
+
+
+def test_index_suspended_still_lets_the_summary_through(tmp_path, monkeypatch):
+    # suspending the index must not suppress the anti-silence line: they are separate obligations
+    roots = _roots(tmp_path)
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "last_run.json").write_text(json.dumps(
+        {"run_id": "r1", "landed": 1, "rejected": 0, "absorbed": 0, "families": []}))
+    monkeypatch.setattr(config, "INDEX_SUSPENDED", True)
+    assert "landed 1" in on_session_start.on_session_start(roots=roots)["context"]
