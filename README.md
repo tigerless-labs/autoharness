@@ -241,6 +241,9 @@ benchmark exists.
 auto-skill-creation and memory-consolidation design helped sharpen autoharness's adherence-based,
 daemon-free take.
 
+[AI Coding Tools (Tigerless Labs Workflow 2026)](https://www.youtube.com/watch?v=TM6tGpug1Hc) —
+a third-party walkthrough by the AI Insider channel; not ours, and not reviewed by us.
+
 Built by Tigerless Labs.
 
 ## License
