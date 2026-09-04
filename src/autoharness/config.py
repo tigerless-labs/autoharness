@@ -43,12 +43,6 @@ SKILL_DESC_MAX_CHARS = _int_env("AUTOHARNESS_SKILL_DESC_MAX_CHARS", 1024)
 # self-injected recall index (SessionStart additionalContext): per-line description truncation,
 # mirroring Hermes's tier-0 index discipline — the index is a scan surface, not the full trigger text.
 INDEX_DESC_MAX_CHARS = _int_env("AUTOHARNESS_INDEX_DESC_MAX_CHARS", 60)
-# injection budget: rendered index lines (category headers + entries). Over it, whole categories
-# collapse to one names-only line, least-earned first — never removed (mng.md: a name that leaves the
-# index is a capability the model stops reaching for). 0 = no budget, the shipping default until the
-# recall baseline exists: the ranking eats use counts, and while surfacing itself is unverified a low
-# count may only mean "never offered".
-INDEX_MAX_LINES = _int_env("AUTOHARNESS_INDEX_MAX_LINES", 0)
 # self-injection off switch: the index stops being emitted, everything else (lifecycle pass,
 # use/view counters, the last-run summary) is untouched. Needed because the only other way to run
 # without the index is to run without the plugin — which also removes the counters that measure the
