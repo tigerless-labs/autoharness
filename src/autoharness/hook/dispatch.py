@@ -22,7 +22,13 @@ import subprocess
 import sys
 
 from autoharness import config
-from autoharness.hook import on_session_end, on_session_start, on_skill_call, on_stop
+from autoharness.hook import (
+    on_session_end,
+    on_session_start,
+    on_skill_call,
+    on_stop,
+    promoter,
+)
 from autoharness.lib import counters, layer
 
 _SANITIZE = re.compile(r"[^A-Za-z0-9_-]")
@@ -88,6 +94,7 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
                 return {"handled": name, "result": {"triggered": False, "reason": "recursion_guard"}}
             counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG denominator (per turn)
             pcount = counters.bump_request(layer.PROJECT, proot)
+            promoter.drain(config.INTERACTIVE_RUN_ID, roots=roots)  # /learn and other in-session proposals; no-op when empty
             result = on_stop.on_stop(event, root=proot)
             if result.get("triggered"):
                 fire(event, result, roots)

@@ -79,4 +79,9 @@ REFLECTOR_AGENT = "autoharness:reflector"  # the --agent reference for spawn (pl
 CURATOR_AGENT = "autoharness:curator"      # the --agent reference for the periodic consolidation pass (same spawn chain as reflector)
 CLAUDE_BIN = "claude"                       # the child-session executable for spawn; PATH resolution, overridable in tests
 RUN_ID_ENV = "AUTOHARNESS_RUN_ID"           # spawn injects the intent-queue run_id into the child session via env (read by stage_skill)
+# The queue for intents staged from a live user session (/learn, or the model acting on its own).
+# spawn injects a run id into every child it launches and drains that run when the child exits; a
+# user's own session has neither, so before this existed stage_skill refused with "unsafe run id"
+# and the shipped learn skill could never land anything. The main session's Stop drains this queue.
+INTERACTIVE_RUN_ID = "interactive"
 PROJECT_ROOT_ENV = "AUTOHARNESS_PROJECT_ROOT"  # same: repo root (where the queue is persisted)

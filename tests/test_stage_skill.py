@@ -384,3 +384,19 @@ def test_stage_accepts_a_description_inside_the_budget(tmp_path):
     out = server.stage({"action": "create", "name": "foo", "level": "project", "body": body,
                         "reason": "r", "evidence": "e"}, run_id="rb2", root=tmp_path)
     assert out["ok"] and len(list(intent_queue.read("rb2", tmp_path))) == 1
+
+
+def test_serve_without_run_id_env_uses_the_interactive_queue(tmp_path, monkeypatch):
+    # A live user session (/learn, or the model on its own) has no spawn-injected run id. The first
+    # real report from such a session was "unsafe run id" — the tool refused, and the learn skill had
+    # never been able to land anything. Absence of the env must mean "the interactive queue", not "no".
+    import io
+    monkeypatch.delenv(config.RUN_ID_ENV, raising=False)
+    monkeypatch.setenv(config.PROJECT_ROOT_ENV, str(tmp_path))
+    req = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+           "params": {"name": "stage_skill", "arguments": _params()}}
+    out = io.StringIO()
+    server.serve(stdin=io.StringIO(json.dumps(req) + "\n"), stdout=out)
+    reply = json.loads(out.getvalue().strip().splitlines()[-1])
+    assert "unsafe" not in json.dumps(reply)
+    assert len(list(intent_queue.read(config.INTERACTIVE_RUN_ID, tmp_path))) == 1
