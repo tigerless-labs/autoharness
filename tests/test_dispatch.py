@@ -257,3 +257,44 @@ def test_child_session_write_denied(tmp_path, monkeypatch):
     v = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Write",
                            "session_id": "s7"}, roots=_roots(tmp_path))
     assert v.get("deny")
+
+
+def _interactive_intent(name="learned"):
+    return {"action": "create", "name": name, "level": "project", "reason": "r", "evidence": "e",
+            "body": f"---\nname: {name}\ndescription: Use when a learned thing applies.\n---\nRule.\n"}
+
+
+def test_main_session_stop_drains_the_interactive_queue(tmp_path, monkeypatch):
+    # nothing else drains it: spawn drains only its own run ids after a child exits. Without this a
+    # /learn proposal sits in the queue forever and the skill's own promise ("lands; reported next
+    # session start") is false.
+    from autoharness.lib import intent_queue, skill_store
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    monkeypatch.delenv(config.CHILD_SESSION_ENV, raising=False)
+    intent_queue.append(config.INTERACTIVE_RUN_ID, _interactive_intent(), roots["project"])
+    dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"}, roots=roots, reflect=lambda *a: None)
+    assert skill_store.exists("project", "learned", roots["project"])
+    assert not list(intent_queue.read(config.INTERACTIVE_RUN_ID, roots["project"]))
+
+
+def test_child_session_stop_leaves_the_interactive_queue_alone(tmp_path, monkeypatch):
+    # a child has its own run id and spawn drains it; touching the user's queue from there would be
+    # a reflector landing user proposals under the reflector's identity
+    from autoharness.lib import intent_queue
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    intent_queue.append(config.INTERACTIVE_RUN_ID, _interactive_intent(), roots["project"])
+    dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"}, roots=roots, reflect=lambda *a: None)
+    assert len(list(intent_queue.read(config.INTERACTIVE_RUN_ID, roots["project"]))) == 1
+
+
+def test_stop_with_empty_interactive_queue_writes_no_run_account(tmp_path, monkeypatch):
+    # every turn drains; an empty drain must not leave a runs/ file or a last_run summary behind,
+    # or the next session start would report a run that never happened
+    from autoharness.lib import layer
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    monkeypatch.delenv(config.CHILD_SESSION_ENV, raising=False)
+    dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1"}, roots=roots, reflect=lambda *a: None)
+    state = layer.state_dir("project", roots["project"])
+    assert not (state / "last_run.json").exists()
+    assert not list((state / "runs").glob("*.json")) if (state / "runs").exists() else True

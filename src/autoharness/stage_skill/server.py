@@ -204,7 +204,7 @@ def handle(request, *, run_id, root=None):
 def serve(stdin=None, stdout=None):
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
-    run_id = os.environ.get(config.RUN_ID_ENV, "")
+    run_id = os.environ.get(config.RUN_ID_ENV) or config.INTERACTIVE_RUN_ID
     root = os.environ.get(config.PROJECT_ROOT_ENV) or None
     for line in stdin:
         line = line.strip()
