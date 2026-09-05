@@ -19,7 +19,12 @@ TRUNCATION_MARK = "...[truncated]"
 
 
 def _clip(line, cap):
-    return line if len(line) <= cap else line[:cap] + TRUNCATION_MARK
+    """Clip *line* so its UTF-8 encoding stays within *cap* bytes."""
+    encoded = line.encode("utf-8")
+    if len(encoded) <= cap:
+        return line
+    truncated = encoded[:cap].decode("utf-8", errors="ignore")
+    return truncated + TRUNCATION_MARK
 
 
 def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes=None,
@@ -37,7 +42,7 @@ def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes
              for line in data[offset:].decode("utf-8", errors="replace").splitlines()]
     kept, total = [], 0
     for line in reversed(lines):
-        total += len(line) + 1
+        total += len(line.encode("utf-8")) + 1
         if total > window_cap:
             kept.append(TRUNCATION_MARK)
             break
