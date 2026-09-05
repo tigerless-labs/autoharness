@@ -13,6 +13,8 @@ skill_store.archive on each.
 ponytail: a rolling-window rate is deferred (open in mng.md).
 """
 
+import hashlib
+
 
 def _rate(use, denom):
     return use / denom if denom else 0.0
@@ -36,6 +38,6 @@ def evaluate(members, request_count, *, maturity, capacity, review_suspended=Fal
             continue  # spared zero-use symbols stay out of the pool either way
         survivors.append((_rate(use, denom), m["name"]))
     if len(survivors) > capacity:
-        survivors.sort(key=lambda rn: rn)  # ascending rate, ties broken stably by name
+        survivors.sort(key=lambda rn: (rn[0], hashlib.md5(rn[1].encode()).digest()))  # rate then deterministic hash
         archive.update(name for _, name in survivors[: len(survivors) - capacity])
     return sorted(archive)
