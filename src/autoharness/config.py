@@ -12,9 +12,13 @@ from autoharness.lib import layer
 
 
 def _int_env(name, default):
+    import warnings
     try:
         return int(os.environ[name])
-    except (KeyError, ValueError):
+    except KeyError:
+        return default
+    except ValueError:
+        warnings.warn(f"{name}={os.environ[name]!r} is not a valid integer; using default {default}", stacklevel=2)
         return default
 
 
@@ -47,7 +51,15 @@ INDEX_DESC_MAX_CHARS = _int_env("AUTOHARNESS_INDEX_DESC_MAX_CHARS", 60)
 # use/view counters, the last-run summary) is untouched. Needed because the only other way to run
 # without the index is to run without the plugin — which also removes the counters that measure the
 # result. Also a legitimate operator knob for anyone unwilling to spend the context every session.
-INDEX_SUSPENDED = bool(_int_env("AUTOHARNESS_INDEX_SUSPENDED", 0))
+def _bool_env(name, default):
+    val = _int_env(name, int(default))
+    if val not in (0, 1):
+        import warnings
+        warnings.warn(f"{name}={val} should be 0 or 1; treating non-zero as True", stacklevel=2)
+    return bool(val)
+
+
+INDEX_SUSPENDED = _bool_env("AUTOHARNESS_INDEX_SUSPENDED", False)
 
 # folder-skill subfile caps (ponytail: placeholders like STAGE_MAX_BODY_BYTES, calibrate in experiments/)
 STAGE_MAX_FILES = 8
@@ -61,7 +73,7 @@ CAPACITY = {layer.GLOBAL: _int_env("AUTOHARNESS_CAPACITY_GLOBAL", 20),
             layer.PROJECT: _int_env("AUTOHARNESS_CAPACITY_PROJECT", 50)}
 # graduation-review suspend gate (direction C): while the recall surface is known-broken, archiving
 # for zero use buries surfacing's failure — flip on to park the review, capacity contention unaffected.
-GRADUATION_REVIEW_SUSPENDED = bool(_int_env("AUTOHARNESS_GRADUATION_SUSPENDED", 0))
+GRADUATION_REVIEW_SUSPENDED = _bool_env("AUTOHARNESS_GRADUATION_SUSPENDED", False)
 SNAPSHOT_KEEP = _int_env("AUTOHARNESS_SNAPSHOT_KEEP", 5)  # curator pre-run library snapshots per layer (mirrors Hermes)
 
 _LIB = Path(__file__).parent / "lib"
