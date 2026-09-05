@@ -71,13 +71,19 @@ def last_run_summary(roots):
     p = layer.state_dir(layer.PROJECT, roots.get(layer.PROJECT)) / "last_run.json"
     if not p.exists():
         return None
+    # Atomic rename to claim the file; concurrent callers get OSError and return None
+    consumed = p.with_suffix(".json.consuming")
     try:
-        last = json.loads(p.read_text())
+        p.rename(consumed)
+    except OSError:
+        return None
+    try:
+        last = json.loads(consumed.read_text())
     except (ValueError, OSError):
         return None
     finally:
         try:
-            p.unlink()
+            consumed.unlink()
         except OSError:
             pass
     line = (f"autoharness last run: landed {last.get('landed', 0)}, "
