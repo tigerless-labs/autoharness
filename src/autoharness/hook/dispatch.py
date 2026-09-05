@@ -15,6 +15,7 @@ platform contract pins the details:
 
 ponytail: detached launch is a fire-and-forget Popen; robustness of orphan / timeout isolation left for observation.
 """
+import hashlib
 import json
 import os
 import re
@@ -40,12 +41,18 @@ def _roots(roots):
 
 
 def _run_id(result):
-    sid = _SANITIZE.sub("", str(result.get("session_id") or "")) or "run"
+    raw = str(result.get("session_id") or "")
+    sid = _SANITIZE.sub("", raw)
+    if not sid:
+        sid = hashlib.sha256(raw.encode()).hexdigest()[:8] if raw else "run"
     return f"{sid}-{result.get('count', 0)}"
 
 
 def _curate_run_id(event, pcount):
-    sid = _SANITIZE.sub("", str(event.get("session_id") or "")) or "run"
+    raw = str(event.get("session_id") or "")
+    sid = _SANITIZE.sub("", raw)
+    if not sid:
+        sid = hashlib.sha256(raw.encode()).hexdigest()[:8] if raw else "run"
     return f"{sid}-c{pcount}"  # keyed on the monotonic request count → unique per curator launch
 
 
@@ -55,13 +62,17 @@ def _is_reflector(event):
 
 
 def _detached_launch(transcript_path, session_id, run_id, roots):
-    subprocess.Popen(  # host-detach: fire-and-forget so the Stop hook returns immediately
-        [sys.executable, "-m", "autoharness.hook.spawn",
-         str(transcript_path), str(session_id), run_id,
-         str(roots[layer.PROJECT]), str(roots[layer.GLOBAL])],
-        start_new_session=True, stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+    try:
+        subprocess.Popen(  # host-detach: fire-and-forget so the Stop hook returns immediately
+            [sys.executable, "-m", "autoharness.hook.spawn",
+             str(transcript_path), str(session_id), run_id,
+             str(roots[layer.PROJECT]), str(roots[layer.GLOBAL])],
+            start_new_session=True, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        return {"error": f"detached_launch failed: {type(exc).__name__}: {exc}"}
+    return None
 
 
 def _reflect(event, result, roots, launch=None):
