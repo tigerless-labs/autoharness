@@ -2,7 +2,7 @@ import re
 import sys
 from pathlib import Path
 
-_MD_LINK = re.compile(r"\]\(\s*([^)\s]+?\.md)(?:#[^)]*)?\s*\)")
+_MD_LINK = re.compile(r"\]\(\s*([^)\s?#]+?\.md)(?:[?#][^)]*)?\s*\)")
 _EXTERNAL = re.compile(r"^[a-z][a-z0-9+.-]*://")
 
 
@@ -31,6 +31,8 @@ def selftest():
     assert list(local_md_targets("see [x](a/b.md) and [ext](https://h.md)")) == ["a/b.md"]
     assert list(local_md_targets("anchor [y](../c/d.md#sec) ok")) == ["../c/d.md"]
     assert list(local_md_targets("plain `path.md` backtick, [[wiki]] prose")) == []
+    assert list(local_md_targets("query [z](file.md?v=2) ok")) == ["file.md"]
+    assert list(local_md_targets("both [w](file.md?v=2#sec) ok")) == ["file.md"]
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / ".archive").mkdir()
