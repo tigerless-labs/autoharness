@@ -77,7 +77,8 @@ def digest(transcript_path, end_offset, *, max_exchanges=None, max_record_chars=
     path = Path(transcript_path)
     if not path.exists() or end_offset <= 0:
         return ""
-    data = path.read_bytes()[:end_offset]
+    with open(path, "rb") as f:
+        data = f.read(end_offset)
     kept, total, users_seen = [], 0, 0
     for line in reversed(data.decode("utf-8", errors="replace").splitlines()):
         try:
