@@ -284,3 +284,15 @@ def test_category_rejects_path_and_unsafe_segments():
         v = validate.validate({"action": "create", "level": "project", "name": "x",
                                "reason": "r", "evidence": "e"}, _body_with_category(bad))
         assert [f for f in v["findings"] if f[0] == "category"], bad
+
+def test_frontmatter_mixed_quotes():
+    # Single quote wrapping double quote should not be stripped
+    body = "---\nname: foo\ndescription: 'he said \"hello\"'\n---\n# Foo\n"
+    from autoharness.lib.validate import _frontmatter
+    fm = _frontmatter(body)
+    assert fm["description"] == 'he said "hello"'
+    
+    # Unmatched quotes should not be stripped
+    body2 = "---\nname: bar\ndescription: \"unmatched'\n---\n# Bar\n"
+    fm2 = _frontmatter(body2)
+    assert fm2["description"] == "\"unmatched'"
