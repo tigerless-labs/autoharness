@@ -151,6 +151,8 @@ def _intent(params):
         intent["new_string"] = params["new_string"]
     elif action == "remove_file":
         intent["path"] = params["path"]
+    if action == "delete" and params.get("absorbed_into"):
+        intent["absorbed_into"] = params["absorbed_into"]
     return intent
 
 
