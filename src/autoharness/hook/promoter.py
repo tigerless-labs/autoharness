@@ -28,6 +28,7 @@ ponytail: a single synchronous process already satisfies "serial single writer";
 """
 import hashlib
 import json
+import re
 
 from autoharness.lib import (
     atomic,
@@ -109,7 +110,9 @@ def _remove_subfile(level, name, rel, root):
     if not p.resolve().is_relative_to(sdir):
         raise ValueError(f"subfile escapes the skill dir: {rel}")
     live = skill_store.read_body(level, name, root) or ""
-    if rel in live:
+    # Use word-boundary check so scripts/run.py does not match scripts/run.py.bak
+    _ref = re.compile(r"(?<![A-Za-z0-9_./-])" + re.escape(rel) + r"(?![A-Za-z0-9_./-])")
+    if _ref.search(live):
         raise ValueError(f"{rel} is still referenced by the live SKILL.md (patch the pointer out first)")
     if p.is_file():
         p.unlink()
