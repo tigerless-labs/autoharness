@@ -20,11 +20,11 @@ pattern = '''xox[abprs]-[A-Za-z0-9-]{10,}'''
 
 [[secret]]
 name = "bearer_token"
-pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{20,}'''
+pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{32,}'''
 
 [[secret]]
 name = "api_key_assignment"
-pattern = '''(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['"]?[A-Za-z0-9._\-/+]{12,}'''
+pattern = '''(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['"]?[A-Za-z0-9._\-/+]{20,}'''
 
 [[pii]]
 name = "email"
