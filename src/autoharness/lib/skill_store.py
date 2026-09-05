@@ -9,6 +9,7 @@ LED/sidecar); landing a delete and MNG (Phase 6) eviction share this one path.
 """
 import os
 import shutil
+import time
 
 from autoharness.lib import atomic, layer
 
@@ -62,7 +63,8 @@ def archive(lyr, name, root=None):
     dest = layer.archive_dir(lyr, root) / name
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
-        shutil.rmtree(dest)
+        ts = time.strftime("%Y%m%dT%H%M%S")
+        dest = dest.parent / f"{name}.{ts}"
     os.replace(sdir, dest)
     return dest
 
@@ -74,7 +76,8 @@ def restore(lyr, name, root=None):
     dest = layer.symbol_dir(lyr, name, root)
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
-        shutil.rmtree(dest)
+        ts = time.strftime("%Y%m%dT%H%M%S")
+        dest = dest.parent / f"{name}.{ts}"
     os.replace(src, dest)
     return dest
 
