@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -147,3 +148,43 @@ def test_project_root_global_layer_unaffected(linked_worktree, monkeypatch):
     monkeypatch.chdir(linked_worktree)
     assert layer.default_root(layer.GLOBAL) == layer.default_root(layer.GLOBAL)
     assert ".claude/worktrees" not in str(layer.default_root(layer.GLOBAL))
+
+
+# --- operator-configured locations ---
+
+def test_project_dir_knob_renames_the_layer_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTOHARNESS_PROJECT_DIR", ".agents")
+    assert _project_root_at(monkeypatch, tmp_path) == tmp_path / ".agents"
+
+
+def test_global_root_follows_claude_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "profile"))
+    assert layer.default_root(layer.GLOBAL) == tmp_path / "profile"
+
+
+def test_global_dir_knob_wins_over_claude_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "profile"))
+    monkeypatch.setenv("AUTOHARNESS_GLOBAL_DIR", str(tmp_path / "agents"))
+    assert layer.default_root(layer.GLOBAL) == tmp_path / "agents"
+
+
+def test_global_root_defaults_to_home_claude():
+    assert layer.default_root(layer.GLOBAL) == Path.home() / ".claude"
+
+
+@pytest.mark.parametrize("lyr", layer.LAYERS)
+def test_state_home_moves_state_and_archive_out_of_the_root(tmp_path, monkeypatch, lyr):
+    monkeypatch.setenv("AUTOHARNESS_STATE_HOME", str(tmp_path / "state"))
+    root = tmp_path / "repo" / ".agents"
+    state = layer.state_dir(lyr, root)
+    assert state.is_relative_to(tmp_path / "state")
+    assert not state.is_relative_to(root)
+    assert layer.archive_dir(lyr, root).is_relative_to(state)
+    assert layer.skills_dir(lyr, root) == root / "skills"  # live skills stay where the host reads them
+
+
+def test_state_home_keeps_roots_and_layers_apart(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTOHARNESS_STATE_HOME", str(tmp_path / "state"))
+    a, b = tmp_path / "a" / ".agents", tmp_path / "b" / ".agents"
+    assert layer.state_dir("project", a) != layer.state_dir("project", b)
+    assert layer.state_dir("project", a) != layer.state_dir("global", a)

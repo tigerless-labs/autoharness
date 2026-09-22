@@ -29,3 +29,11 @@ def test_idempotent():
     raw = "ping ops@corp.io now"
     once = redact.redact(raw)
     assert redact.redact(once) == once
+
+
+def test_redacts_claude_hosted_addresses_and_identifiers():
+    raw = ("open https://claude.ai/design/p/abc, call api.anthropic.com/v1/x, "
+           "session 123e4567-e89b-12d3-a456-426614174000, bridge cse_0123456789abcdefghijKL")
+    out = redact.redact(raw)
+    for leak in ["claude.ai", "api.anthropic.com", "123e4567", "cse_0123456789abcdefghijKL"]:
+        assert leak not in out, f"leaked: {leak}"

@@ -10,6 +10,7 @@ here: the reflector only appends intents, the promoter exclusively validates and
 
 ponytail: run() is the body of the "detached background job" (synchronous spawn→wait→drain); the "do not block the host Stop" detach is started in the background at the hook top level by the Phase 7 dispatch calling run(). spawn_fn is injectable (system tests use a fake reflector script in place of the real claude). Precise handling of the transcript upper-bound race (cap.md open) is still tolerated at v0.
 """
+import functools
 import os
 import subprocess
 import sys
@@ -36,7 +37,7 @@ def description_index(roots=None, *, agent_only=False):
             fm = validate._frontmatter(path.read_text()) or {}
             name = fm.get("name") or symbol
             desc = fm.get("description") or "(no description)"
-            lines.append(f"- {name} [{lyr}]: {desc}")
+            lines.append(f"- {name} [{lyr}]: {desc} ({path})")
     return "\n".join(lines) if lines else "(no live skills yet)"
 
 
@@ -76,9 +77,15 @@ FORK_INSTRUCTION = (
 )
 
 
+def isolation_args():
+    if not config.CHILD_ISOLATION:
+        return []
+    return ["--setting-sources", "", "--plugin-dir", str(config.PLUGIN_ROOT), "--no-session-persistence"]
+
+
 def build_fork_command(*, session_id, claude_bin):
     return [claude_bin, "-p", "--resume", str(session_id), "--fork-session",
-            "--dangerously-skip-permissions"]
+            "--dangerously-skip-permissions", *isolation_args()]
 
 
 def build_fork_prompt(index, spec):
@@ -93,7 +100,7 @@ def build_command(*, agent, claude_bin):
     # (Read/Grep/Glob/stage_skill) + the top-level PreToolUse write backstop, not by the prompt.
     # (live e2e: a reflector's real stage_skill call gets blocked by the permission gate and can only
     # "narrate"; only with this flag does it land.)
-    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions"]
+    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions", *isolation_args()]
 
 
 def child_env(run_id, root, *, base_env=None):
@@ -104,8 +111,18 @@ def child_env(run_id, root, *, base_env=None):
     return env
 
 
-def _detached_spawn(argv, env, bundle):
-    subprocess.run(argv, input=bundle, text=True, env=env, capture_output=True, check=False)
+def _detached_spawn(argv, env, bundle, cwd=None):
+    subprocess.run(argv, input=bundle, text=True, env=env, cwd=cwd, capture_output=True, check=False)
+
+
+def _launcher(spawn_fn, proot, *, keep_cwd=False):
+    """An isolated child runs from the state directory, so it reads no project CLAUDE.md; a forked
+    one keeps the parent's cwd, because --resume looks the session up by it."""
+    if spawn_fn or keep_cwd or not config.CHILD_ISOLATION:
+        return spawn_fn or _detached_spawn
+    cwd = layer.state_dir(layer.PROJECT, proot)
+    cwd.mkdir(parents=True, exist_ok=True)
+    return functools.partial(_detached_spawn, cwd=str(cwd))
 
 
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
@@ -115,7 +132,8 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     spec = (spec_path or config.FORMAT_SPEC).read_text()
 
     carrier = carrier or config.REFLECTOR_CARRIER
-    if carrier == "fork" and session_id:  # no session to fork -> bundle chain (fail-safe)
+    forked = carrier == "fork" and bool(session_id)
+    if forked:  # no session to fork -> bundle chain (fail-safe)
         argv = build_fork_command(session_id=session_id, claude_bin=claude_bin or config.CLAUDE_BIN)
         payload = build_fork_prompt(description_index(roots), spec)  # -p reads the prompt from stdin
     else:
@@ -124,7 +142,7 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
         payload = build_bundle(window_text, description_index(roots), spec, digest=digest)
 
     env = child_env(run_id, proot)
-    (spawn_fn or _detached_spawn)(argv, env, payload)
+    _launcher(spawn_fn, proot, keep_cwd=forked)(argv, env, payload)
 
     return promoter.drain(run_id, roots=roots, repo_name=repo_name)
 
@@ -159,7 +177,7 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
     argv = build_command(agent=agent or config.CURATOR_AGENT,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
     env = child_env(run_id, roots.get(layer.PROJECT))
-    (spawn_fn or _detached_spawn)(argv, env, bundle)
+    _launcher(spawn_fn, roots.get(layer.PROJECT))(argv, env, bundle)
 
     return promoter.drain(run_id, roots=roots, repo_name=repo_name)
 

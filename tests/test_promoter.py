@@ -492,7 +492,8 @@ def test_illegal_category_still_rejected(tmp_path):
 def test_run_account_carries_uncategorized_count(tmp_path):
     roots = _roots(tmp_path)
     proot = roots["project"]
-    intent_queue.append("run-cat", _create(name="uncat"), proot)
+    intent_queue.append("run-cat", _create(name="uncat", body=GOOD_BODY.replace("name: foo", "name: uncat")),
+                        proot)
     intent_queue.append("run-cat", _create(name="cat", body=CATEGORIZED_BODY.replace("name: foo", "name: cat")),
                         proot)
     promoter.drain("run-cat", roots=roots)
@@ -500,3 +501,30 @@ def test_run_account_carries_uncategorized_count(tmp_path):
     assert last["uncategorized"] == 1  # only the one that landed without a category
     rows = json.loads((layer.state_dir("project", proot) / "runs" / "run-cat.json").read_text())["verdicts"]
     assert {r["name"]: r.get("notes") for r in rows}["uncat"] == ["category"]
+
+
+def test_create_never_replaces_a_skill_autoharness_did_not_write(tmp_path):
+    roots = _roots(tmp_path)
+    own = "---\nname: foo\ndescription: Use when writing by hand.\n---\n# Mine\n"
+    skill_store.write_body("project", "foo", own, roots["project"])
+    v = promoter.promote(_create(), roots=roots)
+    assert not v["ok"] and "routing" in _families(v)
+    assert skill_store.read_body("project", "foo", roots["project"]) == own
+    assert not sidecar.is_agent_created("project", "foo", roots["project"])
+
+
+def test_replayed_create_of_its_own_skill_still_lands(tmp_path):
+    roots = _roots(tmp_path)
+    assert promoter.promote(_create(), roots=roots)["ok"]
+    assert promoter.promote(_create(), roots=roots)["ok"]  # crash between land and queue clear
+
+
+def test_landing_redacts_cloud_addresses_from_body_and_subfiles(tmp_path):
+    roots = _roots(tmp_path)
+    body = GOOD_BODY + "See https://claude.ai/code/session_abc and references/notes.md\n"
+    files = {"references/notes.md": "session 123e4567-e89b-12d3-a456-426614174000\n"}
+    assert promoter.promote({**_create(body=body), "files": files}, roots=roots)["ok"]
+    root = roots["project"]
+    assert "claude.ai" not in skill_store.read_body("project", "foo", root)
+    notes = layer.subfile_path("project", "foo", "references/notes.md", root).read_text()
+    assert "123e4567" not in notes

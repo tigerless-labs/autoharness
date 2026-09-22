@@ -10,7 +10,18 @@ land in one place and survive worktree removal. Only the linked-worktree case is
 differs from git-common-dir): plain repos, repo subdirectories, and non-git directories keep cwd
 verbatim, so a nested project can never be attributed to an enclosing repo. Any git failure falls
 back to cwd (fail-safe).
+
+Where each layer lives is operator-configurable, and the defaults are the host's own locations:
+- `AUTOHARNESS_PROJECT_DIR` (default `.claude`) names the directory under the project root that holds
+  `skills/`, e.g. `.agents` to share the library with other agent runtimes.
+- `AUTOHARNESS_GLOBAL_DIR` (default `$CLAUDE_CONFIG_DIR`, else `~/.claude`) is the global layer root.
+- `AUTOHARNESS_STATE_HOME`, when set, moves everything that is not a skill — counters, intent queues,
+  run accounts, snapshots, and the archive — out of the layer root into one directory per root under
+  it, so the only paths autoharness adds to a repository are its live skill directories. Unset keeps
+  state in `<root>/autoharness` and the archive in `skills/.archive`.
+Read on every call, never cached: each hook is a short-lived process and tests flip them freely.
 """
+import os
 import re
 import subprocess
 from functools import cache
@@ -54,8 +65,14 @@ def _main_worktree_root(cwd):
 def default_root(layer):
     _check_layer(layer)
     if layer == GLOBAL:
-        return Path.home() / ".claude"
-    return _main_worktree_root(str(Path.cwd())) / ".claude"
+        configured = os.environ.get("AUTOHARNESS_GLOBAL_DIR") or os.environ.get("CLAUDE_CONFIG_DIR")
+        return Path(configured).expanduser() if configured else Path.home() / ".claude"
+    return _main_worktree_root(str(Path.cwd())) / (os.environ.get("AUTOHARNESS_PROJECT_DIR") or ".claude")
+
+
+def _state_home():
+    configured = os.environ.get("AUTOHARNESS_STATE_HOME")
+    return Path(configured).expanduser() if configured else None
 
 
 def _root(layer, root):
@@ -68,11 +85,17 @@ def skills_dir(layer, root=None):
 
 
 def archive_dir(layer, root=None):
-    return skills_dir(layer, root) / ".archive"
+    if _state_home() is None:
+        return skills_dir(layer, root) / ".archive"
+    return state_dir(layer, root) / "archive"
 
 
 def state_dir(layer, root=None):
-    return _root(layer, root) / "autoharness"
+    home = _state_home()
+    if home is None:
+        return _root(layer, root) / "autoharness"
+    key = re.sub(r"[^A-Za-z0-9._-]", "-", str(_root(layer, root).resolve())).strip("-")
+    return home / layer / key
 
 
 def symbol_dir(layer, name, root=None):

@@ -79,6 +79,21 @@ def description_findings(desc):
     return findings
 
 
+def name_findings(action, name, body):
+    """A skill's identity is its directory name: the host invokes it by the frontmatter name and
+    usage is counted against the directory, so the two must agree, and a new one carries the
+    configured prefix so it can never land in the namespace of a hand-written or installed skill."""
+    findings = []
+    if action == "create" and config.SKILL_PREFIX and not str(name or "").startswith(config.SKILL_PREFIX):
+        findings.append(("prefix", f"skill name must start with {config.SKILL_PREFIX!r}, e.g. "
+                                   f"{config.SKILL_PREFIX}{name}"))
+    if action in ("create", "update") and body is not None:
+        declared = (_frontmatter(body) or {}).get("name")
+        if declared and declared != name:
+            findings.append(("structure", f"frontmatter name {declared!r} must equal the skill name {name!r}"))
+    return findings
+
+
 def _evidence_slice_denied(rel):
     if rel.startswith(layer.EVIDENCE_PREFIX):
         return [("files", f"{rel}: promoter-materialized evidence slices are off-limits to intents")]
@@ -158,7 +173,7 @@ def structure(body, files=None):
 
 
 def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None):
-    findings = []
+    findings = name_findings(intent.get("action"), intent.get("name"), body)
     files = intent.get("files")
 
     if body is not None:

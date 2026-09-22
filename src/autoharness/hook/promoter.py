@@ -29,9 +29,11 @@ ponytail: a single synchronous process already satisfies "serial single writer";
 import hashlib
 import json
 
+from autoharness import config
 from autoharness.lib import (
     atomic,
     counters,
+    git_exclude,
     intent_queue,
     layer,
     ledger,
@@ -126,11 +128,13 @@ def _land(action, intent, body, level, name, root):
         evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
         ledger.append(level, name, _led(intent, evidence_ref), root)
         return
-    _land_files(level, name, intent.get("files"), root)
+    files = {rel: redact.redact(content) for rel, content in (intent.get("files") or {}).items()}
+    _land_files(level, name, files, root)
     evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
-    skill_store.write_body(level, name, body, root)
+    skill_store.write_body(level, name, redact.redact(body), root)
     if action == "create":
         sidecar.create(level, name, counters.request_count(level, root), root)
+        git_exclude.ensure(layer.skills_dir(level, root), config.SKILL_PREFIX)
     else:
         sidecar.bump_patch(level, name, root)  # update/patch: feeds the reuse-after-improvement pair
     ledger.append(level, name, _led(intent, evidence_ref), root)
@@ -156,6 +160,17 @@ def promote(intent, *, roots=None, repo_name=None):
         return _reject(action, level, [("shape", str(exc))])
 
     target_created = sidecar.is_agent_created(level, name, root) if action in _MODIFY else None
+
+    if action == "create":
+        # a create over a live skill someone else wrote would replace it wholesale; only a replayed
+        # create of our own (crash between land and queue clear) may land on an existing directory.
+        try:
+            existing = skill_store.find(name, roots)
+        except ValueError as exc:
+            return _reject(action, level, [("routing", str(exc))])
+        if existing and not sidecar.is_agent_created(existing, name, roots.get(existing)):
+            return _reject(action, level, [("routing", f"{name!r} is an existing skill autoharness did not "
+                                                       "write; choose another name")])
 
     absorbed = intent.get("absorbed_into")
     if action == "delete" and absorbed:

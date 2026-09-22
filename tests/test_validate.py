@@ -1,3 +1,4 @@
+from autoharness import config
 from autoharness.lib import validate
 
 GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
@@ -284,3 +285,26 @@ def test_category_rejects_path_and_unsafe_segments():
         v = validate.validate({"action": "create", "level": "project", "name": "x",
                                "reason": "r", "evidence": "e"}, _body_with_category(bad))
         assert [f for f in v["findings"] if f[0] == "category"], bad
+
+
+def test_create_without_the_configured_prefix_is_rejected(monkeypatch):
+    monkeypatch.setattr(config, "SKILL_PREFIX", "ah-")
+    v = validate.validate(GOOD_INTENT, GOOD_BODY)
+    assert not v["ok"] and "prefix" in _families(v)
+
+
+def test_create_with_the_configured_prefix_passes(monkeypatch):
+    monkeypatch.setattr(config, "SKILL_PREFIX", "ah-")
+    v = validate.validate({**GOOD_INTENT, "name": "ah-foo"}, GOOD_BODY.replace("name: foo", "name: ah-foo"))
+    assert v["ok"], v["findings"]
+
+
+def test_prefix_is_not_demanded_of_an_existing_skill(monkeypatch):
+    monkeypatch.setattr(config, "SKILL_PREFIX", "ah-")
+    v = validate.validate({**GOOD_INTENT, "action": "update"}, GOOD_BODY, target_is_agent_created=True)
+    assert v["ok"], v["findings"]
+
+
+def test_frontmatter_name_must_equal_the_skill_name():
+    v = validate.validate({**GOOD_INTENT, "name": "bar"}, GOOD_BODY)
+    assert not v["ok"] and "structure" in _families(v)
