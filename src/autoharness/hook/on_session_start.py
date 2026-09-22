@@ -11,6 +11,8 @@ zero intrusion).
 ponytail: GC of orphan session counts (residue from crashed sessions) needs a session-liveness signal to sweep safely (a naive sweep would wrongly delete a concurrent session's live count), so it is deferred until that signal exists — the clear_session primitive is ready (Phase 4), policy left open in cap.md/mng.md.
 """
 import json
+import os
+from pathlib import Path
 
 from autoharness import config
 from autoharness.lib import counters, layer, lifecycle, sidecar, skill_store, validate
@@ -39,15 +41,30 @@ def _fit(text, limit):
     return flat if len(flat) <= limit else flat[:limit - 3] + "..."
 
 
+def _native_skill_dirs():
+    """Skill directories the host loads on its own: `.claude/skills` in the cwd and its parents, and
+    `skills/` in the user config directory (Claude Code's project and personal skill locations)."""
+    cwd = Path.cwd().resolve()
+    dirs = {(d / ".claude" / "skills").resolve() for d in (cwd, *cwd.parents)}
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    user = Path(config_dir).expanduser() if config_dir else Path.home() / ".claude"
+    dirs.add((user / "skills").resolve())
+    return dirs
+
+
 def recall_index(roots):
     if config.INDEX_SUSPENDED:
         return None
     groups = {}
+    native = _native_skill_dirs()
     for lyr in layer.LAYERS:
         root = roots.get(lyr)
         skills = layer.skills_dir(lyr, root)
         if not skills.exists():
             continue
+        # a library the host does not load itself (a linked worktree reading its own skill tree, or
+        # a skill directory no .claude/skills points at) is reachable only by path — so name it.
+        located = skills.resolve() not in native
         for path in skills.glob(f"*/{skill_store.SKILL_FILE}"):
             name = path.parent.name
             if not sidecar.is_agent_created(lyr, name, root):
@@ -55,7 +72,8 @@ def recall_index(roots):
             fm = validate._frontmatter(path.read_text()) or {}
             desc = _fit(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
-            groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]: {desc}")
+            where = f" ({path})" if located else ""
+            groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]: {desc}{where}")
     if not groups:
         return None  # empty library -> zero injection
     lines = [INDEX_HEADER, ""]

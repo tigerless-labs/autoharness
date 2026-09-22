@@ -72,10 +72,12 @@ claude plugin marketplace remove autoharness
 ```
 
 Uninstalling only stops it from running — the skills it landed and its own state live **outside** the
-plugin and stay on disk. To clear those too, delete its state dir (`~/.claude/autoharness/` global,
-`<repo>/.claude/autoharness/` per project) and the self-authored skills under `.claude/skills/` (each
-carries a `self-authored` ledger marker, so they're easy to tell from yours). Your own skills are
-never touched.
+plugin and stay on disk. To clear those too, delete its state dir (`~/.claude/autoharness/` global —
+or `$CLAUDE_CONFIG_DIR/autoharness/` when that is set — and `<repo>/.claude/autoharness/` per project,
+or everything under `AUTOHARNESS_STATE_HOME` if you set it) and the self-authored skills under
+`.claude/skills/` (each carries a `self-authored` ledger marker, so they're easy to tell from yours).
+If you configured a skill prefix, also drop the one line it added to the repository's
+`.git/info/exclude`. Your own skills are never touched.
 
 ## Configuration
 
@@ -110,6 +112,20 @@ configure unless you want to change the pace.
 | `AUTOHARNESS_CAPACITY_GLOBAL` | `20` | Same cap for the global layer — smaller because its blast radius is every project. |
 | `AUTOHARNESS_GRADUATION_SUSPENDED` | `0` | Set to `1` to park graduation review entirely, so nothing is archived for going unused. Meant for when you have reason to doubt the recall surface: archiving on zero use would then be punishing skills for never having been offered. Capacity contention still applies. |
 | `AUTOHARNESS_SNAPSHOT_KEEP` | `5` | How many pre-run snapshots of each skill tree the curator keeps before merging. A merge is the one operation a single atomic rename can't undo. |
+
+**Placement — where it writes**
+
+| Variable | Default | What it does |
+|---|---|---|
+| `AUTOHARNESS_PROJECT_DIR` | `.claude` | Directory under the project root whose `skills/` holds the project layer. `.agents` shares the library with other agent runtimes; Claude Code still needs a `.claude/skills` pointing there to load it natively (see below). |
+| `AUTOHARNESS_GLOBAL_DIR` | `$CLAUDE_CONFIG_DIR`, else `~/.claude` | Root of the global layer, whose `skills/` holds global skills. |
+| `AUTOHARNESS_STATE_HOME` | *(unset)* | Moves counters, intent queues, run accounts, snapshots, and the archive out of the layer roots into one directory per root under this path (e.g. `~/.local/state/autoharness`), so the only paths autoharness adds to a repository are live skill directories. Unset keeps them in `<root>/autoharness/` and `skills/.archive/`. |
+| `AUTOHARNESS_SKILL_PREFIX` | *(none)* | Name prefix every new skill must carry, e.g. `ah-`. A create without it is refused back to the reflector, so the library never shares a namespace with hand-written or installed skills. When a project skill first lands inside a git repository, one pattern for the prefix (e.g. `/.claude/skills/ah-*`) is added to the repository's shared `.git/info/exclude` — local to the clone, covering every worktree, never committed. |
+| `AUTOHARNESS_CHILD_ISOLATION` | `0` | Set to `1` to launch the reflector and curator without your settings sources (`--setting-sources ""`): no other plugins, no user hooks, no project settings, only this plugin (by `--plugin-dir`), no session persistence, and — for `bundle` — a working directory outside the project, so no project `CLAUDE.md` is read. Keeps other memory plugins from capturing reflection sessions and trims every reflection's context. Off by default because it also drops settings a child might depend on, such as an `apiKeyHelper`. |
+
+When the host does not load a library on its own — a linked worktree reads its own `.claude/skills`,
+not the main checkout's, and a `PROJECT_DIR` of `.agents` needs a `.claude/skills` link — each line of
+the session-start index carries the skill's `SKILL.md` path, so it can still be read.
 
 Set them in the environment Claude Code launches with — either the shell
 (`export AUTOHARNESS_REFLECT_EVERY_N=10`) or the `env` map in `.claude/settings.json`:

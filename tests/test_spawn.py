@@ -351,3 +351,43 @@ def test_snapshot_failure_never_blocks_the_run(tmp_path, monkeypatch):
     called = []
     spawn.run_curator("c1", roots=roots, spawn_fn=lambda a, e, b: called.append(1))
     assert called  # a transient disk issue must not silently disable curation
+
+
+def test_isolation_is_off_by_default():
+    cmd = spawn.build_command(agent="autoharness:reflector", claude_bin="claude")
+    assert "--setting-sources" not in cmd and "--plugin-dir" not in cmd
+
+
+def test_isolated_child_loads_only_this_plugin(monkeypatch):
+    monkeypatch.setattr(config, "CHILD_ISOLATION", True)
+    for cmd in (spawn.build_command(agent="autoharness:reflector", claude_bin="claude"),
+                spawn.build_fork_command(session_id="s", claude_bin="claude")):
+        assert cmd[cmd.index("--setting-sources") + 1] == ""
+        assert cmd[cmd.index("--plugin-dir") + 1] == str(config.PLUGIN_ROOT)
+        assert "--no-session-persistence" in cmd
+    assert (config.PLUGIN_ROOT / ".claude-plugin" / "plugin.json").is_file()
+
+
+def test_isolated_bundle_child_runs_from_the_state_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "CHILD_ISOLATION", True)
+    seen = {}
+    monkeypatch.setattr(spawn.subprocess, "run", lambda argv, **kw: seen.update(kw))
+    roots = _roots(tmp_path)
+    spawn.run("WINDOW", "r1", roots=roots, spec_path=config.FORMAT_SPEC)
+    assert seen["cwd"] == str(layer.state_dir("project", roots["project"]))
+
+
+def test_isolated_fork_child_keeps_the_parent_cwd(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "CHILD_ISOLATION", True)
+    seen = {}
+    monkeypatch.setattr(spawn.subprocess, "run", lambda argv, **kw: seen.update(kw))
+    spawn.run("WINDOW", "r1", roots=_roots(tmp_path), session_id="s", carrier="fork",
+              spec_path=config.FORMAT_SPEC)
+    assert seen["cwd"] is None  # --resume finds the session by the cwd it was started in
+
+
+def test_description_index_names_each_skill_path(tmp_path):
+    roots = _roots(tmp_path)
+    skill_store.write_body("project", "p1", GOOD.format(n="p1", d="Use when x."), roots["project"])
+    index = spawn.description_index(roots)
+    assert str(skill_store.skill_path("project", "p1", roots["project"])) in index

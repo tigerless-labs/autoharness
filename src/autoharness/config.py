@@ -64,6 +64,19 @@ CAPACITY = {layer.GLOBAL: _int_env("AUTOHARNESS_CAPACITY_GLOBAL", 20),
 GRADUATION_REVIEW_SUSPENDED = bool(_int_env("AUTOHARNESS_GRADUATION_SUSPENDED", 0))
 SNAPSHOT_KEEP = _int_env("AUTOHARNESS_SNAPSHOT_KEEP", 5)  # curator pre-run library snapshots per layer (mirrors Hermes)
 
+# Name prefix every agent-authored skill must carry (empty = no constraint). A prefix keeps the
+# library out of the namespace of hand-written and installed skills, so a create can never collide
+# with one, and gives a repository a single ignore pattern for everything autoharness writes into it
+# (the promoter adds that pattern to the repository's shared info/exclude on first landing).
+SKILL_PREFIX = os.environ.get("AUTOHARNESS_SKILL_PREFIX", "")
+
+# Launch child sessions (reflector / curator) without the user's settings sources: no other plugins,
+# no user hooks, no project settings — only this plugin, loaded by --plugin-dir, running from its
+# state directory so no project CLAUDE.md is read. Opt-in because it also drops settings a child may
+# rely on, such as an apiKeyHelper; OAuth and environment credentials are unaffected.
+CHILD_ISOLATION = bool(_int_env("AUTOHARNESS_CHILD_ISOLATION", 0))
+
+PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 _LIB = Path(__file__).parent / "lib"
 REDACTION_RULES = _LIB / "redaction_rules.toml"  # secret/PII rule set, single source for CAP egress + LED
 FORMAT_SPEC = _LIB / "format_spec.md"            # #416 single source for authoring + lint

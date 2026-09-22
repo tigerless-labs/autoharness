@@ -117,9 +117,9 @@ def _content_errors(params):
     if params["action"] == "remove_file":
         return validate.check_remove_path(params["path"])
     body = params.get("body")
+    errors = validate.name_findings(params["action"], params.get("name"), body)
     if body is None:
-        return []
-    errors = []
+        return errors
     if len(body.encode("utf-8")) > config.STAGE_MAX_BODY_BYTES:
         errors.append(("size", f"body exceeds {config.STAGE_MAX_BODY_BYTES} bytes"))
     files = params.get("files")

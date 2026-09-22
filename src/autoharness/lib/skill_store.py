@@ -4,10 +4,11 @@ Persistence uses atomic (same-dir temp + os.replace) in this one place, so live 
 find extends Hermes's `_find_skill` to the union of the global+project layers; the same name across
 both layers → error (promoter uses this to disambiguate the layer when resolving update/delete).
 apply_delta requires old_string to match uniquely (rejects both not-found and multiple-match
-ambiguity), a deterministic rebuild. archive atomically moves symbol_dir into `.archive` (preserving
-LED/sidecar); landing a delete and MNG (Phase 6) eviction share this one path.
+ambiguity), a deterministic rebuild. archive moves symbol_dir into the layer's archive (preserving
+LED/sidecar) — `skills/.archive`, or the state directory when AUTOHARNESS_STATE_HOME is set, which may
+sit on another filesystem, hence a move rather than a rename; landing a delete and MNG (Phase 6)
+eviction share this one path.
 """
-import os
 import shutil
 
 from autoharness.lib import atomic, layer
@@ -63,7 +64,7 @@ def archive(lyr, name, root=None):
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         shutil.rmtree(dest)
-    os.replace(sdir, dest)
+    shutil.move(sdir, dest)
     return dest
 
 
@@ -75,7 +76,7 @@ def restore(lyr, name, root=None):
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         shutil.rmtree(dest)
-    os.replace(src, dest)
+    shutil.move(src, dest)
     return dest
 
 

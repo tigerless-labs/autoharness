@@ -26,6 +26,24 @@ pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{20,}'''
 name = "api_key_assignment"
 pattern = '''(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['"]?[A-Za-z0-9._\-/+]{12,}'''
 
+# Claude-hosted resource addresses and identifiers: a transcript is full of session and message
+# UUIDs, and a skill that quoted one — or a claude.ai link — would publish a private address.
+[[secret]]
+name = "claude_ai_url"
+pattern = '''(?i)(?:https?://)?(?:[a-z0-9-]+\.)*claude\.ai(?:/[^\s)\]'"`>]*)?'''
+
+[[secret]]
+name = "anthropic_api_url"
+pattern = '''(?i)(?:https?://)?api\.anthropic\.com(?:/[^\s)\]'"`>]*)?'''
+
+[[secret]]
+name = "uuid"
+pattern = '''(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b'''
+
+[[secret]]
+name = "cloud_session_id"
+pattern = '''\bcse_[A-Za-z0-9]{16,}\b'''
+
 [[pii]]
 name = "email"
 pattern = '''[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'''
