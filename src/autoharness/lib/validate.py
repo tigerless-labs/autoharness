@@ -51,7 +51,10 @@ def _frontmatter(body):
         if not s or s.startswith("#") or ":" not in line:
             continue
         key, value = line.split(":", 1)
-        fm[key.strip()] = value.strip().strip('"').strip("'")
+        v = value.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+            v = v[1:-1]
+        fm[key.strip()] = v
     return fm
 
 
