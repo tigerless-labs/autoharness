@@ -26,7 +26,7 @@ from autoharness import config
 from autoharness.lib import layer, skills_guard
 
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
-_PLACEHOLDER = re.compile(r"\b(TODO|FIXME|XXX):|<[A-Z][A-Z_]{2,}>")
+_PLACEHOLDER = re.compile(r"\b(TODO|FIXME|XXX):|<(?:TODO|FIXME|XXX|TBD|PLACEHOLDER|REPLACE[_ ]?ME|INSERT[_ ]?HERE|FILL[_ ]?IN)>")
 _ABS_PATH = re.compile(r"(?:/home/|/Users/|/root/)[^\s`)\]]+|[A-Za-z]:\\[^\s`)\]]+")
 _PY_REF = re.compile(r"[\w./-]+\.py")
 _SUBFILE_REF = re.compile(r"\b(?:{})/[A-Za-z0-9._/-]+".format("|".join(layer.SUBFILE_DIRS)))
