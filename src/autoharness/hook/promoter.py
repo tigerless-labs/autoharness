@@ -130,7 +130,10 @@ def _land(action, intent, body, level, name, root):
     evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
     skill_store.write_body(level, name, body, root)
     if action == "create":
-        sidecar.create(level, name, counters.request_count(level, root), root)
+        existing = sidecar.read(level, name, root)
+        if not existing:
+            sidecar.create(level, name, counters.request_count(level, root), root)
+        # crash-replay: sidecar already exists — skip create to preserve counters
     else:
         sidecar.bump_patch(level, name, root)  # update/patch: feeds the reuse-after-improvement pair
     ledger.append(level, name, _led(intent, evidence_ref), root)
