@@ -33,8 +33,12 @@ def _check_name(name):
         raise ValueError(f"unsafe symbol name: {name!r}")
 
 
-@cache
 def _main_worktree_root(cwd):
+    return _main_worktree_root_resolved(str(Path(cwd).resolve()))
+
+
+@cache
+def _main_worktree_root_resolved(cwd):
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "--git-dir", "--git-common-dir"],
