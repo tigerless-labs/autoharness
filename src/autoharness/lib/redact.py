@@ -25,6 +25,7 @@ def _rules(rules_path):
 
 def redact(text, rules_path=None):
     out = text
-    for category, name, rx in _rules(rules_path):
+    key = str(rules_path) if rules_path else str(config.REDACTION_RULES)
+    for category, name, rx in _rules(key):
         out = rx.sub(f"[REDACTED:{category}:{name}]", out)
     return out
