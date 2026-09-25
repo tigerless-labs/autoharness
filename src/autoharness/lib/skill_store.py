@@ -84,7 +84,7 @@ def sweep_orphans(lyr, root=None):
     if not skills.exists():
         return []
     removed = []
-    for tmp in skills.rglob("*.tmp"):
+    for tmp in skills.glob("*.tmp"):  # top-level only; atomic.write_bytes writes here
         tmp.unlink()
         removed.append(tmp)
     return removed
