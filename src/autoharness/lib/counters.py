@@ -8,6 +8,7 @@ state area (cap.md: session-scoped, written to this repo's .claude, not into liv
 ponytail: read-modify-write is not atomic across processes; the lock for the global request counter
 under concurrent multi-repo writes is deferred to mng.
 """
+import fcntl
 import re
 
 from autoharness.lib import atomic, layer
@@ -23,8 +24,17 @@ def _read_int(p):
 
 
 def _bump(p, delta=1):
-    value = _read_int(p) + delta
-    atomic.write_text(p, str(value))
+    """Read-modify-write under an exclusive lock so concurrent hook processes
+    cannot both read the same value and lose an increment."""
+    lock_path = p.with_suffix(p.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w") as lock_fd:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        try:
+            value = _read_int(p) + delta
+            atomic.write_text(p, str(value))
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
     return value
 
 
