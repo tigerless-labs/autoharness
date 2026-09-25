@@ -144,6 +144,10 @@ def _emit(verdict):
             "hookEventName": "SessionStart",
             "additionalContext": result["context"],
         }}))
+        return
+    handled = verdict.get("handled")
+    if handled:
+        print(json.dumps({"handled": handled, "result": result}), file=sys.stderr)
 
 
 def main():
