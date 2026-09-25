@@ -44,6 +44,15 @@ Nothing to invoke, but one entry point exists when you want it: **`/learn`** dis
 you're in right now — say it after working something out and the lesson goes through the same
 proposal-and-validation chain the background pass uses.
 
+**MCP server naming.** The `.mcp.json` registers the server as `stage_skill`, but agent
+definitions reference the fully-qualified name `mcp__plugin_autoharness_stage_skill__stage_skill`.
+This translation is automatic: the plugin runtime constructs the qualified name from the plugin
+name in `.claude-plugin/plugin.json` (`autoharness`) and the server key in `.mcp.json`.
+Outside the plugin context (e.g., testing with `claude` directly), the tool would be available
+as `mcp__stage_skill__stage_skill` — but the agent allowlists still reference the plugin-namespaced
+form. Always install as a plugin to match both names.
+
+
 ### Update
 
 Update from a terminal — refresh the catalog, then update with the **full `plugin@marketplace`
