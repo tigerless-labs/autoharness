@@ -51,7 +51,7 @@ def _curate_run_id(event, pcount):
 
 def _is_reflector(event):
     at = str(event.get("agent_type") or "")
-    return at == config.REFLECTOR_AGENT or at.endswith("reflector")
+    return at == config.REFLECTOR_AGENT or at.endswith(":reflector")
 
 
 def _detached_launch(transcript_path, session_id, run_id, roots):
