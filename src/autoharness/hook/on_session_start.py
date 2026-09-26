@@ -11,6 +11,7 @@ zero intrusion).
 ponytail: GC of orphan session counts (residue from crashed sessions) needs a session-liveness signal to sweep safely (a naive sweep would wrongly delete a concurrent session's live count), so it is deferred until that signal exists — the clear_session primitive is ready (Phase 4), policy left open in cap.md/mng.md.
 """
 import json
+from pathlib import Path
 
 from autoharness import config
 from autoharness.lib import counters, layer, lifecycle, sidecar, skill_store, validate
@@ -39,10 +40,23 @@ def _fit(text, limit):
     return flat if len(flat) <= limit else flat[:limit - 3] + "..."
 
 
-def recall_index(roots):
+def _read_hint(roots, cwd):
+    """A linked worktree's project layer is remapped to the main checkout (layer.default_root),
+    which the host does not scan for skills — so from a worktree session those skills are listed
+    here but the Skill tool cannot load them. Point the model at the files instead."""
+    if not cwd:
+        return None
+    skills = layer.skills_dir(layer.PROJECT, roots.get(layer.PROJECT)).resolve()
+    if Path(cwd).resolve().is_relative_to(skills.parent.parent):
+        return None
+    return (f"[project] skills live outside this checkout, so the Skill tool cannot load them: "
+            f"Read {skills}/<name>/SKILL.md instead.")
+
+
+def recall_index(roots, cwd=None):
     if config.INDEX_SUSPENDED:
         return None
-    groups = {}
+    groups, has_project = {}, False
     for lyr in layer.LAYERS:
         root = roots.get(lyr)
         skills = layer.skills_dir(lyr, root)
@@ -56,12 +70,16 @@ def recall_index(roots):
             desc = _fit(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
             groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]: {desc}")
+            has_project = has_project or lyr == layer.PROJECT
     if not groups:
         return None  # empty library -> zero injection
     lines = [INDEX_HEADER, ""]
     for cat in sorted(groups):
         lines.append(f"## {cat}")
         lines.extend(sorted(groups[cat]))
+    hint = _read_hint(roots, cwd) if has_project else None
+    if hint:
+        lines += ["", hint]
     return "\n".join(lines)
 
 
@@ -119,6 +137,6 @@ def on_session_start(event=None, *, roots=None):
         for name in names:
             skill_store.archive(lyr, name, root)
         archived[lyr] = names
-    parts = [last_run_summary(roots), recall_index(roots)]  # index built after archiving
+    parts = [last_run_summary(roots), recall_index(roots, (event or {}).get("cwd"))]  # index built after archiving
     context = "\n\n".join(p for p in parts if p) or None
     return {"archived": archived, "context": context}

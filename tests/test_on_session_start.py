@@ -250,3 +250,33 @@ def test_index_suspended_still_lets_the_summary_through(tmp_path, monkeypatch):
         {"run_id": "r1", "landed": 1, "rejected": 0, "absorbed": 0, "families": []}))
     monkeypatch.setattr(config, "INDEX_SUSPENDED", True)
     assert "landed 1" in on_session_start.on_session_start(roots=roots)["context"]
+
+
+def test_index_points_worktree_session_at_remapped_project_skills(tmp_path):
+    # a linked worktree's project layer lives in the main checkout, which the host does not scan:
+    # the index must say where the skills are, or they are listed but unloadable
+    roots = _roots(tmp_path / "main")  # project dir = tmp/main; the worktree sits beside it
+    _seed_desc(roots, "a-skill", "use when a")
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    ctx = on_session_start.on_session_start({"cwd": str(worktree)}, roots=roots)["context"]
+    skills = layer.skills_dir("project", roots["project"]).resolve()
+    assert f"Read {skills}/<name>/SKILL.md" in ctx
+
+
+def test_index_no_read_hint_when_session_runs_inside_the_project(tmp_path):
+    roots = _roots(tmp_path)
+    _seed_desc(roots, "a-skill", "use when a")
+    inside = roots["project"].parent / "sub"
+    inside.mkdir(parents=True)
+    ctx = on_session_start.on_session_start({"cwd": str(inside)}, roots=roots)["context"]
+    assert "a-skill" in ctx and "Read " not in ctx
+
+
+def test_index_no_read_hint_without_project_skills(tmp_path):
+    roots = _roots(tmp_path / "main")
+    _seed_desc(roots, "g-skill", "use when g", lvl="global")
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    ctx = on_session_start.on_session_start({"cwd": str(worktree)}, roots=roots)["context"]
+    assert "g-skill" in ctx and "Read " not in ctx
