@@ -28,3 +28,9 @@ def redact(text, rules_path=None):
     for category, name, rx in _rules(rules_path):
         out = rx.sub(f"[REDACTED:{category}:{name}]", out)
     return out
+
+
+def secret_hits(text, rules_path=None):
+    """Names of the secret rules *text* matches — a gate, not a rewrite (PII stays redact-only)."""
+    return [name for category, name, rx in _rules(rules_path)
+            if category == "secret" and rx.search(text)]
