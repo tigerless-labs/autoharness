@@ -23,7 +23,7 @@ import ast
 import re
 
 from autoharness import config
-from autoharness.lib import layer, skills_guard
+from autoharness.lib import layer, redact, skills_guard
 
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 _PLACEHOLDER = re.compile(r"\b(TODO|FIXME|XXX):|<[A-Z][A-Z_]{2,}>")
@@ -168,6 +168,9 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
         guard = skills_guard.scan(body)
         if guard:
             findings.append(("safety", guard))
+        secrets = redact.secret_hits(body)
+        if secrets:
+            findings.append(("secret", secrets))
 
         findings += _structure(body, base_dir, files)
         findings += check_files(files)
@@ -192,6 +195,9 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
             guard = skills_guard.scan(content)
             if guard:
                 findings.append(("safety", guard))
+            secrets = redact.secret_hits(content)
+            if secrets:
+                findings.append(("secret", secrets))
 
         if intent.get("level") == "global":
             markers = _ABS_PATH.findall(body)

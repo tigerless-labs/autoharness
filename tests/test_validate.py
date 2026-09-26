@@ -296,3 +296,21 @@ def test_frontmatter_mixed_quotes():
     body2 = "---\nname: bar\ndescription: \"unmatched'\n---\n# Bar\n"
     fm2 = _frontmatter(body2)
     assert fm2["description"] == "\"unmatched'"
+
+
+def test_secret_in_body_rejects():
+    # the reflector can Read any file; a credential it copies into a skill must not land in a tree
+    # that gets committed (evidence slices are redacted, the body itself was not gated)
+    body = GOOD_BODY + "\nUse token ghp_" + "a" * 36 + "\n"
+    assert "secret" in _families(validate.validate(GOOD_INTENT, body))
+
+
+def test_secret_in_subfile_rejects():
+    body = GOOD_BODY + "\nSee references/aws.md\n"
+    intent = {**GOOD_INTENT, "files": {"references/aws.md": "key AKIA" + "A" * 16}}
+    assert "secret" in _families(validate.validate(intent, body))
+
+
+def test_pii_alone_does_not_reject():
+    body = GOOD_BODY + "\nSet the git author to dev@example.com.\n"
+    assert validate.validate(GOOD_INTENT, body)["ok"]
