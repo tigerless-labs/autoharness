@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -298,3 +301,51 @@ def test_stop_with_empty_interactive_queue_writes_no_run_account(tmp_path, monke
     state = layer.state_dir("project", roots["project"])
     assert not (state / "last_run.json").exists()
     assert not list((state / "runs").glob("*.json")) if (state / "runs").exists() else True
+
+
+def _run_under_old_python(tmp_path, version=(3, 9, 6, "final", 0)):
+    # the host's bare `python3` may be older than the 3.11 floor (Xcode ships 3.9.6 at
+    # /usr/bin/python3); simulate it in a child by pinning version_info and hiding tomllib,
+    # which is the stdlib module that entered in 3.11 and that redact.py imports at module level
+    probe = tmp_path / "old_python_probe.py"
+    probe.write_text(
+        "import sys\n"
+        f"sys.version_info = {version!r}\n"
+        "class _NoTomllib:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name == 'tomllib':\n"
+        "            raise ModuleNotFoundError(\"No module named 'tomllib'\", name='tomllib')\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, _NoTomllib())\n"
+        "import autoharness.hook.dispatch\n"
+    )
+    root = Path(__file__).resolve().parents[1]
+    return subprocess.run(
+        [sys.executable, str(probe)], capture_output=True, text=True,
+        env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(root / "src")},
+    )
+
+
+def test_below_floor_python_exits_clean_instead_of_crashing_at_import(tmp_path):
+    # hooks.json invokes bare `python3` for all four events, and every import in the chain is
+    # module level, so an interpreter below the floor dies before dispatch() is entered and the
+    # fail-safe handler never gets the chance to catch it: the whole plugin goes off silently
+    r = _run_under_old_python(tmp_path)
+    assert r.returncode == 0, f"expected a clean exit, got {r.returncode}:\n{r.stderr}"
+    assert "Traceback" not in r.stderr
+    assert "tomllib" not in r.stderr
+
+
+def test_below_floor_python_names_the_floor_and_the_interpreter(tmp_path):
+    # the point of the guard is that the operator can act on it: a generic host hook error with
+    # nothing logged is what this replaces
+    r = _run_under_old_python(tmp_path)
+    assert "3.11" in r.stderr
+    assert "3.9" in r.stderr
+    assert "hooks.json" in r.stderr
+
+
+def test_supported_python_still_imports_and_dispatches(tmp_path):
+    # the guard must not fire on a supported interpreter
+    assert dispatch.dispatch({"hook_event_name": "Nope"}) == {
+        "ignored": True, "reason": "unrouted event: 'Nope'"}

@@ -21,15 +21,32 @@ import re
 import subprocess
 import sys
 
-from autoharness import config
-from autoharness.hook import (
+MIN_PYTHON = (3, 11)  # tomllib (lib/redact.py) entered the stdlib here; README badge and CI matrix pin the same floor
+
+
+def _below_floor(version):
+    return (f"autoharness: needs Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+, got "
+            f"{version[0]}.{version[1]} at {sys.executable}. Every hook is off for this session; "
+            f"point the hooks.json commands at a newer interpreter.")
+
+
+# this guard runs before the package imports on purpose: the chain below is module level end to end
+# (dispatch -> promoter -> redact -> tomllib), so on an older interpreter the process dies at import
+# and the fail-safe in dispatch() never gets the chance to catch it -- the host shows a generic hook
+# error and nothing inside the plugin names the cause. Exit 0: a host hook must not fail the session.
+if sys.version_info[:2] < MIN_PYTHON:
+    print(_below_floor(sys.version_info), file=sys.stderr)
+    raise SystemExit(0)
+
+from autoharness import config  # noqa: E402
+from autoharness.hook import (  # noqa: E402
     on_session_end,
     on_session_start,
     on_skill_call,
     on_stop,
     promoter,
 )
-from autoharness.lib import counters, layer
+from autoharness.lib import counters, layer  # noqa: E402
 
 _SANITIZE = re.compile(r"[^A-Za-z0-9_-]")
 _WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")

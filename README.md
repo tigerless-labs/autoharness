@@ -25,8 +25,10 @@ hand every model generation. autoharness bets one slice of it — the skill laye
 
 ## Install
 
-**Requires `python3` on your PATH** — autoharness runs entirely as Python (zero third-party
-dependencies); its hooks and MCP server won't fire without it.
+**Requires Python 3.11+ as the `python3` on your PATH** — autoharness runs entirely as Python
+(zero third-party dependencies); its hooks and MCP server won't fire without it. The hooks resolve
+bare `python3`, so an older interpreter earlier on your PATH (Xcode ships 3.9.6 at
+`/usr/bin/python3`) turns every hook off for the session; autoharness says so on stderr.
 
 Type these in the Claude Code input box.
 
