@@ -70,7 +70,9 @@ def _desktop(line):
 
 
 def _command(cmd, record, line):
-    argv = shlex.split(cmd)
+    # POSIX shlex rules eat the backslashes of a Windows path; there the string goes to
+    # CreateProcess as-is (still no shell) and the target parses it by the native rules.
+    argv = cmd.strip() if os.name == "nt" else shlex.split(cmd)
     if not argv:
         return
     rows = [{**r, "name": _clean(r.get("name"))} for r in record.get("verdicts") or []]
