@@ -34,12 +34,17 @@ def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes
     path = Path(transcript_path)
     if not path.exists():
         return "", 0
-    data = path.read_bytes()
-    new_offset = len(data)
-    if not 0 <= offset <= new_offset:
-        offset = 0
+    # Seek past the offset rather than reading the file to slice it away: a hook
+    # runs per turn, and a long session's transcript is megabytes of history this
+    # call already knows it does not need.
+    with open(path, "rb") as f:
+        new_offset = f.seek(0, 2)
+        if not 0 <= offset <= new_offset:
+            offset = 0
+        f.seek(offset)
+        tail = f.read()
     lines = [_clip(line, record_cap)
-             for line in data[offset:].decode("utf-8", errors="replace").splitlines()]
+             for line in tail.decode("utf-8", errors="replace").splitlines()]
     kept, total = [], 0
     for line in reversed(lines):
         total += len(line.encode("utf-8")) + 1
