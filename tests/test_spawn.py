@@ -1,3 +1,5 @@
+import os
+import sys
 from pathlib import Path
 
 from autoharness import config
@@ -88,7 +90,7 @@ def test_child_env_sets_guard_and_coords_without_polluting():
     env = spawn.child_env("run-1", Path("/repo"), base_env=base)
     assert env[config.CHILD_SESSION_ENV]
     assert env[config.RUN_ID_ENV] == "run-1"
-    assert env[config.PROJECT_ROOT_ENV] == "/repo"
+    assert env[config.PROJECT_ROOT_ENV] == str(Path("/repo"))
     assert env["PATH"] == "/x"
     assert base == {"PATH": "/x"}  # input dict untouched (no parent pollution)
 
@@ -191,6 +193,16 @@ def test_run_curator_cannot_touch_native_skill(tmp_path):
     assert skill_store.read_body("project", "native", root) is not None  # native untouched
 
 
+def _executable(script):
+    """A claude_bin stand-in: POSIX execs the shebang script; Windows cannot, so it gets a .cmd shim."""
+    if os.name != "nt":
+        script.chmod(0o755)
+        return script
+    shim = script.with_suffix(".cmd")
+    shim.write_text(f'@"{sys.executable}" "{script}" %*\n')
+    return shim
+
+
 def _fake_reflector_script(tmp_path):
     script = tmp_path / "fake_reflector.py"
     script.write_text(
@@ -208,8 +220,7 @@ def _fake_reflector_script(tmp_path):
         "res = server.stage(params, run_id=run_id, root=root)\n"
         "sys.exit(0 if res['ok'] else 1)\n"
     )
-    script.chmod(0o755)
-    return script
+    return _executable(script)
 
 
 def test_system_fake_reflector_cross_process_lands(tmp_path, monkeypatch):
@@ -247,8 +258,7 @@ def _fake_curator_script(tmp_path):
         "              'reason': 'absorbed into widgets', 'evidence': ev}, run_id=run_id, root=root)\n"
         "sys.exit(0)\n"
     )
-    script.chmod(0o755)
-    return script
+    return _executable(script)
 
 
 def test_system_fake_curator_cross_process_merges(tmp_path, monkeypatch):
