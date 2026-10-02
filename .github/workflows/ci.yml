@@ -28,6 +28,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install pytest
 
-      - name: tests (exclude live-host, tolerate empty collection)
+      - name: tests (exclude live-host; an empty collection is a failure)
         run: |
-          python3 -m pytest -m "not live" -q || [ $? -eq 5 ]
+          # pytest exits 5 when it collects no tests, and that used to be
+          # tolerated so a `not live` filter matching everything could not fail
+          # the build. But the same exit code is what a renamed tests/ directory,
+          # a conftest that ignores everything, or a marker filter that stops
+          # matching produces, so tolerating it turns a broken test run into a
+          # green build.
+          #
+          # Only exit 5 was ever suppressed. Collection *errors* already fail on
+          # their own: pytest exits 2 for an import error in a test module and 4
+          # for an unparseable conftest, so neither was silently passing. An
+          # empty collection is not a state this suite is meant to be in.
+          python3 -m pytest -m "not live" -q
