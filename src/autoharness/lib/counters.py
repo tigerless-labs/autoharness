@@ -8,35 +8,9 @@ state area (cap.md: session-scoped, written to this repo's .claude, not into liv
 ponytail: read-modify-write is not atomic across processes; the lock for the global request counter
 under concurrent multi-repo writes is deferred to mng.
 """
-import errno
 import re
-import sys
 
-from autoharness.lib import atomic, layer
-
-if sys.platform == "win32":
-    import msvcrt
-
-    def _lock(f):
-        # LK_LOCK gives up with EDEADLOCK after ~10s; retry to match flock's indefinite wait.
-        while True:
-            try:
-                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-                return
-            except OSError as e:
-                if e.errno != errno.EDEADLOCK:
-                    raise
-
-    def _unlock(f):
-        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-else:
-    import fcntl
-
-    def _lock(f):
-        fcntl.flock(f, fcntl.LOCK_EX)
-
-    def _unlock(f):
-        fcntl.flock(f, fcntl.LOCK_UN)
+from autoharness.lib import atomic, filelock, layer
 
 _SAFE_SESSION = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -51,15 +25,9 @@ def _read_int(p):
 def _bump(p, delta=1):
     """Read-modify-write under an exclusive lock so concurrent hook processes
     cannot both read the same value and lose an increment."""
-    lock_path = p.with_suffix(p.suffix + ".lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(lock_path, "w") as lock_fd:
-        _lock(lock_fd)
-        try:
-            value = _read_int(p) + delta
-            atomic.write_text(p, str(value))
-        finally:
-            _unlock(lock_fd)
+    with filelock.exclusive(p):
+        value = _read_int(p) + delta
+        atomic.write_text(p, str(value))
     return value
 
 

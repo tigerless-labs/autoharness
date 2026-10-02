@@ -8,7 +8,7 @@ atomic land = effectively exactly-once); in the extreme case where nothing ran, 
 import json
 import re
 
-from autoharness.lib import layer
+from autoharness.lib import filelock, layer
 
 _SAFE_RUN = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -22,8 +22,12 @@ def _path(run_id, root=None):
 def append(run_id, intent, root=None):
     p = _path(run_id, root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(intent, ensure_ascii=False) + "\n")
+    # O_APPEND only keeps a write whole up to PIPE_BUF, and a staged skill body
+    # runs well past that. Two overlapping reflector runs could interleave
+    # mid-line, and the unparseable line jams every later drain of this run.
+    with filelock.exclusive(p):
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(intent, ensure_ascii=False) + "\n")
 
 
 def read(run_id, root=None):
