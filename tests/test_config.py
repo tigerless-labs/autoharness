@@ -1,5 +1,7 @@
 import importlib
 
+import pytest
+
 from autoharness import config
 from autoharness.lib import layer
 
@@ -61,3 +63,48 @@ def test_env_overrides_knobs_else_defaults(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(config)  # restore defaults for the rest of the suite
+
+
+# #150: the README documents these as operator-settable, but no override test
+# reached them. A knob nothing sets always reads its default, so every default
+# assertion in this file still passed while the documented env var could have
+# been misspelled in config.py with nothing to notice.
+@pytest.mark.parametrize(
+    ("env_var", "attribute", "raw", "expected"),
+    [
+        # the module attribute is GRADUATION_REVIEW_SUSPENDED; the env var is not.
+        ("AUTOHARNESS_GRADUATION_SUSPENDED", "GRADUATION_REVIEW_SUSPENDED", "1", True),
+        ("AUTOHARNESS_INDEX_SUSPENDED", "INDEX_SUSPENDED", "1", True),
+        ("AUTOHARNESS_SNAPSHOT_KEEP", "SNAPSHOT_KEEP", "11", 11),
+        ("AUTOHARNESS_CARRIER", "REFLECTOR_CARRIER", "fork", "fork"),
+    ],
+)
+def test_documented_knob_reads_its_env_var(
+    monkeypatch, env_var, attribute, raw, expected
+):
+    # Guard the guard: if the shipped default ever equals the value we set, the
+    # case below would pass with the env var ignored, so say so out loud.
+    assert getattr(config, attribute) != expected, (
+        f"{attribute} already defaults to {expected!r}, so this case cannot prove "
+        f"{env_var} is read — pick a value the default does not already hold"
+    )
+    monkeypatch.setenv(env_var, raw)
+    importlib.reload(config)
+    try:
+        assert getattr(config, attribute) == expected
+    finally:
+        monkeypatch.undo()
+        importlib.reload(config)  # restore defaults for the rest of the suite
+
+
+def test_int_knob_falls_back_to_default_on_non_numeric(monkeypatch):
+    # _int_env swallows ValueError and hands back the default, so a typo'd value
+    # is indistinguishable from an unset one. Pin that, so the fallback is a
+    # decision on record rather than an accident nobody looked for.
+    monkeypatch.setenv("AUTOHARNESS_SNAPSHOT_KEEP", "five")
+    importlib.reload(config)
+    try:
+        assert config.SNAPSHOT_KEEP == 5
+    finally:
+        monkeypatch.undo()
+        importlib.reload(config)
