@@ -175,6 +175,17 @@ def test_durable_queue_fail_safe_then_recover(tmp_path):
     assert intent_queue.orphans(proot) == []
 
 
+def test_drain_recovers_a_dead_run_leftovers(tmp_path):
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    intent_queue.append("deadrun", _create(), proot)
+    promoter.drain("liverun", roots=roots)  # a different run drains: the dead one never came back
+    assert skill_store.exists("project", "foo", proot)
+    assert intent_queue.orphans(proot) == []
+    run = json.loads((layer.state_dir("project", proot) / "runs" / "deadrun.json").read_text())
+    assert run["verdicts"][0]["ok"]  # the dead run's verdict reached the account too
+
+
 def test_drain_sweeps_orphan_tmp(tmp_path):
     roots = _roots(tmp_path)
     proot = roots["project"]

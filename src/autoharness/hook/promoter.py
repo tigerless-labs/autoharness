@@ -236,10 +236,7 @@ def _account(run_id, intents, verdicts, proot):
     return record
 
 
-def drain(run_id, *, roots=None, repo_name=None):
-    roots = roots or {}
-    sweep(roots)
-    proot = roots.get(layer.PROJECT)
+def _drain_run(run_id, *, roots, repo_name, proot):
     intents = intent_queue.read(run_id, proot)
     verdicts = [promote(i, roots=roots, repo_name=repo_name) for i in intents]
     record = _account(run_id, intents, verdicts, proot) if intents else None
@@ -249,3 +246,16 @@ def drain(run_id, *, roots=None, repo_name=None):
         # widen the crash window where a whole run replays (duplicate LED, re-rejected creates)
         notify.send(record)
     return verdicts
+
+
+def drain(run_id, *, roots=None, repo_name=None):
+    roots = roots or {}
+    sweep(roots)
+    proot = roots.get(layer.PROJECT)
+    # the queue is per-run, so a child that exits before its drain leaves its intents in the
+    # directory for good; land them here under the dead run's own id, which is the at-least-once
+    # recovery the module docstring promises (atomic land makes the replay idempotent)
+    for orphan in intent_queue.orphans(proot):
+        if orphan != run_id:
+            _drain_run(orphan, roots=roots, repo_name=repo_name, proot=proot)
+    return _drain_run(run_id, roots=roots, repo_name=repo_name, proot=proot)
