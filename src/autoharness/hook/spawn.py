@@ -10,6 +10,7 @@ here: the reflector only appends intents, the promoter exclusively validates and
 
 ponytail: run() is the body of the "detached background job" (synchronous spawn→wait→drain); the "do not block the host Stop" detach is started in the background at the hook top level by the Phase 7 dispatch calling run(). spawn_fn is injectable (system tests use a fake reflector script in place of the real claude). Precise handling of the transcript upper-bound race (cap.md open) is still tolerated at v0.
 """
+import json
 import os
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from pathlib import Path
 
 from autoharness import config
 from autoharness.hook import capture, promoter
-from autoharness.lib import counters, layer, sidecar, skill_store, validate
+from autoharness.lib import atomic, counters, layer, sidecar, skill_store, validate
 
 
 def description_index(roots=None, *, agent_only=False):
@@ -103,9 +104,35 @@ def child_env(run_id, root, *, base_env=None):
     env[config.PROJECT_ROOT_ENV] = str(root)
     return env
 
-
 def _detached_spawn(argv, env, bundle):
-    subprocess.run(argv, input=bundle, text=True, env=env, capture_output=True, check=False)
+    """Run the reflector child to completion; report a crash on stderr instead of discarding it."""
+    proc = subprocess.run(argv, input=bundle, text=True, env=env, capture_output=True, check=False)
+    if proc.returncode != 0:
+        print(f"reflector child {argv[0]} exited {proc.returncode}: "
+              f"{(proc.stderr or '').strip()[-2000:]}", file=sys.stderr)
+    return proc
+
+
+def _record_spawn_failure(run_id, roots, proc, argv):
+    """Persist a crashed reflector in the run account (#160).
+
+    The detached launch DEVNULLs this whole process (dispatch.py), so neither the print above nor
+    the exit code reaches an operator. The runs/ account is where landed runs already live; verdicts
+    (if the child staged intents before dying) keep precedence over the crash record.
+    """
+    if proc is None or getattr(proc, "returncode", 0) == 0:
+        return
+    state = layer.state_dir(layer.PROJECT, roots.get(layer.PROJECT))
+    runs = state / "runs"
+    if (runs / f"{run_id}.json").exists():
+        return
+    runs.mkdir(parents=True, exist_ok=True)
+    atomic.write_text(runs / f"{run_id}.json",
+                      json.dumps({"run_id": run_id, "spawn_error": {
+                          "argv0": argv[0] if argv else None,
+                          "returncode": proc.returncode,
+                          "stderr_tail": (proc.stderr or "").strip()[-2000:],
+                      }}, ensure_ascii=False, indent=2))
 
 
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
@@ -124,9 +151,10 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
         payload = build_bundle(window_text, description_index(roots), spec, digest=digest)
 
     env = child_env(run_id, proot)
-    (spawn_fn or _detached_spawn)(argv, env, payload)
-
-    return promoter.drain(run_id, roots=roots, repo_name=repo_name)
+    proc = (spawn_fn or _detached_spawn)(argv, env, payload)
+    verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
+    _record_spawn_failure(run_id, roots, proc, argv)
+    return verdicts
 
 
 def _snapshot_skills(run_id, roots):
@@ -159,9 +187,10 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
     argv = build_command(agent=agent or config.CURATOR_AGENT,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
     env = child_env(run_id, roots.get(layer.PROJECT))
-    (spawn_fn or _detached_spawn)(argv, env, bundle)
-
-    return promoter.drain(run_id, roots=roots, repo_name=repo_name)
+    proc = (spawn_fn or _detached_spawn)(argv, env, bundle)
+    verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
+    _record_spawn_failure(run_id, roots, proc, argv)
+    return verdicts
 
 
 def main(argv=None):
