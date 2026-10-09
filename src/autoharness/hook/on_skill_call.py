@@ -27,12 +27,14 @@ def _skill_name(event):
     return None
 
 
-def _name_from_read_path(event, roots):
+def _identity_from_read_path(event, roots):
     nested = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
     file_path = nested.get("file_path") or event.get("file_path")
     if not isinstance(file_path, str) or not file_path.strip():
         return None
     target = Path(file_path)
+    if not target.is_absolute() and event.get("cwd"):
+        target = Path(event["cwd"]) / target
     for lyr in config.active_layers():
         base = layer.skills_dir(lyr, roots.get(lyr))
         try:
@@ -40,15 +42,18 @@ def _name_from_read_path(event, roots):
         except (ValueError, OSError):
             continue
         if len(rel.parts) > 1 and rel.parts[0] != ".archive":
-            return rel.parts[0]
+            return lyr, rel.parts[0]
     return None
 
 
-def _count(name, roots, kind):
+def _count(name, roots, kind, lyr=None):
     if not name:
         return {"counted": False, "reason": "no_skill"}
     try:
-        lyr = skill_store.find(name, roots)
+        if lyr is None:
+            lyr = skill_store.find(name, roots)
+        else:
+            layer.symbol_dir(lyr, name, roots.get(lyr))
     except ValueError:
         return {"counted": False, "reason": "bad_or_ambiguous"}
     if lyr is None:
@@ -71,4 +76,8 @@ def on_skill_read(event, *, roots=None):
     if os.environ.get(config.CHILD_SESSION_ENV):
         return {"counted": False, "reason": "recursion_guard"}
     roots = roots or {}
-    return _count(_name_from_read_path(event, roots), roots, "view")
+    identity = _identity_from_read_path(event, roots)
+    if identity is None:
+        return {"counted": False, "reason": "no_skill"}
+    lyr, name = identity
+    return _count(name, roots, "view", lyr=lyr)
