@@ -39,7 +39,7 @@ def write_body(lyr, name, body, root=None):
 
 def read_body(lyr, name, root=None):
     p = skill_path(lyr, name, root)
-    return p.read_text() if p.exists() else None
+    return p.read_text(encoding="utf-8") if p.exists() else None
 
 
 def exists(lyr, name, root=None):
