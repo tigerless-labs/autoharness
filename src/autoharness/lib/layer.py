@@ -29,7 +29,7 @@ def _check_layer(layer):
 
 
 def _check_name(name):
-    if not isinstance(name, str) or ".." in name or not _SAFE_NAME.match(name):
+    if not isinstance(name, str) or ".." in name or not _SAFE_NAME.fullmatch(name):
         raise ValueError(f"unsafe symbol name: {name!r}")
 
 
