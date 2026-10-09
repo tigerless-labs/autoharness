@@ -8,7 +8,7 @@ pattern = '''AKIA[0-9A-Z]{16}'''
 
 [[secret]]
 name = "private_key_block"
-pattern = '''-----BEGIN [A-Z ]*PRIVATE KEY-----'''
+pattern = '''-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)'''
 
 [[secret]]
 name = "github_token"
