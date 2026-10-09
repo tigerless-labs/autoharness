@@ -86,6 +86,25 @@ def test_triggered_stop_fires_reflect(tmp_path, monkeypatch):
     assert calls and calls[0]["session_id"] == "s1"
 
 
+def test_triggered_session_end_fires_reflect(tmp_path, monkeypatch):
+    # tail-catch: activity below the cadence at session close still reflects, through the dispatcher
+    monkeypatch.setattr(dispatch.on_session_end, "on_session_end",
+                        lambda e, **k: {"triggered": True, "session_id": "s1", "count": 3, "window_n": 3})
+    calls = []
+    out = dispatch.dispatch({"hook_event_name": "SessionEnd", "transcript_path": "/t.jsonl"},
+                            roots=_roots(tmp_path), reflect=lambda ev, res, roots: calls.append(res))
+    assert out["handled"] == "SessionEnd"
+    assert len(calls) == 1 and calls[0]["session_id"] == "s1"
+
+
+def test_untriggered_session_end_does_not_reflect(tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatch.on_session_end, "on_session_end", lambda e, **k: {"triggered": False})
+    calls = []
+    dispatch.dispatch({"hook_event_name": "SessionEnd", "transcript_path": "/t.jsonl"},
+                      roots=_roots(tmp_path), reflect=lambda *a: calls.append(a))
+    assert calls == []
+
+
 def test_real_onstop_triggers_at_cadence(tmp_path):
     roots = _roots(tmp_path)
     for _ in range(config.REFLECT_EVERY_N):  # activity accumulated by PreToolUse; Stop only judges

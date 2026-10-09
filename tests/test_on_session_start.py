@@ -162,6 +162,9 @@ def test_index_truncates_description_and_neutralizes_newlines(tmp_path, monkeypa
         if line.startswith("- long"):
             desc = line.split(": ", 1)[1]
             assert len(desc) <= 20  # truncated to the knob
+    # the smuggled `b: c` line ends the description; it never becomes an index line of its own
+    assert "- sneaky [project]: use when a" in ctx.splitlines()
+    assert not any(ln.startswith(("b:", "- fake-skill")) for ln in ctx.splitlines())
 
 
 def test_index_runs_after_archiving(tmp_path, monkeypatch):
@@ -217,12 +220,6 @@ def test_summary_line_silent_when_all_categorized(tmp_path):
     (state / "last_run.json").write_text(json.dumps(
         {"run_id": "r1", "landed": 2, "rejected": 0, "absorbed": 0, "families": [], "uncategorized": 0}))
     assert "categor" not in on_session_start.last_run_summary(roots).lower()
-
-
-
-
-
-
 
 
 def test_index_marks_a_truncated_description_as_cut(tmp_path):

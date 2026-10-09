@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from autoharness.hook import promoter
 from autoharness.lib import counters, intent_queue, layer, ledger, sidecar, skill_store
 
@@ -487,10 +489,11 @@ def test_present_category_is_not_noted(tmp_path):
     assert v["ok"] and not v.get("notes")
 
 
-def test_illegal_category_still_rejected(tmp_path):
+@pytest.mark.parametrize("bad", ["dates/iso", "my dates", "..", "-dates", "dates!"])
+def test_illegal_category_still_rejected(tmp_path, bad):
     # format stays fail-closed: a path-shaped category would break index grouping and path safety
     roots = _roots(tmp_path)
-    body = CATEGORIZED_BODY.replace("category: dates", "category: dates/iso")
+    body = CATEGORIZED_BODY.replace("category: dates", f"category: {bad}")
     v = promoter.promote(_create(body=body), roots=roots)
     assert not v["ok"] and "category" in _families(v)
     assert not skill_store.exists("project", "foo", roots["project"])

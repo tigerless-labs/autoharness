@@ -41,6 +41,9 @@ def test_format_spec_states_category_field():
     # unstated here, REF never emits it and every skill collapses into one group
     for token in ["category", "INDEX_DESC_MAX_CHARS"]:
         assert token in text
+    # deliberately asymmetric with the description gate: illegal is rejected, missing goes through
+    assert "deliberately asymmetric" in text
+    assert "**rejected**" in text and "**allowed through**" in text
 
 
 def test_format_spec_states_the_one_sentence_rule():
@@ -48,5 +51,5 @@ def test_format_spec_states_the_one_sentence_rule():
     # adopted from hermes: the description IS the index line, so the rule is one sentence inside the
     # budget with the trigger first — the old four-element recipe produced 385-char descriptions that
     # the index cut mid-clause (E11, first real replay)
-    for token in ["one sentence", "trigger first", "words a", "body"]:
+    for token in ["one sentence", "trigger first", "user would actually type", "body"]:
         assert token in text

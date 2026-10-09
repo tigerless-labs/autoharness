@@ -83,9 +83,8 @@ def test_reflector_picks_category_from_the_injected_index():
     # our defence against category inflation: hermes gets it free (categories are directories the
     # model already sees); we have to say it, because the field is free text
     body = AGENT.read_text().lower()
-    assert "category" in body and "index" in body
-    i = body.index("`category:`")
-    assert "index" in body[i - 400:i + 400]
+    rule = next(ln for ln in body.splitlines() if "`category:`" in ln)
+    assert "index" in rule  # the reuse-from-index instruction sits on the category rule itself
 
 
 def test_reflector_may_not_claim_the_promoter_verdict():
