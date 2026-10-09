@@ -400,3 +400,11 @@ def test_serve_without_run_id_env_uses_the_interactive_queue(tmp_path, monkeypat
     reply = json.loads(out.getvalue().strip().splitlines()[-1])
     assert "unsafe" not in json.dumps(reply)
     assert len(list(intent_queue.read(config.INTERACTIVE_RUN_ID, tmp_path))) == 1
+
+
+def test_non_string_fields_are_rejected_at_stage_time(tmp_path):
+    # `is not None` checks alone let these reach the queue, where they crashed the drain
+    for kw in ({"action": "patch", "body": None, "old_string": 5, "new_string": ["x"]},
+               {"body": {"not": "text"}}, {"level": 1}):
+        v = server.stage(_params(**kw), run_id=RUN, root=tmp_path)
+        assert not v["ok"] and "schema" in _errs(v), kw
