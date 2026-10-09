@@ -184,6 +184,8 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
 
         if _PLACEHOLDER.search(body):
             findings.append(("completeness", "contains TODO/placeholder"))
+        if _body_lines(body) == 0:
+            findings.append(("completeness", "skill body is empty"))
 
         # altitude: create/update author the full body, so this is where rule-level is set. patch is a
         # delta to a live skill -- capping it would strand existing over-long skills (can't even fix them).
