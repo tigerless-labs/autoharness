@@ -23,8 +23,9 @@ def _clip(line, cap):
     encoded = line.encode("utf-8")
     if len(encoded) <= cap:
         return line
-    truncated = encoded[:cap].decode("utf-8", errors="ignore")
-    return truncated + TRUNCATION_MARK
+    marker = TRUNCATION_MARK.encode("utf-8")[:max(0, cap)]
+    truncated = encoded[:max(0, cap - len(marker))].decode("utf-8", errors="ignore")
+    return truncated + marker.decode("utf-8")
 
 
 def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes=None,
@@ -52,7 +53,14 @@ def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes
             kept.append(TRUNCATION_MARK)
             break
         kept.append(line)
-    return redact.redact("\n".join(reversed(kept)), rules_path), new_offset
+    text = redact.redact("\n".join(reversed(kept)), rules_path)
+    encoded = text.encode("utf-8")
+    if len(encoded) > window_cap:
+        marker = TRUNCATION_MARK.encode("utf-8")[:window_cap]
+        budget = window_cap - len(marker)
+        tail = encoded[-budget:].decode("utf-8", errors="ignore") if budget else ""
+        text = marker.decode("utf-8") + tail
+    return text, new_offset
 
 
 def _digest_record(line, max_chars):
