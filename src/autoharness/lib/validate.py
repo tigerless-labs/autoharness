@@ -146,9 +146,10 @@ def _structure(body, base_dir, files=None):
             if not f.resolve().is_relative_to(base):
                 findings.append(("structure", f"referenced {ref} escapes the skill directory"))
                 continue
-            if f.is_file():
+            source = (files or {}).get(ref)
+            if isinstance(source, str) or f.is_file():
                 try:
-                    ast.parse(f.read_text())
+                    ast.parse(source if isinstance(source, str) else f.read_text())
                 except SyntaxError as exc:
                     findings.append(("structure", f"referenced {ref} has syntax error: {exc}"))
         for ref in set(_SUBFILE_REF.findall(body)):
