@@ -42,15 +42,22 @@ def test_pretooluse_backstops_reflector_writes():
 
 
 def test_mcp_registers_existing_stage_skill():
-    m = _load(".mcp.json")["mcpServers"]["stage_skill"]
+    m = _load(".claude-plugin/plugin.json")["mcpServers"]["stage_skill"]
     assert "autoharness.stage_skill.server" in m["args"]
     assert (ROOT / "src/autoharness/stage_skill/server.py").exists()
 
 
 def test_mcp_ships_only_this_plugin_servers():
-    # a plugin-root .mcp.json is installed into every user's session: a dev-only server left
+    # the plugin's MCP servers are installed into every user's session: a dev-only server left
     # here would launch third-party code on their machine. Least privilege at the ship boundary.
-    assert set(_load(".mcp.json")["mcpServers"]) == {"stage_skill"}
+    assert set(_load(".claude-plugin/plugin.json")["mcpServers"]) == {"stage_skill"}
+
+
+def test_no_project_mcp_json_at_repo_root():
+    # the plugin root is the repo root: a .mcp.json here is also this checkout's project-scope config,
+    # which outranks the plugin's same-command server, so a session inside the repo gets the tool as
+    # mcp__stage_skill__stage_skill and the reflector/curator allowlists find nothing to stage with
+    assert not (ROOT / ".mcp.json").exists()
 
 
 def test_marketplace_lists_this_plugin():

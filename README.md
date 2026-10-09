@@ -46,13 +46,15 @@ Nothing to invoke, but one entry point exists when you want it: **`/learn`** dis
 you're in right now — say it after working something out and the lesson goes through the same
 proposal-and-validation chain the background pass uses.
 
-**MCP server naming.** The `.mcp.json` registers the server as `stage_skill`, but agent
+**MCP server naming.** `.claude-plugin/plugin.json` registers the server as `stage_skill`, but agent
 definitions reference the fully-qualified name `mcp__plugin_autoharness_stage_skill__stage_skill`.
 This translation is automatic: the plugin runtime constructs the qualified name from the plugin
-name in `.claude-plugin/plugin.json` (`autoharness`) and the server key in `.mcp.json`.
-Outside the plugin context (e.g., testing with `claude` directly), the tool would be available
-as `mcp__stage_skill__stage_skill` — but the agent allowlists still reference the plugin-namespaced
-form. Always install as a plugin to match both names.
+name (`autoharness`) and the server key. Outside the plugin context (e.g., registering the server
+by hand), the tool would be available as `mcp__stage_skill__stage_skill` — but the agent allowlists
+still reference the plugin-namespaced form. Always install as a plugin to match both names. The
+server is declared in the manifest, not in a root `.mcp.json`, because the plugin root is the repo
+root: a `.mcp.json` there would also be this checkout's project config, which outranks the plugin's
+same-command server and leaves the reflector without its tool in sessions inside the repo.
 
 
 ### Update
