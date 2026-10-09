@@ -151,6 +151,8 @@ def _structure(body, base_dir, files=None):
                     ast.parse(f.read_text())
                 except SyntaxError as exc:
                     findings.append(("structure", f"referenced {ref} has syntax error: {exc}"))
+                except (OSError, UnicodeError) as exc:
+                    findings.append(("structure", f"referenced {ref} could not be read: {exc}"))
         for ref in set(_SUBFILE_REF.findall(body)):
             # escaping refs are skipped silently: writes are gated by the
             # promoter's landing check, validation must not probe outside
