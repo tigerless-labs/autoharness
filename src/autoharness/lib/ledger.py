@@ -10,13 +10,12 @@ immutability: existing lines are never rewritten.
 slice; entries written before folder-skills keep their inline string (append-only, never
 rewritten). Readers must not assume either form.
 
-ponytail: one JSON line per write, and under small entries a POSIX append is effectively atomic;
-the strict-ordering lock for concurrent cross-process appends to the same symbol is deferred to mng
-along with sidecar.
+A dedicated per-ledger lock serializes append and read, so readers never parse an in-flight
+record and concurrent append writers preserve whole provenance entries.
 """
 import json
 
-from autoharness.lib import layer
+from autoharness.lib import layer, lock
 
 FILENAME = ".ledger.jsonl"
 
@@ -28,8 +27,9 @@ def path(lyr, name, root=None):
 def append(lyr, name, entry, root=None):
     p = path(lyr, name, root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def read(lyr, name, root=None, *, archived=False):
@@ -38,4 +38,7 @@ def read(lyr, name, root=None, *, archived=False):
     p = (layer.archive_dir(lyr, root) / name / FILENAME) if archived else path(lyr, name, root)
     if not p.exists():
         return []
-    return [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
+    with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
+        if not p.exists():
+            return []
+        return [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
