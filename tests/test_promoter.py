@@ -1,4 +1,6 @@
 import json
+import os
+import time
 
 from autoharness.hook import promoter
 from autoharness.lib import counters, intent_queue, layer, ledger, sidecar, skill_store
@@ -187,7 +189,10 @@ def test_drain_sweeps_orphan_tmp(tmp_path):
     proot = roots["project"]
     sdir = layer.symbol_dir("project", "foo", proot)
     sdir.mkdir(parents=True)
-    (sdir / "SKILL.md.x.tmp").write_text("half-written")
+    orphan = sdir / "SKILL.md.x.tmp"
+    orphan.write_text("half-written")
+    old = time.time() - skill_store.ORPHAN_TMP_MIN_AGE_S - 1
+    os.utime(orphan, (old, old))
     promoter.drain("emptyrun", roots=roots)  # empty run, only triggers the startup sweep
     assert list(layer.skills_dir("project", proot).rglob("*.tmp")) == []
 

@@ -7,6 +7,7 @@ apply_delta requires old_string to match uniquely (rejects both not-found and mu
 ambiguity), a deterministic rebuild. archive atomically moves symbol_dir into `.archive` (preserving
 LED/sidecar); landing a delete and MNG (Phase 6) eviction share this one path.
 """
+import json
 import os
 import shutil
 import time
@@ -91,12 +92,51 @@ def restore(lyr, name, root=None):
     return dest
 
 
+# an atomic write lives as a .tmp for milliseconds; a younger one may be another hook's write in flight
+ORPHAN_TMP_MIN_AGE_S = 60
+
+
+def _ours(d):
+    """A skill dir autoharness wrote (its sidecar says so), or the debris of one of its creates that died
+    inside the sidecar write (nothing but .tmp files). Anyone else's skill is left alone."""
+    if d.is_symlink() or not d.is_dir():
+        return False
+    try:
+        meta = json.loads((d / ".sidecar.json").read_text(encoding="utf-8"))
+        return isinstance(meta, dict) and meta.get("created_by") == "agent"
+    except (OSError, ValueError):
+        pass
+    try:
+        return all(p.is_file() and p.suffix == ".tmp" for p in d.iterdir())
+    except OSError:
+        return False  # unreadable: not something we can tell is ours
+
+
+def _listing(d):
+    try:
+        return list(d.iterdir())
+    except OSError:
+        return []  # an unreadable dir: nothing to sweep there, and the drain must still run
+
+
 def sweep_orphans(lyr, root=None):
     skills = layer.skills_dir(lyr, root)
     if not skills.exists():
         return []
     removed = []
-    for tmp in skills.rglob("*.tmp"):
-        tmp.unlink()
+    cutoff = time.time() - ORPHAN_TMP_MIN_AGE_S
+    archive = layer.archive_dir(lyr, root)
+    try:  # a linked .archive leads outside the layer: never walk it; an unreadable layer has none to walk
+        walk_archive = archive.is_dir() and not archive.is_symlink()
+    except OSError:
+        walk_archive = False
+    dirs = [*_listing(skills), *(_listing(archive) if walk_archive else [])]
+    for tmp in (t for d in dirs if _ours(d) for t in d.rglob("*.tmp")):
+        try:
+            if tmp.stat().st_mtime > cutoff:
+                continue
+            tmp.unlink()
+        except FileNotFoundError:
+            continue  # its writer renamed it into place meanwhile
         removed.append(tmp)
     return removed
