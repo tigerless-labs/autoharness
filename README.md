@@ -93,6 +93,12 @@ never touched.
 Every knob is an `AUTOHARNESS_*` environment variable with a built-in default — nothing to
 configure unless you want to change the pace.
 
+**Where it writes**
+
+| Variable | Default | What it does |
+|---|---|---|
+| `AUTOHARNESS_GLOBAL_ROOT` | _(unset)_ | Replaces `~/.claude` as the global layer's root. Unset, or set to blank, is stock behaviour — the real home. Set it when autoharness itself has to run sandboxed (a pinned clone, CI, an evaluation harness) and the production skills library must stay untouched. The project layer is unaffected: it is still keyed to the session's own checkout. |
+
 **Cadence — when it learns**
 
 | Variable | Default | What it does |

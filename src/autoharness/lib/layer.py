@@ -11,6 +11,7 @@ differs from git-common-dir): plain repos, repo subdirectories, and non-git dire
 verbatim, so a nested project can never be attributed to an enclosing repo. Any git failure falls
 back to cwd (fail-safe).
 """
+import os
 import re
 import subprocess
 from functools import cache
@@ -19,6 +20,10 @@ from pathlib import Path
 GLOBAL = "global"
 PROJECT = "project"
 LAYERS = (GLOBAL, PROJECT)
+
+# Read inside default_root, not at import: every other layer path is derived per call, so pinning this
+# to import time would make the override invisible to tests that set it with monkeypatch.setenv.
+GLOBAL_ROOT_ENV = "AUTOHARNESS_GLOBAL_ROOT"
 
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
@@ -58,6 +63,14 @@ def _main_worktree_root_resolved(cwd):
 def default_root(layer):
     _check_layer(layer)
     if layer == GLOBAL:
+        # the global layer is ~/.claude by default, which is the only layer that reaches outside the
+        # project; AUTOHARNESS_GLOBAL_ROOT redirects it so a sandboxed install (pinned clone, CI,
+        # an evaluation harness) never reads or writes the real home. Blank (unset, or an empty /
+        # whitespace-only `AUTOHARNESS_GLOBAL_ROOT=` left in a settings block) is stock behaviour —
+        # resolving "" to the cwd would re-root the layer on whatever project the session is in.
+        override = os.environ.get(GLOBAL_ROOT_ENV, "").strip()
+        if override:
+            return Path(override).expanduser()
         return Path.home() / ".claude"
     return _main_worktree_root(str(Path.cwd())) / ".claude"
 

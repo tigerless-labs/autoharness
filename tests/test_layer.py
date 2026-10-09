@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +24,42 @@ def test_paths_nest_under_root(tmp_path, lyr):
 
 def test_default_roots_differ_between_layers():
     assert layer.default_root("global") != layer.default_root("project")
+
+
+# --- global root env override (sandboxed installs never reach the real ~/.claude) ---
+
+def test_global_root_env_overrides_home(monkeypatch, tmp_path):
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, str(tmp_path))
+    assert layer.default_root("global") == tmp_path
+    # every global path is derived from it, and none of them escape back to the real home
+    assert layer.skills_dir("global") == tmp_path / "skills"
+    assert layer.state_dir("global") == tmp_path / "autoharness"
+    assert layer.symbol_dir("global", "foo") == tmp_path / "skills" / "foo"
+
+
+def test_global_root_env_unset_keeps_home(monkeypatch):
+    monkeypatch.delenv(layer.GLOBAL_ROOT_ENV, raising=False)
+    assert layer.default_root("global") == Path.home() / ".claude"
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_global_root_env_blank_falls_back_to_home(monkeypatch, value):
+    # an empty value must not resolve to the cwd, or a stray `AUTOHARNESS_GLOBAL_ROOT=` in a settings
+    # block would silently re-root the global layer on whatever project the session happens to be in
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, value)
+    assert layer.default_root("global") == Path.home() / ".claude"
+
+
+def test_global_root_env_expands_tilde(monkeypatch):
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, "~/sandbox-claude")
+    assert layer.default_root("global") == Path.home() / "sandbox-claude"
+
+
+def test_global_root_env_leaves_project_layer_alone(monkeypatch, tmp_path):
+    # the project layer is keyed to the session cwd; an override for the global one must not shift it
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, str(tmp_path))
+    assert layer.default_root("project") != tmp_path
+    assert layer.default_root("project").name == ".claude"
 
 
 @pytest.mark.parametrize("fn", [layer.skills_dir, layer.archive_dir, layer.state_dir])
