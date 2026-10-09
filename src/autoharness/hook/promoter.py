@@ -159,6 +159,17 @@ def promote(intent, *, roots=None, repo_name=None):
     if level == layer.GLOBAL and config.DISABLE_GLOBAL:
         return _reject(action, level,
                        [("routing", "global layer is disabled by AUTOHARNESS_DISABLE_GLOBAL")])
+    if action == "create":
+        # a second live copy in the other layer makes every later update/patch/delete and every load
+        # count ambiguous for good, whoever wrote the first one. Both layers, even with global disabled:
+        # disabling it stops writes there, and re-enabling it must not surface a collision.
+        try:
+            other = [lyr for lyr in layer.LAYERS
+                     if lyr != level and skill_store.exists(lyr, name, roots.get(lyr))]
+        except ValueError as exc:
+            return _reject(action, level, [("routing", str(exc))])
+        if other:
+            return _reject(action, level, [("routing", f"{name!r} is already live in the {other[0]} layer")])
 
     root = roots.get(level)
     try:
