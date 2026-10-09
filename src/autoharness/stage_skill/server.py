@@ -214,7 +214,12 @@ def serve(stdin=None, stdout=None):
         line = line.strip()
         if not line:
             continue
-        response = handle(json.loads(line), run_id=run_id, root=root)
+        try:
+            request = json.loads(line)
+        except json.JSONDecodeError:
+            response = _err(None, -32700, "parse error")
+        else:
+            response = handle(request, run_id=run_id, root=root)
         if response is not None:
             stdout.write(json.dumps(response) + "\n")
             stdout.flush()
