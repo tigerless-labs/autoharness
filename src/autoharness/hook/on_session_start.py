@@ -11,6 +11,7 @@ zero intrusion).
 ponytail: GC of orphan session counts (residue from crashed sessions) needs a session-liveness signal to sweep safely (a naive sweep would wrongly delete a concurrent session's live count), so it is deferred until that signal exists — the clear_session primitive is ready (Phase 4), policy left open in cap.md/mng.md.
 """
 import json
+import os
 from pathlib import Path
 
 from autoharness import config
@@ -131,6 +132,10 @@ def _members(lyr, root):
 
 
 def on_session_start(event=None, *, roots=None):
+    if os.environ.get(config.CHILD_SESSION_ENV):
+        # a reflector/curator child: it must not consume the user's last-run line, run the archive pass
+        # beside the parent, or get a second index on top of its bundle
+        return {"archived": {}, "context": None, "reason": "recursion_guard"}
     roots = roots or {}
     archived = {}
     for lyr in config.active_layers():

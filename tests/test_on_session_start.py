@@ -1,8 +1,15 @@
 import json
 
+import pytest
+
 from autoharness import config
 from autoharness.hook import on_session_start
 from autoharness.lib import layer, sidecar, skill_store
+
+
+@pytest.fixture(autouse=True)
+def _not_a_child(monkeypatch):
+    monkeypatch.delenv(config.CHILD_SESSION_ENV, raising=False)  # ambient may set it
 
 
 def _roots(base):
@@ -297,3 +304,19 @@ def test_index_no_read_hint_without_project_skills(tmp_path):
     worktree.mkdir()
     ctx = on_session_start.on_session_start({"cwd": str(worktree)}, roots=roots)["context"]
     assert "g-skill" in ctx and "Read " not in ctx
+
+
+def test_child_session_start_touches_nothing(tmp_path, monkeypatch):
+    # spawn marks reflector/curator children; their SessionStart fires against the parent's root
+    _small_knobs(monkeypatch)
+    roots = _roots(tmp_path)
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "last_run.json").write_text(json.dumps({"run_id": "s1-50", "landed": 1, "rejected": 0}))
+    _set_requests(roots, "project", 100)
+    _seed(roots, "dead", calls=0)  # mature, zero use: a parent SessionStart would archive it
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    out = on_session_start.on_session_start(roots=roots)
+    assert out["context"] is None and out["archived"] == {}
+    assert (state / "last_run.json").exists()  # the user still gets the summary
+    assert skill_store.exists("project", "dead", roots["project"])
