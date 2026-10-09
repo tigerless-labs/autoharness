@@ -96,7 +96,9 @@ def check_remove_path(rel):
     return _evidence_slice_denied(rel)
 
 
-def check_files(files):
+def check_files(files, *, base_dir=None, creating=False):
+    """Carried subfiles. Only a name being created (a create, or a file not yet in base_dir) is held to
+    the new-name limits; an existing legacy file must stay updatable."""
     if files is None:
         return []
     if not isinstance(files, dict):
@@ -107,7 +109,7 @@ def check_files(files):
     total = 0
     for rel, content in files.items():
         try:
-            layer.check_subfile(rel)
+            layer.check_subfile(rel, new=creating or (base_dir is not None and not (base_dir / rel).exists()))
         except ValueError as exc:
             findings.append(("files", str(exc)))
             continue
@@ -180,7 +182,7 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
             findings.append(("secret", secrets))
 
         findings += _structure(body, base_dir, files)
-        findings += check_files(files)
+        findings += check_files(files, base_dir=base_dir, creating=intent.get("action") == "create")
 
         if _PLACEHOLDER.search(body):
             findings.append(("completeness", "contains TODO/placeholder"))

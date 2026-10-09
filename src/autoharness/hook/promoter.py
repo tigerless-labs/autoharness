@@ -149,6 +149,11 @@ def promote(intent, *, roots=None, repo_name=None):
     roots = roots or {}
     action = intent.get("action")
     name = intent.get("name")
+    if action == "create":
+        try:  # before any filesystem call: a name past NAME_MAX would raise, not reject
+            layer.check_new_name(name)
+        except ValueError as exc:
+            return _reject(action, None, [("shape", str(exc))])
 
     try:
         level = _resolve_level(intent, roots)

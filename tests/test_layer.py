@@ -37,6 +37,31 @@ def test_symbol_name_traversal_rejected(tmp_path, bad):
         layer.symbol_dir("project", bad, tmp_path)
 
 
+@pytest.mark.parametrize("bad", ["a" * 101, "notes.", "con", "CON", "aux.md", "com1", "lpt9.txt", "nul"])
+def test_new_name_the_filesystem_would_refuse_is_rejected(bad):
+    # past NAME_MAX once mkstemp adds its suffix, or unusable on Windows: reject before creating it
+    with pytest.raises(ValueError):
+        layer.check_new_name(bad)
+
+
+@pytest.mark.parametrize("existing", ["a" * 101, "con", "notes."])
+def test_existing_names_still_resolve(tmp_path, existing):
+    # a user's skills/con/ or a long legacy name must not break reading the library
+    assert layer.symbol_dir("project", existing, tmp_path).name == existing
+
+
+def test_new_subfile_segment_the_filesystem_would_refuse_is_rejected():
+    for bad in ["references/" + "b" * 250 + ".md", "references/aux.md", "scripts/run."]:
+        with pytest.raises(ValueError):
+            layer.check_subfile(bad, new=True)
+        layer.check_subfile(bad)  # an existing file of that name can still be addressed
+
+
+def test_ordinary_new_names_near_the_limit_pass():
+    for ok in ["a" * 100, "console", "auxiliary-notes", "com10", "my.skill.v2"]:
+        layer.check_new_name(ok)
+
+
 def test_valid_symbol_name_ok(tmp_path):
     assert layer.symbol_dir("project", "my_skill-2.v1", tmp_path).name == "my_skill-2.v1"
 

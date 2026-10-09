@@ -507,3 +507,28 @@ def test_run_account_carries_uncategorized_count(tmp_path):
     assert last["uncategorized"] == 1  # only the one that landed without a category
     rows = json.loads((layer.state_dir("project", proot) / "runs" / "run-cat.json").read_text())["verdicts"]
     assert {r["name"]: r.get("notes") for r in rows}["uncat"] == ["category"]
+
+
+def test_create_with_an_unusable_name_is_rejected_cleanly(tmp_path):
+    roots = _roots(tmp_path)
+    for bad in ["a" * 256, "con"]:
+        v = promoter.promote(_create(name=bad, body=GOOD_BODY.replace("name: foo", f"name: {bad}")), roots=roots)
+        assert not v["ok"] and "shape" in _families(v), bad
+
+
+def test_update_can_still_rewrite_an_existing_legacy_subfile(tmp_path):
+    # the new-name limits are for names being created; an existing over-long subfile stays updatable
+    roots = _roots(tmp_path)
+    legacy_rel = "references/" + "n" * 104 + ".md"  # portable: no reserved device name involved
+    body = GOOD_BODY + f"See {legacy_rel} for the notes\n"
+    assert promoter.promote(_create(body=GOOD_BODY), roots=roots)["ok"]
+    legacy = layer.symbol_dir("project", "foo", roots["project"]) / legacy_rel
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text("old\n")
+    upd = {"action": "update", "name": "foo", "body": body, "files": {legacy_rel: "new\n"},
+           "reason": "r", "evidence": "e"}
+    v = promoter.promote(upd, roots=roots)
+    assert v["ok"], v["findings"]
+    fresh = "references/" + "m" * 104 + ".md"
+    bad = {**upd, "files": {fresh: "x\n"}, "body": GOOD_BODY + f"See {fresh} for the notes\n"}
+    assert "files" in _families(promoter.promote(bad, roots=roots))  # a new over-long name is still refused

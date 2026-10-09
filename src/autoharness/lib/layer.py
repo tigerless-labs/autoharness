@@ -28,9 +28,24 @@ def _check_layer(layer):
         raise ValueError(f"unknown layer: {layer!r} (expected one of {LAYERS})")
 
 
+# a name becomes a directory or file, and atomic writes add `.<8 chars>.tmp` to it: stay well inside
+# NAME_MAX (255 bytes), and away from what Windows refuses (reserved device names, a trailing dot)
+MAX_NAME_LEN = 100
+_WINDOWS_RESERVED = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
+
+
 def _check_name(name):
     if not isinstance(name, str) or ".." in name or not _SAFE_NAME.match(name):
         raise ValueError(f"unsafe symbol name: {name!r}")
+
+
+def check_new_name(name):
+    """A name autoharness is about to create: safe, and usable on every filesystem. Existing names
+    (a user's `con` skill, a long legacy one) are only held to _check_name, so reading never breaks."""
+    _check_name(name)
+    if len(name) > MAX_NAME_LEN or name.endswith(".") or name.split(".")[0].lower() in _WINDOWS_RESERVED:
+        raise ValueError(f"unusable new name: {name!r} (over {MAX_NAME_LEN} chars, a trailing dot, or "
+                         "reserved on Windows)")
 
 
 def _main_worktree_root(cwd):
@@ -88,14 +103,14 @@ SUBFILE_DIRS = ("scripts", "templates", "assets", "references")
 EVIDENCE_PREFIX = "references/evidence-"
 
 
-def check_subfile(rel):
+def check_subfile(rel, *, new=False):
     if not isinstance(rel, str) or not rel or ".." in rel or "\\" in rel:
         raise ValueError(f"unsafe subfile path: {rel!r}")
     segments = rel.split("/")
     if len(segments) < 2 or segments[0] not in SUBFILE_DIRS:
         raise ValueError(f"subfile path must sit under one of {SUBFILE_DIRS}: {rel!r}")
     for segment in segments:
-        _check_name(segment)
+        (check_new_name if new else _check_name)(segment)
 
 
 def subfile_path(layer, name, rel, root=None):

@@ -72,6 +72,11 @@ def _schema_errors(params):
     errors = []
     if not _nonempty(params, "name"):
         errors.append(("schema", "name required (non-empty)"))
+    else:
+        try:  # the promoter would refuse it after the session is gone
+            (layer.check_new_name if action == "create" else layer._check_name)(params["name"])
+        except ValueError as exc:
+            errors.append(("schema", str(exc)))
     if not _nonempty(params, "reason") or not _nonempty(params, "evidence"):
         errors.append(("schema", "LED reason+evidence required"))
 
@@ -125,7 +130,7 @@ def _content_errors(params):
     if len(body.encode("utf-8")) > config.STAGE_MAX_BODY_BYTES:
         errors.append(("size", f"body exceeds {config.STAGE_MAX_BODY_BYTES} bytes"))
     files = params.get("files")
-    errors += validate.check_files(files)
+    errors += validate.check_files(files, creating=params["action"] == "create")
     errors += validate.structure(body, files)
     if params.get("action") in ("create", "update"):
         # The promoter is the authority, but it runs after this session is gone: a description gate
