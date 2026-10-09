@@ -70,6 +70,9 @@ def _schema_errors(params):
     if action not in _ACTIONS:
         return [("schema", f"action must be one of {_ACTIONS}, got {action!r}")]
     errors = []
+    for key in ("body", "old_string", "new_string", "absorbed_into"):
+        if params.get(key) is not None and not isinstance(params[key], str):
+            errors.append(("schema", f"{key} must be a string"))
     if not _nonempty(params, "name"):
         errors.append(("schema", "name required (non-empty)"))
     if not _nonempty(params, "reason") or not _nonempty(params, "evidence"):
