@@ -36,7 +36,7 @@ def read(lyr, name, root=None):
     p = path(lyr, name, root)
     if not p.exists():
         return {}
-    return _migrate(json.loads(p.read_text()))
+    return _migrate(json.loads(p.read_text(encoding="utf-8")))
 
 
 def write(lyr, name, data, root=None):
