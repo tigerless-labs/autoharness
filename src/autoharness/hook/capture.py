@@ -99,7 +99,7 @@ def digest(transcript_path, end_offset, *, max_exchanges=None, max_record_chars=
             continue
         role, text = entry
         rendered = f"{role}: {text}"
-        total += len(rendered) + 1
+        total += len(rendered.encode("utf-8")) + 1
         if total > digest_cap:
             kept.append(TRUNCATION_MARK)
             break
@@ -108,4 +108,11 @@ def digest(transcript_path, end_offset, *, max_exchanges=None, max_record_chars=
             users_seen += 1
             if users_seen >= exchanges:
                 break
-    return redact.redact("\n".join(reversed(kept)), rules_path) if kept else ""
+    text = redact.redact("\n".join(reversed(kept)), rules_path) if kept else ""
+    encoded = text.encode("utf-8")
+    if len(encoded) > digest_cap:
+        marker = TRUNCATION_MARK.encode("utf-8")[:digest_cap]
+        budget = digest_cap - len(marker)
+        tail = encoded[-budget:].decode("utf-8", errors="ignore") if budget else ""
+        text = marker.decode("utf-8") + tail
+    return text
