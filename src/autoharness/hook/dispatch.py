@@ -78,6 +78,11 @@ def _is_reflector(event):
     return at == config.REFLECTOR_AGENT or at.endswith(":reflector")
 
 
+def _is_curator(event):
+    at = str(event.get("agent_type") or "")
+    return at == config.CURATOR_AGENT or at.endswith(":curator")
+
+
 def _detached_launch(transcript_path, session_id, run_id, roots):
     try:
         subprocess.Popen(  # host-detach: fire-and-forget so the Stop hook returns immediately
@@ -138,9 +143,10 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
         if name == "PreToolUse":
             tool = event.get("tool_name")
             child = bool(os.environ.get(config.CHILD_SESSION_ENV))
-            if tool in _WRITE_TOOLS and (child or _is_reflector(event)):
+            maintenance_agent = _is_reflector(event) or _is_curator(event)
+            if tool in _WRITE_TOOLS and (child or maintenance_agent):
                 return {"deny": True, "reason": "reflector may only stage intents, not write files"}
-            if not child:  # direction H: every main-session tool call advances the activity numerator
+            if not child and not maintenance_agent:  # direction H: every main-session tool call advances the activity numerator
                 sid = event.get("session_id")
                 if isinstance(sid, str) and sid:
                     try:
@@ -148,9 +154,11 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
                     except ValueError:
                         pass  # unsafe session id: skip counting, never crash the host hook
             if tool == "Skill":
+                if maintenance_agent:
+                    return {"handled": name, "result": {"counted": False, "reason": "recursion_guard"}}
                 return {"handled": name, "result": on_skill_call.on_skill_call(event, roots=roots)}
             if tool == "Read":
-                if _is_reflector(event):
+                if maintenance_agent:
                     return {"handled": name, "result": {"counted": False, "reason": "reflector_read"}}
                 return {"handled": name, "result": on_skill_call.on_skill_read(event, roots=roots)}
             return {"ignored": True, "reason": "untracked PreToolUse"}
