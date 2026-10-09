@@ -169,6 +169,8 @@ def stage(params, *, run_id, root=None):
         intent_queue.append(run_id, intent, root)
     except ValueError as exc:
         return {"ok": False, "errors": [("queue", str(exc))], "intent": None}
+    except OSError:
+        return {"ok": False, "errors": [("queue", "unable to persist intent")], "intent": None}
     return {"ok": True, "errors": [], "intent": intent}
 
 
