@@ -121,6 +121,21 @@ def _remove_subfile(level, name, rel, root):
         p.unlink()
 
 
+def _occupied(base_dir):
+    # a create that died inside its own sidecar write leaves only the bare dir and, after a hard kill,
+    # a top-level *.tmp orphan; anything else — a subdir, a symlink, the dir itself linked — is not ours
+    if base_dir.is_symlink():
+        return True
+    if not base_dir.is_dir():
+        return base_dir.exists()  # a plain file there is the user's too, not a free slot
+    return any(p.is_symlink() or not p.is_file() or (p.suffix != ".tmp" and p.name not in _OS_DEBRIS)
+               for p in base_dir.iterdir())
+
+
+# what a file manager drops into any folder it opens; not anyone's content
+_OS_DEBRIS = {".DS_Store", "Thumbs.db", "desktop.ini"}
+
+
 def _land(action, intent, body, level, name, root):
     if action == "delete":
         evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
@@ -132,15 +147,14 @@ def _land(action, intent, body, level, name, root):
         evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
         ledger.append(level, name, _led(intent, evidence_ref), root)
         return
+    if action == "create" and not sidecar.read(level, name, root):
+        # claim the dir before anything lands in it, so a create that dies midway replays as ours, not
+        # as a hand-written skill; an existing sidecar is a crash replay — keep its counters
+        sidecar.create(level, name, counters.request_count(level, root), root)
     _land_files(level, name, intent.get("files"), root)
     evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
     skill_store.write_body(level, name, body, root)
-    if action == "create":
-        existing = sidecar.read(level, name, root)
-        if not existing:
-            sidecar.create(level, name, counters.request_count(level, root), root)
-        # crash-replay: sidecar already exists — skip create to preserve counters
-    else:
+    if action != "create":
         sidecar.bump_patch(level, name, root)  # update/patch: feeds the reuse-after-improvement pair
     ledger.append(level, name, _led(intent, evidence_ref), root)
 
@@ -167,7 +181,10 @@ def promote(intent, *, roots=None, repo_name=None):
     except (ValueError, KeyError) as exc:
         return _reject(action, level, [("shape", str(exc))])
 
-    target_created = sidecar.is_agent_created(level, name, root) if action in _MODIFY else None
+    target_created = None
+    if action in _MODIFY or (action == "create" and _occupied(base_dir)):
+        # a create into an occupied directory is an overwrite: only of a skill we wrote (crash replay)
+        target_created = sidecar.is_agent_created(level, name, root)
 
     absorbed = intent.get("absorbed_into")
     if action == "delete" and absorbed:

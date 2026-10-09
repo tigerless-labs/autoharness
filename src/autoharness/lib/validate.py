@@ -223,5 +223,7 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
 
     if intent.get("action") in _MODIFY and target_is_agent_created is not True:
         findings.append(("self_produced", "target live skill not created_by:agent"))
+    elif intent.get("action") == "create" and target_is_agent_created is False:
+        findings.append(("self_produced", "create would overwrite a skill not created_by:agent"))
 
     return {"ok": not findings, "findings": findings}
