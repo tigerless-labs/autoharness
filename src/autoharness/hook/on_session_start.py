@@ -97,6 +97,8 @@ def last_run_summary(roots):
         return None
     try:
         last = json.loads(consumed.read_text())
+        if not isinstance(last, dict):
+            return None
     except (ValueError, OSError):
         return None
     finally:
@@ -106,8 +108,9 @@ def last_run_summary(roots):
             pass
     line = (f"autoharness last run: landed {last.get('landed', 0)}, "
             f"rejected {last.get('rejected', 0)}")
-    if last.get("families"):
-        line += f" ({', '.join(last['families'])})"
+    families = last.get("families")
+    if isinstance(families, list) and families and all(isinstance(f, str) for f in families):
+        line += f" ({', '.join(families)})"
     if last.get("absorbed"):
         line += f"; merged {last['absorbed']} into umbrellas"
     if last.get("uncategorized"):
