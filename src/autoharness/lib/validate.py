@@ -170,6 +170,12 @@ def structure(body, files=None):
 def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None):
     findings = []
     files = intent.get("files")
+    if files is not None and not isinstance(files, dict):
+        findings += check_files(files)
+        files = None
+    if body is not None and not isinstance(body, str):
+        findings.append(("structure", "body must be a string"))
+        body = None
 
     if body is not None:
         guard = skills_guard.scan(body)
@@ -218,7 +224,8 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
     if intent.get("action") == "remove_file":
         findings += check_remove_path(intent.get("path"))
 
-    if not (intent.get("reason") or "").strip() or not (intent.get("evidence") or "").strip():
+    if any(not isinstance(intent.get(field), str) or not intent[field].strip()
+           for field in ("reason", "evidence")):
         findings.append(("led", "intent missing reason/evidence"))
 
     if intent.get("action") in _MODIFY and target_is_agent_created is not True:
