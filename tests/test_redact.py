@@ -1,3 +1,5 @@
+import pytest
+
 from autoharness.lib import redact
 
 
@@ -77,3 +79,38 @@ def test_secret_hits_honors_rule_validator(tmp_path):
 
     assert redact.secret_hits("invalid 79927398714", rules) == []
     assert redact.secret_hits("valid 79927398713", rules) == ["checked_number"]
+
+
+_EACH_SECRET = [
+    ("AKIAIOSFODNN7EXAMPLE", "[REDACTED:secret:aws_access_key_id]"),
+    ("-----BEGIN RSA PRIVATE KEY-----", "[REDACTED:secret:private_key_block]"),
+    ("token ghp_" + "a" * 36, "token [REDACTED:secret:github_token]"),
+    ("xoxb-123456789012-abcdefghijkl", "[REDACTED:secret:slack_token]"),
+    ("Authorization: Bearer glpat-AbCdEfGhIjKlMnOpQrStU", "Authorization: [REDACTED:secret:bearer_token]"),
+    ("api_key=sk_live_abcd1234EFGH5678ijkl", "[REDACTED:secret:api_key_assignment]"),
+]
+
+
+@pytest.mark.parametrize("raw, expected", _EACH_SECRET)
+def test_each_secret_keeps_its_own_placeholder(raw, expected):
+    # a later rule must not rewrite an earlier placeholder: `secret:bearer_token` is not a key=value
+    assert redact.redact(raw) == expected
+
+
+def test_a_second_pass_leaves_placeholders_alone():
+    # evidence is redacted twice: once in the captured window, again when it is materialized
+    once = redact.redact("; ".join(raw for raw, _ in _EACH_SECRET) + "; mail jane.doe@example.com")
+    assert redact.redact(once) == once
+
+
+def test_a_made_up_placeholder_does_not_shield_a_secret():
+    # only this rule set's own placeholders are protected; anything else is raw text
+    out = redact.redact("[REDACTED:secret:AKIAIOSFODNN7EXAMPLE] and [REDACTED:secret:ghp_" + "c" * 36 + "]")
+    assert "AKIAIOSFODNN7EXAMPLE" not in out and "ghp_" not in out
+
+
+def test_secret_hits_ignores_this_rule_sets_own_placeholders():
+    # a skill may quote the redacted window it learned from; that is not a secret
+    once = redact.redact("; ".join(raw for raw, _ in _EACH_SECRET))
+    assert redact.secret_hits(once) == []
+    assert "aws_access_key_id" in redact.secret_hits("[REDACTED:secret:AKIAIOSFODNN7EXAMPLE]")
