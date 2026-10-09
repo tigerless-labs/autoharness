@@ -199,6 +199,18 @@ def test_summary_shown_even_with_empty_library(tmp_path):
     assert out["context"] and "rejected 3" in out["context"]  # anti-silence beats empty-index None
 
 
+def test_summary_names_the_run_that_drained(tmp_path):
+    # a Stop that drained a dead sibling's queue leaves the dead run's account as last_run;
+    # the line has to name it or the next session reads the numbers as its own
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "last_run.json").write_text(json.dumps(
+        {"run_id": "deadrun", "landed": 1, "rejected": 0, "absorbed": 0, "families": []}))
+    line = on_session_start.last_run_summary(roots)
+    assert "deadrun" in line and "landed 1" in line
+
+
 def test_summary_line_reports_uncategorized_landings(tmp_path):
     # fail-open still has to be visible: a run that landed skills without a category says so
     roots = {"global": tmp_path / "g", "project": tmp_path / "p"}

@@ -28,6 +28,9 @@ if sys.platform == "win32":
                 if e.errno != errno.EDEADLOCK:
                     raise
 
+    def _try_lock(f):
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+
     def _unlock(f):
         msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
 else:
@@ -35,6 +38,9 @@ else:
 
     def _lock(f):
         fcntl.flock(f, fcntl.LOCK_EX)
+
+    def _try_lock(f):
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def _unlock(f):
         fcntl.flock(f, fcntl.LOCK_UN)
@@ -51,3 +57,21 @@ def file_lock(path):
             yield
         finally:
             _unlock(lock_fd)
+
+
+def held(path):
+    """Liveness probe: True when some process currently holds the lock at `path`.
+
+    Tries to take the lock without waiting instead of blocking on it: a lock that cannot be
+    taken is held by a live process, one that can be taken is released immediately and reported
+    free. Safe to call while holding other locks, because it never waits.
+    """
+    lock_path = Path(path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w") as f:
+        try:
+            _try_lock(f)
+        except OSError:
+            return True
+        _unlock(f)
+        return False

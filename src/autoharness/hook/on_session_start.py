@@ -104,7 +104,8 @@ def last_run_summary(roots):
             consumed.unlink()
         except OSError:
             pass
-    line = (f"autoharness last run: landed {last.get('landed', 0)}, "
+    # name the run so the numbers stay traceable when a Stop drained a dead sibling's queue
+    line = (f"autoharness last run ({last.get('run_id', 'unknown')}): landed {last.get('landed', 0)}, "
             f"rejected {last.get('rejected', 0)}")
     if last.get("families"):
         line += f" ({', '.join(last['families'])})"

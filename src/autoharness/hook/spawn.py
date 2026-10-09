@@ -23,6 +23,7 @@ from autoharness.hook import capture, promoter
 from autoharness.lib import (
     atomic,
     counters,
+    intent_queue,
     layer,
     redact,
     sidecar,
@@ -170,9 +171,13 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
         payload = build_bundle(window_text, description_index(roots), spec, digest=digest)
 
     env = child_env(run_id, proot)
-    proc = (spawn_fn or _detached_spawn)(argv, env, payload)
-    verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
-    _record_spawn_failure(run_id, roots, proc, argv)
+    # the live lock marks the run as having a spawn parent: between here and the own drain below,
+    # a foreign drain (the main session's Stop) leaves this queue alone instead of landing the
+    # child's intents mid-flight or racing its appends
+    with intent_queue.live_lock(run_id, proot):
+        proc = (spawn_fn or _detached_spawn)(argv, env, payload)
+        verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
+        _record_spawn_failure(run_id, roots, proc, argv)
     return verdicts
 
 
@@ -208,9 +213,10 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
     argv = build_command(agent=agent or config.CURATOR_AGENT,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
     env = child_env(run_id, roots.get(layer.PROJECT))
-    proc = (spawn_fn or _detached_spawn)(argv, env, bundle)
-    verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
-    _record_spawn_failure(run_id, roots, proc, argv)
+    with intent_queue.live_lock(run_id, roots.get(layer.PROJECT)):  # same liveness marker as reflection
+        proc = (spawn_fn or _detached_spawn)(argv, env, bundle)
+        verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
+        _record_spawn_failure(run_id, roots, proc, argv)
     return verdicts
 
 

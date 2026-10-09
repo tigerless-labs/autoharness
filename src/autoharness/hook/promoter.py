@@ -241,6 +241,16 @@ def _account(run_id, intents, verdicts, proot):
     return record
 
 
+def _drain_run(run_id, *, roots, repo_name, proot):
+    """Land one run's queued intents: take (atomic claim), promote, account, drop. Notification
+    is the caller's job, so a fire-and-forget send never holds the drain lock."""
+    intents = intent_queue.take(run_id, proot)
+    verdicts = [promote(i, roots=roots, repo_name=repo_name) for i in intents]
+    record = _account(run_id, intents, verdicts, proot) if intents else None
+    intent_queue.drop(run_id, proot)
+    return verdicts, record
+
+
 def drain(run_id, *, roots=None, repo_name=None):
     roots = roots or {}
     proot = roots.get(layer.PROJECT)
@@ -251,12 +261,20 @@ def drain(run_id, *, roots=None, repo_name=None):
     # the account comment below used to leave open to an external writer.
     with lock.file_lock(layer.state_dir(layer.PROJECT, proot) / "drain.lock"):
         sweep(roots)
-        intents = intent_queue.read(run_id, proot)
-        verdicts = [promote(i, roots=roots, repo_name=repo_name) for i in intents]
-        record = _account(run_id, intents, verdicts, proot) if intents else None
-        intent_queue.clear(run_id, proot)
-    if record:
-        # after clear and outside the lock: the notification is fire-and-forget and must not hold
-        # the next pass out of the state dir
-        notify.send(record)
+        # the queue is per-run, so a child that exits before its drain leaves its intents in the
+        # directory for good; land them here under the dead run's own id, which is the at-least-once
+        # recovery the module docstring promises (atomic land makes the replay idempotent). A run
+        # whose spawn parent still holds its live lock is not abandoned: it drains itself when the
+        # child exits, and a foreign drain would land its intents mid-flight (orphans also covers
+        # a .draining claim left by a drain that crashed before drop).
+        landed = [_drain_run(orphan, roots=roots, repo_name=repo_name, proot=proot)
+                  for orphan in intent_queue.orphans(proot)
+                  if orphan != run_id and not intent_queue.is_live(orphan, proot)]
+        verdicts, record = _drain_run(run_id, roots=roots, repo_name=repo_name, proot=proot)
+        landed.append((verdicts, record))
+    # after clear and outside the lock: the notification is fire-and-forget and must not hold
+    # the next pass out of the state dir
+    for _, rec in landed:
+        if rec:
+            notify.send(rec)
     return verdicts
