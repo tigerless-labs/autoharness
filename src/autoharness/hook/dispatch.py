@@ -109,6 +109,8 @@ def _consolidate_launch(run_id, roots):
 
 
 def dispatch(event, *, roots=None, reflect=None, consolidate=None):
+    if not isinstance(event, dict):
+        return {"ignored": True, "reason": "non-object hook input"}
     name = event.get("hook_event_name")
     roots = _roots(roots)
     proot = roots.get(layer.PROJECT)
