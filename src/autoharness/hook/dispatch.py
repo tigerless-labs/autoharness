@@ -21,6 +21,7 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 
 MIN_PYTHON = (3, 11)  # tomllib (lib/redact.py) entered the stdlib here; README badge and CI matrix pin the same floor
 
@@ -62,7 +63,7 @@ def _run_id(result):
     sid = _SANITIZE.sub("", raw)
     if not sid:
         sid = hashlib.sha256(raw.encode()).hexdigest()[:8] if raw else "run"
-    return f"{sid}-{result.get('count', 0)}"
+    return f"{sid}-{result.get('count', 0)}-{uuid.uuid4().hex}"
 
 
 def _curate_run_id(event, pcount):
