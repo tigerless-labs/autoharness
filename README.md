@@ -57,11 +57,14 @@ form. Always install as a plugin to match both names.
 
 ### Update
 
+Update and uninstall are shown in their terminal form (`claude plugin …`); inside Claude Code the same
+operations live in the `/plugin` menu.
+
 Update from a terminal — refresh the catalog by marketplace name, then update the plugin by its
 **full `plugin@marketplace` id**, then restart:
 
 ```
-claude plugin marketplace update autoharness       
+claude plugin marketplace update autoharness
 claude plugin update autoharness@autoharness
 ```
 
@@ -78,8 +81,8 @@ field is bumped.
 ### Uninstall
 
 ```
-claude plugin uninstall autoharness@autoharness     
-claude plugin marketplace remove autoharness       
+claude plugin uninstall autoharness@autoharness
+claude plugin marketplace remove autoharness
 ```
 
 Uninstalling only stops it from running — the skills it landed and its own state live **outside** the
@@ -149,7 +152,7 @@ Set them in the environment Claude Code launches with — either the shell
 ```
 
 Hooks read the environment on every event, so a change applies from the next session. The defaults
-are deliberate placeholders pending empirical calibration (tracked under `experiments/`); byte caps
+are deliberate placeholders pending empirical calibration; byte caps
 on captured windows and staged files are fixed constants, not env knobs.
 
 ## How it works
