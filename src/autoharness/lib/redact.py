@@ -33,7 +33,7 @@ _VALIDATORS = {"luhn": _passes_luhn}
 @functools.lru_cache(maxsize=4)
 def _rules(rules_path):
     path = Path(rules_path) if rules_path else config.REDACTION_RULES
-    data = tomllib.loads(path.read_text())
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     compiled = []
     for category in ("secret", "pii"):
         for rule in data.get(category, []):

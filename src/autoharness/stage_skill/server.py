@@ -206,6 +206,9 @@ def handle(request, *, run_id, root=None):
 
 
 def serve(stdin=None, stdout=None):
+    if stdin is None and hasattr(sys.stdin, "reconfigure"):
+        # JSON-RPC arrives as UTF-8 whatever the locale codec is; responses are ASCII JSON
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     run_id = os.environ.get(config.RUN_ID_ENV) or config.INTERACTIVE_RUN_ID

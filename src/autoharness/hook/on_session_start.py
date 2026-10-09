@@ -66,7 +66,7 @@ def recall_index(roots, cwd=None):
             name = path.parent.name
             if not sidecar.is_agent_created(lyr, name, root):
                 continue
-            fm = validate._frontmatter(path.read_text()) or {}
+            fm = validate._frontmatter(path.read_text(encoding="utf-8")) or {}
             desc = _fit(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
             groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]: {desc}")
@@ -96,7 +96,7 @@ def last_run_summary(roots):
     except OSError:
         return None
     try:
-        last = json.loads(consumed.read_text())
+        last = json.loads(consumed.read_text(encoding="utf-8"))
     except (ValueError, OSError):
         return None
     finally:

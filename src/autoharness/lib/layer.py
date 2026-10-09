@@ -42,7 +42,7 @@ def _main_worktree_root_resolved(cwd):
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "--git-dir", "--git-common-dir"],
-            cwd=cwd, capture_output=True, text=True, timeout=5,
+            cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
         )
         lines = proc.stdout.splitlines()
         if proc.returncode != 0 or len(lines) < 2:

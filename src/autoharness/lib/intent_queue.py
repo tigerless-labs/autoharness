@@ -34,7 +34,7 @@ def read(run_id, root=None):
     p = _path(run_id, root)
     if not p.exists():
         return []
-    return [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def clear(run_id, root=None):
