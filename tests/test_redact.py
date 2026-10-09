@@ -77,3 +77,37 @@ def test_secret_hits_honors_rule_validator(tmp_path):
 
     assert redact.secret_hits("invalid 79927398714", rules) == []
     assert redact.secret_hits("valid 79927398713", rules) == ["checked_number"]
+
+
+def test_private_key_block_redacts_body_and_end_line():
+    raw = (
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n"
+        "QyNTUxOQAAACDq1J2v9xR8fGqJ6p3W\n"
+        "-----END OPENSSH PRIVATE KEY-----"
+    )
+    out = redact.redact(raw)
+    for leak in [
+        "BEGIN OPENSSH PRIVATE KEY",
+        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ",
+        "QyNTUxOQAAACDq1J2v9xR8fGqJ6p3W",
+        "END OPENSSH PRIVATE KEY",
+    ]:
+        assert leak not in out, f"leaked: {leak}"
+    assert "[REDACTED:" in out
+    assert redact.secret_hits(raw) == ["private_key_block"]
+
+
+def test_truncated_private_key_block_redacts_to_end_of_text():
+    # Capture windows clip records at CAPTURE_MAX_RECORD_BYTES, so a window can
+    # hold a BEGIN without its END; the safe side is redacting to end of text.
+    raw = (
+        "prefix -----BEGIN RSA PRIVATE KEY-----\n"
+        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n"
+        "trailing evidence text"
+    )
+    out = redact.redact(raw)
+    assert "BEGIN RSA PRIVATE KEY" not in out
+    assert "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ" not in out
+    assert "trailing evidence text" not in out
+    assert out.startswith("prefix ")
