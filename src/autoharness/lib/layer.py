@@ -4,13 +4,17 @@ The rest of the code is layer-agnostic and passes layer in as an argument. Unkno
 symbol names are always rejected (fail-safe, deny-by-default), because this is the chokepoint that
 builds filesystem paths: privilege escalation / path traversal must be stopped here.
 
-The project layer's identity is the session cwd — except inside a linked git worktree, where it is
-remapped to the main worktree root, so counters / intents / skills from all worktrees of one repo
-land in one place and survive worktree removal. Only the linked-worktree case is remapped (git-dir
-differs from git-common-dir): plain repos, repo subdirectories, and non-git directories keep cwd
-verbatim, so a nested project can never be attributed to an enclosing repo. Any git failure falls
-back to cwd (fail-safe).
+The project layer's identity is the session's project dir: CLAUDE_PROJECT_DIR, which the host hands
+every hook, else the process cwd. Not the cwd first — a hook inherits the shell cwd, which the host
+carries across Bash calls, so after a `cd sub` it would seed a stray sub/.claude/autoharness. Inside a
+linked git worktree that dir is remapped to the main worktree root, so counters / intents / skills
+from all worktrees of one repo land in one place and survive worktree removal. Only the
+linked-worktree case is remapped (git-dir differs from git-common-dir): plain repos, repo
+subdirectories, and non-git directories are kept verbatim, so a nested project can never be
+attributed to an enclosing repo. Any git failure falls back to the dir itself (fail-safe).
+A reflector/curator child session skips all of this: spawn pins the parent's resolved root in its env.
 """
+import os
 import re
 import subprocess
 from functools import cache
@@ -19,6 +23,8 @@ from pathlib import Path
 GLOBAL = "global"
 PROJECT = "project"
 LAYERS = (GLOBAL, PROJECT)
+# set by spawn on child sessions: already the project layer root (<repo>/.claude), not the repo dir
+PROJECT_ROOT_ENV = "AUTOHARNESS_PROJECT_ROOT"
 
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
@@ -59,7 +65,10 @@ def default_root(layer):
     _check_layer(layer)
     if layer == GLOBAL:
         return Path.home() / ".claude"
-    return _main_worktree_root(str(Path.cwd())) / ".claude"
+    pinned = os.environ.get(PROJECT_ROOT_ENV)
+    if pinned:
+        return Path(pinned)
+    return _main_worktree_root(os.environ.get("CLAUDE_PROJECT_DIR") or str(Path.cwd())) / ".claude"
 
 
 def _root(layer, root):

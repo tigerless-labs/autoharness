@@ -113,6 +113,32 @@ def test_project_root_repo_subdir_stays_cwd_no_jump_to_repo_root(main_repo, monk
     assert _project_root_at(monkeypatch, sub) == sub / ".claude"
 
 
+def test_project_root_follows_host_project_dir_not_shell_cwd(main_repo, monkeypatch):
+    # the shell cwd persists across Bash calls: after `cd sub`, hooks must still land at the project
+    sub = main_repo / "sub"
+    sub.mkdir()
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(main_repo))
+    assert _project_root_at(monkeypatch, sub) == main_repo / ".claude"
+
+
+def test_project_root_host_project_dir_in_worktree_maps_to_main_root(linked_worktree, main_repo,
+                                                                      monkeypatch):
+    sub = linked_worktree / "src"
+    sub.mkdir()
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(linked_worktree))
+    assert _project_root_at(monkeypatch, sub) == main_repo / ".claude"
+
+
+def test_project_root_child_session_uses_spawn_pinned_root(main_repo, tmp_path, monkeypatch):
+    # a reflector child starts in the parent's shell cwd; its hooks must reuse the parent's root
+    sub = main_repo / "sub"
+    sub.mkdir()
+    pinned = tmp_path / "pinned" / ".claude"
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(sub))
+    monkeypatch.setenv(layer.PROJECT_ROOT_ENV, str(pinned))
+    assert _project_root_at(monkeypatch, sub) == pinned
+
+
 def test_project_root_linked_worktree_maps_to_main_root(linked_worktree, main_repo, monkeypatch):
     assert _project_root_at(monkeypatch, linked_worktree) == main_repo / ".claude"
 
