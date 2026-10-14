@@ -88,7 +88,7 @@ def _led(intent, evidence_ref):
 
 def _materialize_evidence(level, name, evidence, root):
     text = redact.redact(evidence)
-    rel = f"{layer.EVIDENCE_PREFIX}{hashlib.sha256(text.encode('utf-8')).hexdigest()[:8]}.md"
+    rel = f"{layer.EVIDENCE_PREFIX}{hashlib.sha256(text.encode('utf-8')).hexdigest()}.md"
     p = layer.subfile_path(level, name, rel, root)
     if not p.exists():
         atomic.write_text(p, text)
