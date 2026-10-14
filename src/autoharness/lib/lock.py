@@ -45,7 +45,7 @@ def file_lock(path):
     """Hold the lock named by `path` for the duration of the block, releasing it on any exit."""
     lock_path = Path(path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(lock_path, "w") as lock_fd:
+    with open(lock_path, "w", encoding="utf-8") as lock_fd:
         _lock(lock_fd)
         try:
             yield

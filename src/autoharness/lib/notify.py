@@ -55,7 +55,7 @@ def summary(rows):
 
 def _run(argv, *, stdin=None, env=None):
     subprocess.run(argv, input=stdin, stdin=None if stdin is not None else subprocess.DEVNULL,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, env=env,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, encoding="utf-8", env=env,
                    timeout=config.NOTIFY_TIMEOUT_S, check=False)
 
 

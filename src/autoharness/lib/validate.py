@@ -253,7 +253,7 @@ def _structure(body, base_dir, files=None):
                 continue
             if f.is_file():
                 try:
-                    ast.parse(f.read_text())
+                    ast.parse(f.read_text(encoding="utf-8"))
                 except SyntaxError as exc:
                     findings.append(("structure", f"referenced {ref} has syntax error: {exc}"))
         for ref in subfile_references(body, base_dir=base_dir, files=files):
