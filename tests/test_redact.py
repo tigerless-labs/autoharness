@@ -1,3 +1,5 @@
+import time
+
 from autoharness.lib import redact
 
 
@@ -66,11 +68,78 @@ def test_each_rule_reports_itself_and_placeholders_are_never_rematched():
         assert "[REDACTED:[REDACTED:" not in out, f"nested placeholder for {raw!r}"
 
 
-def test_overlapping_rules_keep_the_earlier_rule_in_the_file():
+
+_SECRETS = [
+    "AKIAABCDEFGHIJKLMNOP",
+    "-----BEGIN RSA PRIVATE KEY-----",
+    "ghp_abcdefghij0123456789",
+    "xoxb-1234567890-abcdef",
+    "Authorization: Bearer glpat-AbCdEfGhIjKlMnOpQrStU",
+    "api_key=sk_live_abcd1234EFGH5678ijkl",
+]
+
+
+def test_a_second_pass_leaves_placeholders_alone():
+    # evidence is redacted twice: once in the captured window, again when promoter materializes it
+    once = redact.redact("; ".join(_SECRETS) + "; mail jane.doe@example.com")
+    assert redact.redact(once) == once
+
+
+def test_a_made_up_placeholder_does_not_shield_a_secret():
+    # only this rule set's own placeholders are held; anything else is raw text
+    out = redact.redact("[REDACTED:secret:AKIAIOSFODNN7EXAMPLE] and [REDACTED:secret:ghp_" + "c" * 36 + "]")
+    assert "AKIAIOSFODNN7EXAMPLE" not in out and "ghp_" not in out
+
+
+def test_secret_hits_ignores_this_rule_sets_own_placeholders():
+    # a skill may quote the redacted window it learned from; that is not a secret
+    assert redact.secret_hits(redact.redact("; ".join(_SECRETS))) == []
+    assert "aws_access_key_id" in redact.secret_hits("[REDACTED:secret:AKIAIOSFODNN7EXAMPLE]")
+
+
+def test_a_placeholder_inside_a_key_block_does_not_shield_the_block():
+    # a match reaching outside a placeholder is raw: the block around it is still redacted and reported
+    raw = "\n".join(["-----BEGIN RSA PRIVATE KEY-----", "Comment: [REDACTED:pii:email]",
+                     "MIIEowIBAAKCAQEAyF2t", "-----END RSA PRIVATE KEY-----"])
+    assert "MIIEowIBAAKCAQEAyF2t" not in redact.redact(raw)
+    assert redact.secret_hits(raw) == ["private_key_block"]
+
+def test_overlapping_matches_merge_and_the_earlier_rule_names_them():
     # github_token is ordered before api_key_assignment; the wider assignment match
-    # overlaps it, so the narrower, earlier rule owns the span.
+    # overlaps it, so the narrower, earlier rule names the merged span.
     raw = "token = ghp_abcdefghij0123456789"
-    assert redact.redact(raw) == "token = [REDACTED:secret:github_token]"
+    assert redact.redact(raw) == "[REDACTED:secret:github_token]"
+
+
+def test_a_match_inside_a_key_block_does_not_leave_the_block_raw():
+    # the aws rule comes first and takes the id; dropping the overlapping key block kept its body
+    raw = "\n".join(["-----BEGIN RSA PRIVATE KEY-----", "Comment: AKIAABCDEFGHIJKLMNOP",
+                     "MIIEowIBAAKCAQEAyF2t", "-----END RSA PRIVATE KEY-----"]) + "\nafter"
+    out = redact.redact(raw)
+    for leak in ["BEGIN RSA", "AKIAABCDEFGHIJKLMNOP", "MIIEowIBAAKCAQEAyF2t", "END RSA"]:
+        assert leak not in out, f"leaked: {leak}"
+    assert out == "[REDACTED:secret:aws_access_key_id]\nafter"
+
+
+def test_dense_matches_do_not_make_redact_quadratic():
+    # 28k matches in a 200 KB window (the capture cap): checking each against every span took ~8 s
+    started = time.perf_counter()
+    out = redact.redact("a@b.co " * 28_000)
+    assert time.perf_counter() - started < 2
+    assert "a@b.co" not in out
+
+
+def test_a_card_right_after_a_phone_number_is_still_found():
+    # the phone and the card read as one 20-digit run whose first 16 digits fail luhn; finditer resumed
+    # after that rejected match and never tried the card on its own
+    out = redact.redact("call 415-555-0132 4111 1111 1111 1111 now")
+    assert out.startswith("call [REDACTED:pii:us_phone] [REDACTED:pii:credit_card]") and "4111" not in out
+
+
+def test_a_window_that_passes_luhn_by_chance_does_not_hide_the_rest_of_a_card():
+    # `6026 1064 4111 1111` passes luhn; resuming after it left the real card's last eight digits raw
+    out = redact.redact("6346 7486 6026 1064 4111 1111 1111 1111")
+    assert "1111" not in out and out.endswith("[REDACTED:pii:credit_card]")
 
 
 def test_unknown_validator_name_fails_loud_at_rule_load():
