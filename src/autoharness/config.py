@@ -114,4 +114,4 @@ RUN_ID_ENV = "AUTOHARNESS_RUN_ID"           # spawn injects the intent-queue run
 # user's own session has neither, so before this existed stage_skill refused with "unsafe run id"
 # and the shipped learn skill could never land anything. The main session's Stop drains this queue.
 INTERACTIVE_RUN_ID = "interactive"
-PROJECT_ROOT_ENV = "AUTOHARNESS_PROJECT_ROOT"  # same: repo root (where the queue is persisted)
+PROJECT_ROOT_ENV = layer.PROJECT_ROOT_ENV  # same: the project layer root, where the queue is persisted (layer resolves it)
