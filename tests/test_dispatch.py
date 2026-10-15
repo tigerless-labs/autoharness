@@ -413,3 +413,37 @@ def test_supported_python_still_imports_and_dispatches(tmp_path):
     # the guard must not fire on a supported interpreter
     assert dispatch.dispatch({"hook_event_name": "Nope"}) == {
         "ignored": True, "reason": "unrouted event: 'Nope'"}
+
+
+def test_a_failing_drain_does_not_cost_the_turn_its_reflection(tmp_path, monkeypatch):
+    def broken(*a, **k):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(dispatch.promoter, "drain", broken)
+    monkeypatch.setattr(dispatch.on_stop, "on_stop",
+                        lambda e, **k: {"triggered": True, "session_id": "s1", "count": 50, "window_n": 50})
+    calls = []
+    out = dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1", "transcript_path": "/t.jsonl"},
+                            roots=_roots(tmp_path), reflect=lambda ev, res, roots: calls.append(res))
+    assert calls and out["result"]["drain_error"].startswith("OSError")
+
+
+def test_torn_interactive_queue_line_no_longer_wedges_every_stop(tmp_path):
+    roots = _roots(tmp_path)
+    proot = roots[layer.PROJECT]
+    q = layer.state_dir(layer.PROJECT, proot) / "intents" / "interactive.jsonl"
+    q.parent.mkdir(parents=True)
+    q.write_text('{"action": "create", "name": "foo", "body": "---\\nname: foo\\ndesc')  # torn mid-write
+    for _ in range(config.REFLECT_EVERY_N):
+        counters.bump_session("s1", proot)
+    calls = []
+    out = dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1", "transcript_path": "/t.jsonl"},
+                            roots=roots, reflect=lambda ev, res, roots: calls.append(res))
+    assert "error" not in out and calls  # on_stop ran and reflection fired
+    assert not q.exists()  # accounted once and cleared, not replayed on every Stop
+    run = json.loads((layer.state_dir(layer.PROJECT, proot) / "runs" / "interactive.json").read_text())
+    assert run["verdicts"][0]["findings"] == ["queue"]
+
+
+def test_a_crashed_handler_is_reported_on_stderr(capsys):
+    dispatch._emit({"error": "TypeError: boom"})
+    assert "TypeError: boom" in capsys.readouterr().err

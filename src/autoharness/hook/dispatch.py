@@ -123,8 +123,14 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
             if not config.DISABLE_GLOBAL:
                 counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG denominator (per turn)
             pcount = counters.bump_request(layer.PROJECT, proot)
-            promoter.drain(config.INTERACTIVE_RUN_ID, roots=roots)  # /learn and other in-session proposals; no-op when empty
+            drain_error = None
+            try:
+                promoter.drain(config.INTERACTIVE_RUN_ID, roots=roots)  # /learn and other in-session proposals; no-op when empty
+            except Exception as exc:  # the queue stays for the next Stop; this turn still counts and reflects
+                drain_error = f"{type(exc).__name__}: {exc}"
             result = on_stop.on_stop(event, root=proot)
+            if drain_error:
+                result = {**result, "drain_error": drain_error}
             if result.get("triggered"):
                 fire(event, result, roots)
             if config.CONSOLIDATE_EVERY_N and pcount % config.CONSOLIDATE_EVERY_N == 0:
@@ -177,6 +183,8 @@ def _emit(verdict):
     handled = verdict.get("handled")
     if handled:
         print(json.dumps({"handled": handled, "result": result}), file=sys.stderr)
+    elif verdict.get("error"):
+        print(json.dumps({"error": verdict["error"]}), file=sys.stderr)  # a crashed handler is not silent
 
 
 def main():

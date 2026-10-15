@@ -28,8 +28,16 @@ def path(lyr, name, root=None):
 def append(lyr, name, entry, root=None):
     p = path(lyr, name, root)
     p.parent.mkdir(parents=True, exist_ok=True)
+    # a tail torn by a crash mid-append has no newline: start on a fresh line so this entry survives
+    torn = p.exists() and p.stat().st_size > 0 and _last_byte(p) != b"\n"
     with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        f.write(("\n" if torn else "") + json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _last_byte(p):
+    with p.open("rb") as f:
+        f.seek(-1, 2)
+        return f.read(1)
 
 
 def read(lyr, name, root=None, *, archived=False):
@@ -38,4 +46,14 @@ def read(lyr, name, root=None, *, archived=False):
     p = (layer.archive_dir(lyr, root) / name / FILENAME) if archived else path(lyr, name, root)
     if not p.exists():
         return []
-    return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+    out = []
+    # "\n" only: json.dumps writes U+2028 and friends raw inside `reason`, and splitlines() would cut
+    # an entry in two; a line torn by a crash mid-append is skipped, the rest of the provenance reads
+    for line in p.read_text(encoding="utf-8", errors="replace").split("\n"):
+        if not line.strip():
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out

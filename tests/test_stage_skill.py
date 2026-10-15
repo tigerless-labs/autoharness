@@ -414,3 +414,11 @@ def test_existing_unusual_names_can_still_be_updated(tmp_path):
     v = server.stage(_params(action="patch", name="con", body=None, old_string="a", new_string="b"),
                      run_id=RUN, root=tmp_path)
     assert v["ok"], v["errors"]
+
+
+def test_non_string_fields_are_rejected_at_stage_time(tmp_path):
+    # `is not None` checks alone let these reach the queue, where they crashed the drain
+    for kw in ({"action": "patch", "body": None, "old_string": 5, "new_string": ["x"]},
+               {"body": {"not": "text"}}, {"level": 1}):
+        v = server.stage(_params(**kw), run_id=RUN, root=tmp_path)
+        assert not v["ok"] and "schema" in _errs(v), kw
