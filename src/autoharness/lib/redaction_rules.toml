@@ -12,7 +12,7 @@ pattern = '''-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVAT
 
 [[secret]]
 name = "github_token"
-pattern = '''gh[posru]_[A-Za-z0-9]{20,}'''
+pattern = '''gh[posru]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{22,}'''
 
 [[secret]]
 name = "slack_token"
