@@ -24,7 +24,9 @@ pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{20,}'''
 
 [[secret]]
 name = "api_key_assignment"
-pattern = '''(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['"]?[A-Za-z0-9._\-/+]{12,}'''
+# the key may itself be quoted ("api_key": ...), and inside a JSONL transcript record the quotes arrive
+# backslash-escaped (\"api_key\": \"...\"), so allow an optional (escaped) quote after the key and before the value
+pattern = '''(?i)(api[_-]?key|secret|token|password)(?:\\?['"])?\s*[:=]\s*(?:\\?['"])?[A-Za-z0-9._\-/+]{12,}'''
 
 [[pii]]
 name = "email"
