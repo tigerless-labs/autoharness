@@ -109,6 +109,8 @@ def _frontmatter(body):
         s = line.strip()
         if not s or s.startswith("#") or ":" not in line:
             continue
+        if line[0] in " \t":
+            continue  # nested mapping or wrapped scalar line: not a top-level field of the skill
         key, value = line.split(":", 1)
         v = value.strip()
         if re.fullmatch(r"[>|](?:[1-9][-+]?|[-+][1-9]?)?(?:[ \t]+#.*)?", v):
