@@ -8,7 +8,13 @@ pattern = '''AKIA[0-9A-Z]{16}'''
 
 [[secret]]
 name = "private_key_block"
-pattern = '''-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)'''
+# the whole block, not just its header (PEM and PGP armor): through its END when that comes within 8 KiB
+# and before another BEGIN or the next record (a line starting `{` in a capture window, `user: ` or
+# `assistant: ` in a digest); otherwise (a record clipped mid-key) the rest of that record, whatever its
+# lines look like: a body line can carry spaces, so telling it from prose is guesswork. Only `\n` ends
+# a line; a `\r` (CRLF, or `\r\r\n` that openssl still reads) is part of it.
+# Possessive runs (3.11+) keep the clipped branch linear.
+pattern = '''-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----(?:(?:(?!-----BEGIN |\n(?:\{|(?:user|assistant): ))[\s\S]){0,8192}?-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----|[^\n]*+(?:\n(?!\{|(?:user|assistant): )[^\n]*+)*+)'''
 
 [[secret]]
 name = "github_token"

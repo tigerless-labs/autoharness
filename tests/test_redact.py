@@ -1,3 +1,5 @@
+import pytest
+
 from autoharness.lib import redact
 
 
@@ -18,6 +20,107 @@ def test_redacts_secrets_and_pii():
     ]:
         assert leak not in out, f"leaked: {leak}"
     assert "[REDACTED:" in out
+
+
+_BODY = ["b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ", "QyNTUxOQAAACDq1J2v9xR8fGqJ6p3W", "AAECAw=="]  # short tail line
+_BEGIN, _END = "-----BEGIN OPENSSH PRIVATE KEY-----", "-----END OPENSSH PRIVATE KEY-----"
+
+
+def _no_key_left(out):
+    for leak in [_BEGIN, *_BODY, _END]:
+        assert leak not in out, f"leaked: {leak}"
+
+
+def test_private_key_block_redacts_the_body_not_just_the_header():
+    out = redact.redact("before\n" + "\n".join([_BEGIN, *_BODY, _END]) + "\nafter")
+    _no_key_left(out)
+    assert out.startswith("before\n") and out.endswith("\nafter")
+
+
+def test_private_key_block_in_a_json_escaped_transcript_record():
+    # capture windows are transcript JSONL: the key's newlines are escaped, the block is one line
+    record = '{"output": "' + "\\n".join([_BEGIN, *_BODY, _END]) + '\\nexit 0"}'
+    out = redact.redact(record)
+    _no_key_left(out)
+    assert "exit 0" in out
+
+
+def test_private_key_block_clipped_before_its_end_line():
+    # a record clipped mid-key has no END: redact the rest of that record, keep the next one
+    clipped = '{"output": "' + "\\n".join([_BEGIN, *_BODY]) + '"}\n{"next": "record"}'
+    out = redact.redact(clipped)
+    _no_key_left(out)
+    assert '{"next": "record"}' in out
+    digest = "user: " + "\n".join([_BEGIN, *_BODY]) + "\nthe rest of this record goes too\nassistant: next record"
+    out = redact.redact(digest)
+    _no_key_left(out)
+    assert "the rest of this record" not in out and out.endswith("\nassistant: next record")
+
+
+def test_clipped_key_body_goes_whatever_its_lines_look_like():
+    # indented (a YAML block scalar), padded, or with spaces inside the base64 (openssl reads that):
+    # the body of a clipped key is the rest of its record, not lines that happen to look like base64
+    chunks = [ln[i:i + 16] for ln in _BODY for i in range(0, len(ln), 16)]
+    layouts = ["\n    ".join([_BEGIN, *_BODY]), "\n".join([_BEGIN] + [ln + " " for ln in _BODY]),
+               "\n".join([_BEGIN] + [" ".join(ln[i:i + 16] for i in range(0, len(ln), 16)) for ln in _BODY])]
+    for layout in layouts:
+        out = redact.redact("user: " + layout + "\nassistant: next record")
+        for leak in [_BEGIN, *chunks]:
+            assert leak not in out, f"leaked: {leak}"
+        assert out.endswith("\nassistant: next record")
+
+
+
+@pytest.mark.parametrize("eol", ["\r\n", "\r\r\n", "\r"])
+def test_clipped_key_body_goes_whatever_its_line_endings(eol):
+    # openssl reads a PEM with `\r\r\n` endings; a fallback that stopped at the first `\r` kept the body
+    out = redact.redact("user: " + eol.join([_BEGIN, *_BODY]) + "\nassistant: next record")
+    _no_key_left(out)
+    assert out.endswith("\nassistant: next record")
+
+def test_pgp_private_key_block_is_redacted_whole_and_clipped():
+    begin, end = "-----BEGIN PGP PRIVATE KEY BLOCK-----", "-----END PGP PRIVATE KEY BLOCK-----"
+    body = ["Version: GnuPG v2", "", "lQdGBGYAAAABEADKxAbCdEfGh", "=abcd"]
+    for raw, after in [("\n".join([begin, *body, end]), "\nthe prose after it stays"),
+                       ("\n".join([begin, *body]), "\nassistant: next record")]:
+        out = redact.redact(raw + after)
+        for leak in [begin, "GnuPG", "lQdGBGYAAAABEADKxAbCdEfGh", "=abcd", end]:
+            assert leak not in out, f"leaked: {leak}"
+        assert out.endswith(after)
+    assert redact.secret_hits(begin) == ["private_key_block"]
+
+
+def test_private_key_blocks_redact_separately():
+    two = "\n".join([_BEGIN, *_BODY, _END, "between the keys", _BEGIN, *_BODY, _END])
+    assert "between the keys" in redact.redact(two)
+
+
+def test_clipped_key_does_not_swallow_records_up_to_a_later_keys_end():
+    # a clipped key must not reach across records to the END of a later, complete key
+    clipped = '{"output": "' + "\\n".join([_BEGIN, *_BODY]) + '"}'
+    full = '{"output": "' + "\\n".join([_BEGIN, *_BODY, _END]) + '"}'
+    out = redact.redact("\n".join([clipped, '{"diag": "kept"}', full]))
+    _no_key_left(out)
+    assert '{"diag": "kept"}' in out
+
+
+def test_key_clipped_by_the_digest_record_cap():
+    # capture.digest() cuts a record's text and appends its truncation mark to the cut line
+    for cut in ("...[truncated]", "   ...[truncated]"):  # the cap can land inside trailing padding
+        digest = "user: " + "\n    ".join([_BEGIN, *_BODY[:2]]) + cut + "\nassistant: done"
+        out = redact.redact(digest)
+        _no_key_left(out)
+        assert "assistant: done" in out
+
+
+def test_clipped_legacy_encrypted_key_redacts_its_headers_and_body():
+    raw = "\n".join(["-----BEGIN RSA PRIVATE KEY-----", "Proc-Type: 4,ENCRYPTED",
+                     "DEK-Info: AES-128-CBC,0123456789ABCDEF0123456789ABCDEF", "", *_BODY,
+                     "assistant: next record"])
+    out = redact.redact(raw)
+    for leak in ["Proc-Type", "DEK-Info", *_BODY]:
+        assert leak not in out, f"leaked: {leak}"
+    assert out.endswith("\nassistant: next record")
 
 
 def test_benign_text_unchanged():
@@ -122,18 +225,3 @@ def test_private_key_block_redacts_body_and_end_line():
         assert leak not in out, f"leaked: {leak}"
     assert "[REDACTED:" in out
     assert redact.secret_hits(raw) == ["private_key_block"]
-
-
-def test_truncated_private_key_block_redacts_to_end_of_text():
-    # Capture windows clip records at CAPTURE_MAX_RECORD_BYTES, so a window can
-    # hold a BEGIN without its END; the safe side is redacting to end of text.
-    raw = (
-        "prefix -----BEGIN RSA PRIVATE KEY-----\n"
-        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n"
-        "trailing evidence text"
-    )
-    out = redact.redact(raw)
-    assert "BEGIN RSA PRIVATE KEY" not in out
-    assert "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ" not in out
-    assert "trailing evidence text" not in out
-    assert out.startswith("prefix ")
