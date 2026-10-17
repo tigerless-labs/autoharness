@@ -14,7 +14,7 @@ _SAFE_RUN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _path(run_id, root=None):
-    if not isinstance(run_id, str) or not _SAFE_RUN.match(run_id):
+    if not isinstance(run_id, str) or not _SAFE_RUN.fullmatch(run_id):
         raise ValueError(f"unsafe run id: {run_id!r}")
     return layer.state_dir(layer.PROJECT, root) / "intents" / f"{run_id}.jsonl"
 

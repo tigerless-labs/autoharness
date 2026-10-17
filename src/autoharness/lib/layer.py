@@ -35,7 +35,7 @@ _WINDOWS_RESERVED = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 1
 
 
 def _check_name(name):
-    if not isinstance(name, str) or ".." in name or not _SAFE_NAME.match(name):
+    if not isinstance(name, str) or ".." in name or not _SAFE_NAME.fullmatch(name):
         raise ValueError(f"unsafe symbol name: {name!r}")
 
 
