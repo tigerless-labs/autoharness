@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 
 from autoharness import config
+from autoharness.hook import recovery
 from autoharness.lib import counters, layer, lifecycle, sidecar, skill_store, validate
 
 # Recall self-injection (mng.md §召回面自持): the host's native description recall stays untouched;
@@ -139,6 +140,7 @@ def on_session_start(event=None, *, roots=None):
         # beside the parent, or get a second index on top of its bundle
         return {"archived": {}, "context": None, "reason": "recursion_guard"}
     roots = roots or {}
+    recovery.recover(roots=roots)
     archived = {}
     for lyr in config.active_layers():
         root = roots.get(lyr)

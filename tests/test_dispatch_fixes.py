@@ -9,7 +9,7 @@ def test_run_id_empty_session_gets_hash():
     result = {"session_id": "...", "count": 5}
     rid = dispatch._run_id(result)
     assert rid != "run-5"
-    assert rid.endswith("-5")
+    assert "-5-" in rid
     # Two different session_ids that both sanitize to empty should differ
     r1 = dispatch._run_id({"session_id": "...", "count": 0})
     r2 = dispatch._run_id({"session_id": "???", "count": 0})
@@ -19,7 +19,7 @@ def test_run_id_empty_session_gets_hash():
 def test_run_id_normal_session_unchanged():
     """A normal session_id should still produce the expected format."""
     result = {"session_id": "abc-123", "count": 3}
-    assert dispatch._run_id(result) == "abc-123-3"
+    assert dispatch._run_id(result).startswith("abc-123-3-")
 
 
 def test_curate_run_id_empty_session_gets_hash():

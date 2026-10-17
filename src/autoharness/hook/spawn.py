@@ -19,7 +19,7 @@ import tarfile
 from pathlib import Path
 
 from autoharness import config
-from autoharness.hook import capture, promoter
+from autoharness.hook import capture, promoter, recovery
 from autoharness.lib import (
     atomic,
     counters,
@@ -218,14 +218,19 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "--curate":
         run_id, proot, groot = argv[1:]
-        return run_curator(run_id, roots={layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)})
+        owner = recovery.track(run_id, Path(proot))
+        result = run_curator(run_id, roots={layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)})
+        recovery.complete(owner)
+        return result
     transcript_path, session_id, run_id, proot, groot = argv
     roots = {layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)}
+    owner = recovery.track(run_id, roots[layer.PROJECT])
     offset = counters.session_offset(session_id, roots[layer.PROJECT])
     window_text, new_offset = capture.window(transcript_path, offset)
     result = run(window_text, run_id, roots=roots, session_id=session_id,
                  digest=capture.digest(transcript_path, offset))
     counters.write_session_offset(session_id, new_offset, roots[layer.PROJECT])
+    recovery.complete(owner)
     return result
 
 

@@ -2,13 +2,14 @@
 
 Durable (recovers after a crash): only appends to a per-run file in the repo-layer state area, never
 touches the skill tree. promoter runs read → land (atomic, idempotent) → clear: a crash between land
-and clear leaves the file in place, and the next run's orphans scan recovers it (at-least-once +
-atomic land = effectively exactly-once); in the extreme case where nothing ran, zero land (fail-safe).
+and clear leaves the file in place. SessionStart retries tracked detached POSIX runs only after
+all registered writer groups disappear; untracked or potentially live queues require explicit
+operator recovery. In the extreme case where nothing ran, zero land (fail-safe).
 """
 import json
 import re
 
-from autoharness.lib import layer, lock
+from autoharness.lib import layer, lock, run_owners
 
 _SAFE_RUN = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -25,7 +26,7 @@ def append(run_id, intent, root=None):
     # O_APPEND only keeps a write whole up to PIPE_BUF, and a staged skill body
     # runs well past that. Two overlapping reflector runs could interleave
     # mid-line, and the unparseable line jams every later drain of this run.
-    with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
+    with run_owners.writer(run_id, root), lock.file_lock(p.with_suffix(p.suffix + ".lock")):
         with p.open("a", encoding="utf-8") as f:
             f.write(json.dumps(intent, ensure_ascii=False) + "\n")
 
