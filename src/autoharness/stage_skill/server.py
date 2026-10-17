@@ -199,6 +199,8 @@ def handle(request, *, run_id, root=None):
                                        "inputSchema": TOOL_SCHEMA}]})
     if method == "tools/call":
         params = request.get("params") or {}
+        if not isinstance(params, dict):
+            return _err(req_id, -32602, "invalid params: expected an object")
         if params.get("name") != TOOL_NAME:
             return _err(req_id, -32602, f"unknown tool: {params.get('name')}")
         out = stage(params.get("arguments") or {}, run_id=run_id, root=root)
@@ -219,7 +221,19 @@ def serve(stdin=None, stdout=None):
         line = line.strip()
         if not line:
             continue
-        response = handle(json.loads(line), run_id=run_id, root=root)
+        try:
+            request = json.loads(line)
+        except json.JSONDecodeError:
+            response = _err(None, -32700, "parse error")
+        else:
+            if not isinstance(request, dict):
+                response = _err(None, -32600, "invalid request")
+            else:
+                try:
+                    response = handle(request, run_id=run_id, root=root)
+                except Exception:  # last resort: one bad request must not end the session's server
+                    req_id = request.get("id")
+                    response = None if req_id is None else _err(req_id, -32603, "internal error")
         if response is not None:
             stdout.write(json.dumps(response) + "\n")
             stdout.flush()
