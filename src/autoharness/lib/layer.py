@@ -11,6 +11,7 @@ differs from git-common-dir): plain repos, repo subdirectories, and non-git dire
 verbatim, so a nested project can never be attributed to an enclosing repo. Any git failure falls
 back to cwd (fail-safe).
 """
+import hashlib
 import re
 import subprocess
 from functools import cache
@@ -116,3 +117,10 @@ def check_subfile(rel, *, new=False):
 def subfile_path(layer, name, rel, root=None):
     check_subfile(rel)
     return symbol_dir(layer, name, root) / rel
+
+
+def symbol_lock_path(lyr, name, root=None):
+    """A symbol's stable lock, outside the directory that archive moves."""
+    _check_name(name)
+    key = hashlib.sha256(name.casefold().encode("utf-8")).hexdigest()
+    return state_dir(lyr, root) / "symbol-locks" / f"{key}.lock"

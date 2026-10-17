@@ -51,9 +51,11 @@ def create(lyr, name, anchor, root=None):
 
 
 def _bump(lyr, name, key, root=None):
-    lock_path = path(lyr, name, root).with_suffix(".json.lock")
+    lock_path = layer.symbol_lock_path(lyr, name, root)
     with lock.file_lock(lock_path):
         data = read(lyr, name, root)
+        if not data:
+            raise FileNotFoundError(path(lyr, name, root))
         data[key] = data.get(key, 0) + 1
         if key == "use" and data.get("patch", 0) > data.get("reused_gen", 0):
             data["reused_gen"] = data["patch"]  # first use after a patch = reuse-after-improvement

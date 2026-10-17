@@ -108,3 +108,81 @@ def test_bumps_preserve_all_counters_across_processes(tmp_path):
     assert data["created_by"] == "agent"
     sidecar.bump_use("project", "shared", tmp_path)
     assert sidecar.read("project", "shared", tmp_path)["reused_gen"] == 80
+
+
+def test_archive_and_counter_bump_share_a_stable_lock(tmp_path, monkeypatch):
+    import threading
+
+    from autoharness.lib import skill_store
+
+    skill_store.write_body("project", "foo", "owned body", tmp_path)
+    sidecar.create("project", "foo", 0, tmp_path)
+    ready = threading.Event()
+    release = threading.Event()
+    archived = threading.Event()
+    errors = []
+    original_write = sidecar.write
+
+    def held_write(*args, **kwargs):
+        ready.set()
+        if not release.wait(3):
+            raise RuntimeError("fixture did not release counter write")
+        original_write(*args, **kwargs)
+
+    def bump():
+        try:
+            sidecar.bump_use("project", "foo", tmp_path)
+        except BaseException as error:
+            errors.append(error)
+
+    def archive():
+        try:
+            skill_store.archive("project", "foo", tmp_path)
+        except BaseException as error:
+            errors.append(error)
+        finally:
+            archived.set()
+
+    monkeypatch.setattr(sidecar, "write", held_write)
+    writer = threading.Thread(target=bump)
+    mover = threading.Thread(target=archive)
+    writer.start()
+    try:
+        assert ready.wait(3)
+        mover.start()
+        # Give the archive a bounded chance to finish while the write is held.
+        archived.wait(0.2)
+    finally:
+        release.set()
+        writer.join(3)
+        if mover.ident is not None:
+            mover.join(3)
+    assert not writer.is_alive() and not mover.is_alive()
+    assert not errors
+    assert not (tmp_path / "skills" / "foo").exists()
+    import json
+    card = json.loads((tmp_path / "skills" / ".archive" / "foo" / ".sidecar.json").read_text())
+    assert card["use"] == 1
+
+
+def test_bump_after_archive_does_not_recreate_live_metadata(tmp_path):
+    import pytest
+
+    from autoharness.lib import skill_store
+
+    skill_store.write_body("project", "foo", "owned body", tmp_path)
+    sidecar.create("project", "foo", 0, tmp_path)
+    skill_store.archive("project", "foo", tmp_path)
+    with pytest.raises(FileNotFoundError):
+        sidecar.bump_use("project", "foo", tmp_path)
+    assert not (tmp_path / "skills" / "foo").exists()
+
+
+def test_stable_lock_preserves_legacy_long_name_usage(tmp_path):
+    from autoharness.lib import skill_store
+
+    name = "x" * 250
+    skill_store.write_body("project", name, "owned body", tmp_path)
+    sidecar.create("project", name, 0, tmp_path)
+    assert sidecar.bump_use("project", name, tmp_path) == 1
+    assert skill_store.archive("project", name, tmp_path) is not None

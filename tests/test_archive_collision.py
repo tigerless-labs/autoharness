@@ -26,6 +26,7 @@ def test_archive_collision_preserves_old(tmp_path):
     with patch("autoharness.lib.skill_store.layer") as lyr_mod:
         lyr_mod.symbol_dir.return_value = Path(root) / "global" / "skills" / "foo"
         lyr_mod.archive_dir.return_value = Path(root) / "global" / ".archive"
+        lyr_mod.symbol_lock_path.return_value = Path(root) / "locks" / "foo.lock"
         result = skill_store.archive("global", "foo", root)
 
     # The old archive must still exist
@@ -71,6 +72,7 @@ def test_archive_repeated_timestamp_collision_gets_unique_suffix(tmp_path):
         lyr_mod.symbol_dir.return_value = live
         lyr_mod.archive_dir.return_value = archive_dest.parent
 
+        lyr_mod.symbol_lock_path.return_value = Path(root) / "locks" / "foo.lock"
         _make_tree(root, "global", "foo", marker="first")
         first = skill_store.archive("global", "foo", root)
         _make_tree(root, "global", "foo", marker="second")

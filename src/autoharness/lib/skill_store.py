@@ -12,7 +12,7 @@ import shutil
 import time
 
 from autoharness import config
-from autoharness.lib import atomic, layer
+from autoharness.lib import atomic, layer, lock
 
 SKILL_FILE = "SKILL.md"
 
@@ -70,14 +70,15 @@ def remove(lyr, name, root=None):
 
 
 def archive(lyr, name, root=None):
-    sdir = layer.symbol_dir(lyr, name, root)
-    if not sdir.exists():
-        return None
-    dest = layer.archive_dir(lyr, root) / name
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest = _collision_safe_dest(dest)
-    os.replace(sdir, dest)
-    return dest
+    with lock.file_lock(layer.symbol_lock_path(lyr, name, root)):
+        sdir = layer.symbol_dir(lyr, name, root)
+        if not sdir.exists():
+            return None
+        dest = layer.archive_dir(lyr, root) / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest = _collision_safe_dest(dest)
+        os.replace(sdir, dest)
+        return dest
 
 
 def restore(lyr, name, root=None):
