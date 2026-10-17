@@ -133,6 +133,8 @@ def _content_errors(params):
     errors += validate.check_files(files, creating=params["action"] == "create")
     errors += validate.structure(body, files)
     if params.get("action") in ("create", "update"):
+        if not validate._body_lines(body):
+            errors.append(("completeness", "skill body is empty after frontmatter"))
         # The promoter is the authority, but it runs after this session is gone: a description gate
         # enforced only there is one the model can never learn from — it stages, exits, and the
         # verdict lands in a file nobody reads back to it. Checking here hands the error to the
