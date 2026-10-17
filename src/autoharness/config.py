@@ -12,27 +12,31 @@ from pathlib import Path
 from autoharness.lib import layer
 
 
-def _int_env(name, default):
+def _int_env(name, default, minimum=None):
     try:
-        return int(os.environ[name])
+        value = int(os.environ[name])
     except KeyError:
         return default
     except ValueError:
         warnings.warn(f"{name}={os.environ[name]!r} is not a valid integer; using default {default}", stacklevel=2)
         return default
+    if minimum is not None and value < minimum:
+        warnings.warn(f"{name}={value} is below the minimum {minimum}; using default {default}", stacklevel=2)
+        return default
+    return value
 
 
 # trigger cadence, counted in the activity quantum (main-session tool calls, direction H) — not turns.
 # Recalibrated with the numerator: the old turn-based 10 lands near 30-50 tool calls, and the standing
 # ruling is to err sparse (precipitation is maintenance, and SessionEnd flushes the tail).
-REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 50)  # the window itself is watermark-delimited (capture)
+REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 50, minimum=1)  # the window itself is watermark-delimited (capture)
 CONSOLIDATE_EVERY_N = _int_env("AUTOHARNESS_CONSOLIDATE_EVERY_N", 250)  # ponytail: placeholder, calibrate in experiments/; curator (content-level merge) beat, same quantum as REFLECT_EVERY_N and held sparser than it
 
 # raw-capture byte caps (ponytail: placeholders, calibrate in experiments/): per transcript record,
 # and per handoff window (tail kept) — bound tool dumps / base64 away from the child context.
 CAPTURE_MAX_RECORD_BYTES = 4_000
 CAPTURE_MAX_WINDOW_BYTES = 200_000
-DIGEST_EXCHANGES = _int_env("AUTOHARNESS_DIGEST_EXCHANGES", 20)  # prior-context digest: exchanges before the window
+DIGEST_EXCHANGES = _int_env("AUTOHARNESS_DIGEST_EXCHANGES", 20, minimum=1)  # prior-context digest: exchanges before the window
 DIGEST_MAX_RECORD_CHARS = 200
 DIGEST_MAX_BYTES = 20_000
 
@@ -40,13 +44,13 @@ STAGE_MAX_BODY_BYTES = 100_000  # ponytail: placeholder, SKILL.md body cap; for 
 # altitude gate: SKILL.md body must read as a rule, not a transcript. A deterministic proxy for the
 # reflector (the only LLM in the loop) actually distilling — non-blank body lines (ex-frontmatter)
 # over this reject create/update; detail belongs in references/. ponytail: crude proxy, calibrate in experiments/.
-SKILL_BODY_MAX_LINES = _int_env("AUTOHARNESS_SKILL_BODY_MAX_LINES", 25)
+SKILL_BODY_MAX_LINES = _int_env("AUTOHARNESS_SKILL_BODY_MAX_LINES", 25, minimum=1)
 # description is the trigger: the host preloads name+description and matches recall on it, so a skill
 # lives or dies here. Cap = Anthropic's documented 1024-char host limit (past it the host truncates).
 SKILL_DESC_MAX_CHARS = _int_env("AUTOHARNESS_SKILL_DESC_MAX_CHARS", 1024)
 # self-injected recall index (SessionStart additionalContext): per-line description truncation,
 # mirroring Hermes's tier-0 index discipline — the index is a scan surface, not the full trigger text.
-INDEX_DESC_MAX_CHARS = _int_env("AUTOHARNESS_INDEX_DESC_MAX_CHARS", 60)
+INDEX_DESC_MAX_CHARS = _int_env("AUTOHARNESS_INDEX_DESC_MAX_CHARS", 60, minimum=4)
 # self-injection off switch: the index stops being emitted, everything else (lifecycle pass,
 # use/view counters, the last-run summary) is untouched. Needed because the only other way to run
 # without the index is to run without the plugin — which also removes the counters that measure the
@@ -77,14 +81,14 @@ STAGE_MAX_FILE_BYTES = 64_000
 STAGE_MAX_FILES_TOTAL_BYTES = 256_000
 
 # maturity threshold (denominator gate to graduate out of probation) / capacity cap, set per layer, independently tunable. global has a larger blast radius -> more conservative (smaller capacity).
-MATURITY_THRESHOLD = {layer.GLOBAL: _int_env("AUTOHARNESS_MATURITY_GLOBAL", 300),
-                      layer.PROJECT: _int_env("AUTOHARNESS_MATURITY_PROJECT", 100)}
-CAPACITY = {layer.GLOBAL: _int_env("AUTOHARNESS_CAPACITY_GLOBAL", 20),
-            layer.PROJECT: _int_env("AUTOHARNESS_CAPACITY_PROJECT", 50)}
+MATURITY_THRESHOLD = {layer.GLOBAL: _int_env("AUTOHARNESS_MATURITY_GLOBAL", 300, minimum=0),
+                      layer.PROJECT: _int_env("AUTOHARNESS_MATURITY_PROJECT", 100, minimum=0)}
+CAPACITY = {layer.GLOBAL: _int_env("AUTOHARNESS_CAPACITY_GLOBAL", 20, minimum=0),
+            layer.PROJECT: _int_env("AUTOHARNESS_CAPACITY_PROJECT", 50, minimum=0)}
 # graduation-review suspend gate (direction C): while the recall surface is known-broken, archiving
 # for zero use buries surfacing's failure — flip on to park the review, capacity contention unaffected.
 GRADUATION_REVIEW_SUSPENDED = _bool_env("AUTOHARNESS_GRADUATION_SUSPENDED", False)
-SNAPSHOT_KEEP = _int_env("AUTOHARNESS_SNAPSHOT_KEEP", 5)  # curator pre-run library snapshots per layer (mirrors Hermes)
+SNAPSHOT_KEEP = _int_env("AUTOHARNESS_SNAPSHOT_KEEP", 5, minimum=0)  # curator pre-run library snapshots per layer (mirrors Hermes)
 
 # run-account notification (lib/notify), opt-in: the SessionStart summary is a session late and
 # carries counts, not names. "desktop" = native notification; NOTIFY_CMD = argv fed the run record
