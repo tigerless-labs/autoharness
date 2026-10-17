@@ -49,10 +49,13 @@ def test_longer_unknown_pointer_does_not_match_the_carried_prefix(tmp_path):
         "action": "create", "name": "run", "body": BODY.format(pointer="scripts/run.sh.bak."),
         "files": {"scripts/run.sh": SCRIPT}, "reason": "negative control", "evidence": "local fixture",
     }, run_id="unknown", root=tmp_path)
-    assert staged["ok"]  # stage cannot yet probe a live skill directory
-    verdicts = promoter.drain("unknown", roots=roots)
-    assert not verdicts[0]["ok"]
-    assert any(kind == "structure" for kind, _ in verdicts[0]["findings"])
+    # the exact-pointer check rejects the longer filename already at stage time; if a stage ever
+    # lets it through, the promoter must still reject it
+    if staged["ok"]:
+        findings = promoter.drain("unknown", roots=roots)[0]["findings"]
+    else:
+        findings = staged["errors"]
+    assert any(kind == "structure" for kind, _ in findings)
     assert not skill_store.skill_path("project", "run", tmp_path).exists()
 
 
