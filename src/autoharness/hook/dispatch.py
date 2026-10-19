@@ -180,6 +180,9 @@ def _emit(verdict):
 
 
 def main():
+    # the host writes UTF-8 JSON, whatever the locale codec (cp1252 on Windows) is; output is ASCII JSON
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     try:
         event = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):

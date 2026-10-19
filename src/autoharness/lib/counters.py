@@ -17,7 +17,7 @@ _SAFE_SESSION = re.compile(r"^[A-Za-z0-9_-]+$")
 
 def _read_int(p):
     try:
-        return int(p.read_text().strip())
+        return int(p.read_text(encoding="utf-8").strip())
     except (FileNotFoundError, ValueError):
         return 0
 

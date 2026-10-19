@@ -58,7 +58,7 @@ def _funnel(lyr, root):
     if runs.exists():
         for path in runs.glob("*.json"):
             try:
-                run = json.loads(path.read_text())
+                run = json.loads(path.read_text(encoding="utf-8"))
             except (ValueError, OSError):
                 continue  # a corrupt account never breaks reporting
             for v in run.get("verdicts", []):
