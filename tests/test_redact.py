@@ -237,7 +237,9 @@ def test_fine_grained_github_pat_is_redacted():
 def test_quoted_key_assignments_are_redacted():
     # JSON / Python-dict / TOML-style assignments quote the key, and inside a JSONL transcript record
     # the quotes are backslash-escaped: the value must not survive any of those spellings.
-    secret = "sk_live_abcd1234EFGH5678ijkl"
+    # (no vendor prefix on purpose: this test is about the assignment rule alone, and secret_hits below
+    # would also list the vendor-key rule for an sk_live_ value)
+    secret = "abcd1234EFGH5678ijkl"
     for raw in (
         f'{{"api_key": "{secret}"}}',
         f'{{"password":"{secret}"}}',
