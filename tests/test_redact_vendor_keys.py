@@ -56,6 +56,38 @@ def test_secret_named_variable_keeps_no_value(name):
 
 
 @pytest.mark.parametrize(
+    "url",
+    [
+        "postgres://app:P@ss!w0rd#2026/ab@db.internal:5432/prod",
+        "mysql+pymysql://service:p%40ss%2Fword@db.internal/app",
+        "https://deploy:temporary-password@example.com/artifact",
+        "https://deploy:temporary-password@example.com,",
+    ],
+)
+def test_url_credentials_are_redacted_as_a_unit(url):
+    out = redact.redact(url)
+    assert "://" not in out
+    assert "[REDACTED:secret:url_credentials]" in out
+    assert out.endswith(("db.internal:5432/prod", "db.internal/app", "example.com/artifact", "example.com,"))
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgres://db.internal:5432/prod",
+        "https://example.com/artifact",
+    ],
+)
+def test_urls_without_embedded_credentials_are_left_alone(url):
+    assert redact.redact(url) == url
+
+
+def test_at_sign_in_url_path_is_not_treated_as_embedded_credentials():
+    out = redact.redact("https://example.com/path@other.example")
+    assert "[REDACTED:secret:url_credentials]" not in out
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "the risk-management-and-compliance-framework-overview was updated",
