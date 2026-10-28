@@ -66,6 +66,14 @@ pattern = '''(?<![A-Za-z0-9])npm_[A-Za-z0-9]{36}'''
 name = "jwt"
 pattern = '''eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'''
 
+[[secret]]
+name = "url_credentials"
+# Match the credential-bearing prefix as a whole. The greedy credential run deliberately reaches
+# the last @ that can introduce a host, so malformed but commonly pasted passwords containing raw
+# @ or / characters are still removed. A URI scheme and a host-shaped suffix keep this from
+# treating ordinary prose containing user:password@host as a secret URL.
+pattern = '''(?i)\b[a-z][a-z0-9+.-]*://[^\s:/@]+:[^\s]+@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s]|$))'''
+
 [[pii]]
 name = "email"
 # the local part is capped at 64 chars (RFC 5321): the unbounded `+` backtracks
