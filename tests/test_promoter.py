@@ -362,6 +362,24 @@ def test_leftover_draining_claim_from_a_crashed_drain_is_recovered(tmp_path):
     assert intent_queue.orphans(proot) == []
 
 
+def test_recovery_crash_does_not_replace_older_claim_with_new_queue(tmp_path):
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    intent_queue.append("child", _create(name="old"), proot)
+    assert [i["name"] for i in intent_queue.take("child", proot)] == ["old"]
+
+    # The first drain crashed with its claim in place, then the child staged another intent.
+    # A second recovery must retry only the old claim and leave the new queue on disk. If it
+    # replaces .draining with .jsonl here, another crash permanently loses "old".
+    intent_queue.append("child", _create(name="new"), proot)
+    assert [i["name"] for i in intent_queue.take("child", proot)] == ["old"]
+    assert [i["name"] for i in intent_queue.read("child", proot)] == ["new"]
+
+    intent_queue.drop("child", proot)
+    assert [i["name"] for i in intent_queue.take("child", proot)] == ["new"]
+    intent_queue.drop("child", proot)
+
+
 def test_drain_sweeps_orphan_tmp(tmp_path):
     roots = _roots(tmp_path)
     proot = roots["project"]
