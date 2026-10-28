@@ -31,8 +31,48 @@ pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{20,}'''
 [[secret]]
 name = "api_key_assignment"
 # the key may itself be quoted ("api_key": ...), and inside a JSONL transcript record the quotes arrive
-# backslash-escaped (\"api_key\": \"...\"), so allow an optional (escaped) quote after the key and before the value
-pattern = '''(?i)(api[_-]?key|secret|token|password)(?:\\?['"])?\s*[:=]\s*(?:\\?['"])?[A-Za-z0-9._\-/+]{12,}'''
+# backslash-escaped (\"api_key\": \"...\"), so allow an optional (escaped) quote after the key and before the value.
+# secret[_-]?key covers names such as AWS_SECRET_ACCESS_KEY and STRIPE_SECRET_KEY, where "secret" is not the last word.
+pattern = '''(?i)(api[_-]?key|secret(?:[_-]?access)?[_-]?key|secret|token|password)(?:\\?['"])?\s*[:=]\s*(?:\\?['"])?[A-Za-z0-9._\-/+]{12,}'''
+
+# Keys with a recognizable vendor prefix are matched on their own shape, so they are redacted when they
+# appear bare in prose or a log line, not only when assigned to a variable the rule above can see. These come
+# after api_key_assignment on purpose: an assignment keeps reporting itself as api_key_assignment (first match
+# wins), and these rules cover the keys that appear outside one.
+# The left guard keeps ordinary hyphenated words (risk-, task-, disk-) from starting a match.
+[[secret]]
+name = "stripe_key"
+pattern = '''(?<![A-Za-z0-9])[sr]k_(?:live|test)_[A-Za-z0-9]{16,}'''
+
+# listed before openai_api_key: an sk-ant- key would also fit the shorter sk- shape, and the first match wins
+[[secret]]
+name = "anthropic_api_key"
+pattern = '''(?<![A-Za-z0-9])sk-ant-[A-Za-z0-9_-]{20,}'''
+
+[[secret]]
+name = "openai_api_key"
+pattern = '''(?<![A-Za-z0-9])sk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{32,}'''
+
+[[secret]]
+name = "google_api_key"
+pattern = '''(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{35}'''
+
+[[secret]]
+name = "npm_token"
+pattern = '''(?<![A-Za-z0-9])npm_[A-Za-z0-9]{36}'''
+
+# header and payload both start with eyJ (base64 of `{"`)
+[[secret]]
+name = "jwt"
+pattern = '''eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'''
+
+[[secret]]
+name = "url_credentials"
+# Match the credential-bearing prefix as a whole. The greedy credential run deliberately reaches
+# the last @ that can introduce a host, so malformed but commonly pasted passwords containing raw
+# @ or / characters are still removed. A URI scheme and a host-shaped suffix keep this from
+# treating ordinary prose containing user:password@host as a secret URL.
+pattern = '''(?i)\b[a-z][a-z0-9+.-]*://[^\s:/@]+:[^\s]+@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]]|$))'''
 
 [[pii]]
 name = "email"
