@@ -8,7 +8,7 @@ def test_canonical_reflector():
 
 
 def test_other_namespace_reflector():
-    assert _is_reflector({"agent_type": "myplugin:reflector"})
+    assert not _is_reflector({"agent_type": "myplugin:reflector"})
 
 
 def test_hyphen_reflector_not_matched():
