@@ -51,6 +51,12 @@ from autoharness.lib import counters, layer  # noqa: E402
 
 _SANITIZE = re.compile(r"[^A-Za-z0-9_-]")
 _WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+_CHILD_ALLOWED_TOOLS = frozenset((
+    "Read",
+    "Grep",
+    "Glob",
+    "mcp__plugin_autoharness_stage_skill__stage_skill",
+))
 
 
 def _roots(roots):
@@ -140,7 +146,9 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
         if name == "PreToolUse":
             tool = event.get("tool_name")
             child = bool(os.environ.get(config.CHILD_SESSION_ENV))
-            if tool in _WRITE_TOOLS and (child or _is_reflector(event)):
+            if child and tool not in _CHILD_ALLOWED_TOOLS:
+                return {"deny": True, "reason": "autoharness child may only read and stage intents"}
+            if tool in _WRITE_TOOLS and _is_reflector(event):
                 return {"deny": True, "reason": "reflector may only stage intents, not write files"}
             if not child:  # direction H: every main-session tool call advances the activity numerator
                 sid = event.get("session_id")
@@ -152,7 +160,7 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
             if tool == "Skill":
                 return {"handled": name, "result": on_skill_call.on_skill_call(event, roots=roots)}
             if tool == "Read":
-                if _is_reflector(event):
+                if child or _is_reflector(event):
                     return {"handled": name, "result": {"counted": False, "reason": "reflector_read"}}
                 return {"handled": name, "result": on_skill_call.on_skill_read(event, roots=roots)}
             return {"ignored": True, "reason": "untracked PreToolUse"}
