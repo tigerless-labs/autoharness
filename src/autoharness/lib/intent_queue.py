@@ -61,17 +61,20 @@ def take(run_id, root=None):
     The claim renames <run>.jsonl to <run>.draining under the append lock, so an append that
     lands after the claim starts a fresh <run>.jsonl for the run's own drain instead of racing
     the drain's clear (a foreign drain of a live run's queue used to unlink a staged intent
-    unread). A .draining left by a drain that crashed before drop() is read first: the same
-    intents again, harmless because landing is idempotent, and read before the fresh batch so
-    run ordering holds.
+    unread). A .draining left by a drain that crashed before drop() is always retried by itself;
+    a newer .jsonl stays queued for the next drain. Replacing an old claim with that newer file
+    would lose the old batch if recovery crashed a second time.
     """
     p = _path(run_id, root)
     claimed = _claim_path(run_id, root)
-    lines = claimed.read_text().splitlines() if claimed.exists() else []
     with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
-        if p.exists():
-            lines += p.read_text().splitlines()
+        if claimed.exists():
+            lines = claimed.read_text(encoding="utf-8").splitlines()
+        elif p.exists():
             os.replace(p, claimed)
+            lines = claimed.read_text(encoding="utf-8").splitlines()
+        else:
+            lines = []
     return [json.loads(line) for line in lines if line.strip()]
 
 
