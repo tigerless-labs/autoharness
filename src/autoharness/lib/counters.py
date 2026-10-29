@@ -40,7 +40,7 @@ def bump_request(lyr, root=None):
 
 
 def _session_path(session_id, root=None):
-    if not isinstance(session_id, str) or not _SAFE_SESSION.match(session_id):
+    if not isinstance(session_id, str) or not _SAFE_SESSION.fullmatch(session_id):
         raise ValueError(f"unsafe session id: {session_id!r}")
     return layer.state_dir(layer.PROJECT, root) / f"session-{session_id}"
 
@@ -64,7 +64,7 @@ def clear_session(session_id, root=None):
 
 
 def _offset_path(session_id, root=None):
-    if not isinstance(session_id, str) or not _SAFE_SESSION.match(session_id):
+    if not isinstance(session_id, str) or not _SAFE_SESSION.fullmatch(session_id):
         raise ValueError(f"unsafe session id: {session_id!r}")
     return layer.state_dir(layer.PROJECT, root) / f"offset-{session_id}"
 
