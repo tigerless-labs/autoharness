@@ -56,7 +56,6 @@ def _fit(text, limit):
     if len(cue_text) > cue_budget:
         return omission + clipped(cue_text, cue_budget)
 
-    # Preserve as much leading identity as the fixed budget permits, then the complete short cue.
     prefix_budget = cue_budget - len(cue_text)
     prefix = flat[:cue_start].strip()[:prefix_budget]
     return prefix + omission + cue_text
@@ -90,7 +89,7 @@ def recall_index(roots, cwd=None):
                 managed = sidecar.is_agent_created(lyr, name, root)
                 body = path.read_text(encoding="utf-8")
             except (OSError, UnicodeError, ValueError, TypeError, AttributeError):
-                continue  # one malformed member must not suppress the rest of the recall surface
+                continue
             if not managed:
                 continue
             fm = validate._frontmatter(body) or {}
