@@ -1,3 +1,5 @@
+import pytest
+
 from autoharness.lib import validate
 
 GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
@@ -22,6 +24,32 @@ def test_safety_rejects_injection():
 def test_structure_missing_description():
     body = "---\nname: foo\n---\n# Foo\n"
     assert "structure" in _families(validate.validate(GOOD_INTENT, body))
+
+
+@pytest.mark.parametrize("closing", ["----", "---broken"])
+@pytest.mark.parametrize("later_rule", [False, True])
+def test_structure_rejects_malformed_frontmatter_closing_delimiter(closing, later_rule):
+    body = GOOD_BODY.replace("\n---\n", f"\n{closing}\n")
+    if later_rule:
+        from autoharness import config
+        body += "Use strftime.\n" * (config.SKILL_BODY_MAX_LINES + 1) + "---\n"
+    v = validate.validate(GOOD_INTENT, body)
+    assert not v["ok"]
+    assert ("structure", "missing/invalid frontmatter") in v["findings"]
+    if later_rule:
+        assert "altitude" in _families(v)
+
+
+def test_frontmatter_closing_delimiter_at_eof_passes():
+    body = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---"
+    v = validate.validate(GOOD_INTENT, body)
+    assert v["ok"], v["findings"]
+
+
+def test_indented_frontmatter_delimiter_in_block_scalar_passes():
+    body = "---\nname: foo\ndescription: |-\n  Use when formatting a date as ISO.\n  ---\n---\nUse strftime.\n"
+    v = validate.validate(GOOD_INTENT, body)
+    assert v["ok"], v["findings"]
 
 
 def test_led_required():
