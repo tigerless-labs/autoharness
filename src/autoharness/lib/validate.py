@@ -36,10 +36,18 @@ _MODIFY = ("update", "patch", "remove_file", "delete")
 # literal phrase the user would type (quoted). A bare topic-label has neither and never fires.
 _QUOTED_PHRASE = re.compile(r'"[^"]+"|\'[^\']+\'|`[^`]+`')
 _WHEN = re.compile(r"(?i)\bwhen")
+_USE_WHEN = re.compile(r"(?i)\buse\s+when\b")
+
+
+def trigger_cue_start(text):
+    """Return the first cue boundary, using the same proxy as description validation."""
+    matches = [match for pattern in (_USE_WHEN, _WHEN, _QUOTED_PHRASE)
+               if (match := pattern.search(text))]
+    return min((match.start() for match in matches), default=None)
 
 
 def _has_cue(text):
-    return bool(_WHEN.search(text) or _QUOTED_PHRASE.search(text))
+    return trigger_cue_start(text) is not None
 
 
 def _block_scalar(lines, start, parent_indent, header):
