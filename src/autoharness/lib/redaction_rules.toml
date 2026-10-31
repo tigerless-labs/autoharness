@@ -31,9 +31,10 @@ pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{20,}'''
 [[secret]]
 name = "api_key_assignment"
 # the key may itself be quoted ("api_key": ...), and inside a JSONL transcript record the quotes arrive
-# backslash-escaped (\"api_key\": \"...\"), so allow an optional (escaped) quote after the key and before the value.
+# backslash-escaped (\"api_key\": \"...\"), so allow an optional (escaped) quote after the key and before the value;
+# the `key` group lets the scan resume after the key, since the value it matched may hold the next assignment.
 # secret[_-]?key covers names such as AWS_SECRET_ACCESS_KEY and STRIPE_SECRET_KEY, where "secret" is not the last word.
-pattern = '''(?i)(api[_-]?key|secret(?:[_-]?access)?[_-]?key|secret|token|password)(?:\\?['"])?\s*[:=]\s*(?:\\?['"])?[A-Za-z0-9._\-/+]{12,}'''
+pattern = '''(?i)(?P<key>api[_-]?key|secret(?:[_-]?access)?[_-]?key|secret|token|password)(?:\\?['"])?\s*[:=]\s*(?:\\?['"])?[A-Za-z0-9._\-/+]{12,}'''
 
 # Keys with a recognizable vendor prefix are matched on their own shape, so they are redacted when they
 # appear bare in prose or a log line, not only when assigned to a variable the rule above can see. These come

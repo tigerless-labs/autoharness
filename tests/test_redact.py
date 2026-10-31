@@ -325,3 +325,15 @@ def test_quoted_key_assignments_are_redacted():
 def test_quoted_key_rule_keeps_short_values_and_prose():
     raw = '{"token": "short"} and the "password" field is required'
     assert redact.redact(raw) == raw
+
+
+def test_an_assignment_inside_a_quoted_value_keeps_its_value_redacted():
+    # the quoted-key form matched token -> "client_secret" first; the inner assignment holding the value
+    # overlaps that match and must still be found and merged into the span
+    for raw in (
+        '{"token":"client_secret=abcdefghijklmnop"}',
+        '{"token":"client_secret\\":\\"abcdefghijklmnop"}',
+    ):
+        out = redact.redact(raw)
+        assert "abcdefghijklmnop" not in out, f"leaked in {raw!r}: {out!r}"
+        assert redact.secret_hits(raw) == ["api_key_assignment"]
