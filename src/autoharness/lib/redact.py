@@ -81,18 +81,21 @@ def _raw(text, key):
 
 
 def _kept(rx, validator, text):
-    """Matches of *rx* in *text* that the rule's validator keeps, overlapping ones included: the search
-    resumes one character on, not after the match. finditer skipped a card right after a phone number
-    (one digit run whose first window fails luhn), and resuming after a kept window that happens to pass
-    luhn would skip the rest of a real card it overlaps; overlapping kept matches merge into one span."""
-    if validator is None:
+    """Matches of *rx* in *text* that the rule's validator keeps, overlapping ones included where a
+    match can hide another. A validated rule resumes one character on: finditer skipped a card right
+    after a phone number (one digit run whose first window fails luhn), and resuming after a kept window
+    that happens to pass luhn would skip the rest of a real card it overlaps. A rule with a `key` group
+    resumes after its key: {"token":"client_secret=<value>"} matched token -> "client_secret", and the
+    inner assignment holding the value starts inside that match. Overlapping kept matches merge into one
+    span. Resuming one character on for every rule would go quadratic (xoxb- repeated is one slack token)."""
+    if validator is None and "key" not in rx.groupindex:
         yield from rx.finditer(text)
         return
     pos = 0
     while (match := rx.search(text, pos)) is not None:
-        if validator(match.group(0)):
+        if validator is None or validator(match.group(0)):
             yield match
-        pos = match.start() + 1
+        pos = match.start() + 1 if validator is not None else max(match.end("key"), match.start() + 1)
 
 
 def _spans(text, key):
