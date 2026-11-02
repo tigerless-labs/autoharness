@@ -44,6 +44,11 @@ def description_index(roots=None, *, agent_only=False):
             continue
         for path in sorted(skills.glob(f"*/{skill_store.SKILL_FILE}")):
             symbol = path.parent.name
+            if agent_only:
+                try:
+                    layer._check_name(symbol)
+                except ValueError:
+                    continue  # handwritten skills cannot belong to the managed pool
             if agent_only and not sidecar.is_agent_created(lyr, symbol, root):
                 continue  # curator only ever sees its own skills; native/user stay out of the pool
             # anyone's skill can sit here; a latin-1 SKILL.md must not take the whole reflection down
