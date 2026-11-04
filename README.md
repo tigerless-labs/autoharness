@@ -271,6 +271,12 @@ benchmark exists.
 | Needs a benchmark / oracle | No | Yes | No | No |
 | Needs a resident daemon | No | No | Yes | No |
 
+## Contributing
+
+Bug reports and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers local setup,
+the two commands CI runs (`ruff check .` and `python3 -m pytest -m "not live" -q`), the layout of
+the source tree, and what a reviewable first change looks like.
+
 ## Acknowledgements
 
 [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) — studying its
