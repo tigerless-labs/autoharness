@@ -7,8 +7,10 @@ import time
 
 import pytest
 
+from autoharness import config
 from autoharness.hook import promoter
 from autoharness.lib import counters, intent_queue, layer, ledger, sidecar, skill_store
+from autoharness.stage_skill import server
 
 GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
 
@@ -670,6 +672,137 @@ def test_drain_writes_run_account_and_last_run(tmp_path):
     assert [v["ok"] for v in run["verdicts"]] == [True, False]
     last = json.loads((state / "last_run.json").read_text())
     assert last["landed"] == 1 and last["rejected"] == 1
+
+
+# --- a fold is one move: its deletes wait for the umbrella's write and fall with it (#296) ---
+
+def _write_umbrella(name="umbrella", body=None):
+    body = body or f"---\nname: {name}\ndescription: use when {name}\n---\nrule"
+    return {"action": "create", "name": name, "level": "project", "body": body, "reason": "r", "evidence": "e"}
+
+
+def _rejected_patch(name="umbrella"):
+    return {"action": "patch", "name": name, "old_string": "not in the body", "new_string": "x",
+            "reason": "r", "evidence": "e"}
+
+
+def _fold(name="narrow", into="umbrella"):
+    return {"action": "delete", "name": name, "reason": "merged", "evidence": "e", "absorbed_into": into}
+
+
+def _drain_intents(roots, *intents):
+    for intent in intents:
+        intent_queue.append("fold", intent, roots["project"])
+    return promoter.drain("fold", roots=roots)
+
+
+@pytest.mark.parametrize("delete_first", [False, True])
+def test_fold_stays_live_when_the_umbrella_create_is_rejected(tmp_path, delete_first):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    create = _write_umbrella(body="no frontmatter")
+    intents = [_fold(), create] if delete_first else [create, _fold()]
+    verdicts = _drain_intents(roots, *intents)
+    assert [v["ok"] for v in verdicts] == [False, False]
+    assert _families(verdicts[intents.index(_fold())]) == {"absorbed_into"}
+    assert skill_store.exists("project", "narrow", roots["project"])
+    last = json.loads((layer.state_dir("project", roots["project"]) / "last_run.json").read_text())
+    assert last["landed"] == 0 and last["absorbed"] == 0
+
+
+def test_fold_stated_only_in_the_reason_never_archives_the_skill(tmp_path):
+    # the #296 run: the create passes staging, the promoter rejects it on altitude, and the delete
+    # names the umbrella in prose. Staged through the real tool, with the curator retrying as told.
+    roots = _roots12(tmp_path)
+    proot = roots["project"]
+    _mk_agent(roots, "narrow")
+    transcript = "\n".join(f"step {i}" for i in range(config.SKILL_BODY_MAX_LINES + 1))
+    body = f"---\nname: umbrella\ndescription: use when umbrella\n---\n{transcript}\n"
+    assert server.stage(_write_umbrella(body=body), run_id="fold", root=proot)["ok"]
+    delete = {"action": "delete", "name": "narrow", "evidence": "e",
+              "reason": "Absorbed into umbrella as its unit-test section."}
+    assert not server.stage(delete, run_id="fold", root=proot)["ok"]
+    assert server.stage({**delete, "absorbed_into": "umbrella"}, run_id="fold", root=proot)["ok"]
+    verdicts = promoter.drain("fold", roots=roots)
+    assert [(v["ok"], sorted(_families(v))) for v in verdicts] == [(False, ["altitude"]), (False, ["absorbed_into"])]
+    assert skill_store.exists("project", "narrow", proot)
+
+
+def test_fold_stays_live_when_the_patch_to_a_live_umbrella_is_rejected(tmp_path):
+    # the umbrella passes the liveness check, but the sibling's content never reached it
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "umbrella")
+    _mk_agent(roots, "narrow")
+    verdicts = _drain_intents(roots, _rejected_patch(), _fold())
+    assert [v["ok"] for v in verdicts] == [False, False]
+    assert "was rejected in this run" in verdicts[1]["findings"][0][1]
+    assert skill_store.exists("project", "narrow", roots["project"])
+
+
+def test_fold_staged_before_its_umbrella_lands_with_queue_order_verdicts(tmp_path):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    verdicts = _drain_intents(roots, _fold(), _write_umbrella())
+    assert [(v["action"], v["ok"]) for v in verdicts] == [("delete", True), ("create", True)]
+    assert not skill_store.exists("project", "narrow", roots["project"])
+    last = json.loads((layer.state_dir("project", roots["project"]) / "last_run.json").read_text())
+    assert last["absorbed"] == 1
+
+
+def test_rejected_write_only_holds_back_the_folds_into_that_skill(tmp_path):
+    roots = _roots12(tmp_path)
+    for name in ("umbrella", "other", "narrow", "retired"):
+        _mk_agent(roots, name)
+    verdicts = _drain_intents(
+        roots,
+        _rejected_patch("other"),
+        {"action": "patch", "name": "umbrella", "old_string": "rule", "new_string": "rules",
+         "reason": "r", "evidence": "e"},
+        _fold(),
+        {"action": "delete", "name": "retired", "reason": "stale", "evidence": "e"},
+    )
+    assert [v["ok"] for v in verdicts] == [False, True, True, True]
+
+
+def test_umbrella_deleted_in_the_same_run_fails_the_fold_into_it(tmp_path):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    verdicts = _drain_intents(
+        roots, _write_umbrella(), _fold(),
+        {"action": "delete", "name": "umbrella", "reason": "stale", "evidence": "e"},
+    )
+    assert [v["ok"] for v in verdicts] == [True, False, True]
+    assert skill_store.exists("project", "narrow", roots["project"])
+
+
+def test_delete_then_create_of_the_same_name_keeps_its_order(tmp_path):
+    # a replacement, even when the delete also points at a skill the run writes
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    _mk_agent(roots, "umbrella")
+    body = "---\nname: narrow\ndescription: use when rewritten\n---\nnew"
+    verdicts = _drain_intents(
+        roots, _fold(),
+        {"action": "patch", "name": "umbrella", "old_string": "rule", "new_string": "rules",
+         "reason": "r", "evidence": "e"},
+        _write_umbrella("narrow", body),
+    )
+    assert [v["ok"] for v in verdicts] == [True, True, True]
+    assert skill_store.read_body("project", "narrow", roots["project"]) == body
+
+
+def test_malformed_fields_beside_a_write_are_accounted_not_raised(tmp_path):
+    roots = _roots12(tmp_path)
+    verdicts = _drain_intents(
+        roots,
+        _write_umbrella(),
+        {"action": "delete", "name": ["not", "a", "name"], "reason": 5, "evidence": "e", "absorbed_into": "umbrella"},
+        {"action": "delete", "name": "umbrella-too", "reason": "r", "evidence": "e", "absorbed_into": ["umbrella"]},
+        {"action": "patch", "name": ["not", "a", "name"], "old_string": "a", "new_string": "b",
+         "reason": "r", "evidence": "e"},
+    )
+    assert [v["ok"] for v in verdicts] == [True, False, False, False]
+    assert skill_store.exists("project", "umbrella", roots["project"])
 
 
 CATEGORIZED_BODY = ("---\nname: foo\ndescription: Use when formatting a date as ISO.\n"
