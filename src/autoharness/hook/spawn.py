@@ -16,8 +16,8 @@ import os
 import subprocess
 import sys
 import tarfile
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 from autoharness import config
 from autoharness.hook import capture, promoter, recovery
