@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import tarfile
+from types import SimpleNamespace
 from pathlib import Path
 
 from autoharness import config
@@ -162,6 +163,15 @@ def _record_spawn_failure(run_id, roots, proc, argv):
     atomic.write_text(account, json.dumps(record, ensure_ascii=False, indent=2))
 
 
+def _invoke_spawn(spawn_fn, argv, env, payload, run_id, roots):
+    try:
+        return spawn_fn(argv, env, payload)
+    except OSError as exc:
+        proc = SimpleNamespace(returncode=None, stderr=f"{type(exc).__name__}: {exc}")
+        _record_spawn_failure(run_id, roots, proc, argv)
+        raise
+
+
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
         spec_path=None, digest="", session_id=None, carrier=None, spawn_fn=None):
     roots = roots or {}
@@ -182,7 +192,7 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     # a foreign drain (the main session's Stop) leaves this queue alone instead of landing the
     # child's intents mid-flight or racing its appends
     with intent_queue.live_lock(run_id, proot):
-        proc = (spawn_fn or _detached_spawn)(argv, env, payload)
+        proc = _invoke_spawn(spawn_fn or _detached_spawn, argv, env, payload, run_id, roots)
         verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
         _record_spawn_failure(run_id, roots, proc, argv)
     return verdicts
@@ -221,7 +231,7 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
     env = child_env(run_id, roots.get(layer.PROJECT))
     with intent_queue.live_lock(run_id, roots.get(layer.PROJECT)):  # same liveness marker as reflection
-        proc = (spawn_fn or _detached_spawn)(argv, env, bundle)
+        proc = _invoke_spawn(spawn_fn or _detached_spawn, argv, env, bundle, run_id, roots)
         verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
         _record_spawn_failure(run_id, roots, proc, argv)
     return verdicts
