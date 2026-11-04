@@ -54,13 +54,15 @@ def bump_session(session_id, root=None):
 
 
 def reset_session(session_id, root=None):
-    atomic.write_text(_session_path(session_id, root), "0")
+    p = _session_path(session_id, root)
+    with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
+        atomic.write_text(p, "0")
 
 
 def clear_session(session_id, root=None):
     p = _session_path(session_id, root)
-    if p.exists():
-        p.unlink()
+    with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
+        p.unlink(missing_ok=True)
 
 
 def _offset_path(session_id, root=None):
