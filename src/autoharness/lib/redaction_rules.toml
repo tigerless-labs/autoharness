@@ -73,7 +73,11 @@ name = "url_credentials"
 # the last @ that can introduce a host, so malformed but commonly pasted passwords containing raw
 # @ or / characters are still removed. A URI scheme and a host-shaped suffix keep this from
 # treating ordinary prose containing user:password@host as a secret URL.
-pattern = '''(?i)\b[a-z][a-z0-9+.-]*://[^\s:/@]+:[^\s]+@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]]|$))'''
+# Both runs are capped: an unbounded scheme gets backtracked at every word boundary against
+# letter/digit/dot/dash stretches to the end of the string, and an unbounded `[^\s]+@` scans to
+# the end of the non-space run whenever no @ follows. Real schemes stay under 32 chars, a
+# username:password run under 512 (the same rationale as the e-mail local-part cap above).
+pattern = '''(?i)\b[a-z][a-z0-9+.-]{0,31}://[^\s:/@]+:[^\s]{1,512}@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]]|$))'''
 
 [[pii]]
 name = "email"
