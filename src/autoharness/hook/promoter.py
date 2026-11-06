@@ -8,8 +8,9 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
 - Shaping: create/update = intent body; patch = read live + apply delta; delete = None (removal).
 - Layer resolution: create takes the intent `level`; update/patch/delete go through skill_store.find
   (same name across layers errors, missing is rejected).
-- Validation: reuse lib.validate's six classes, fed {**intent, level: resolved layer} (the global gate
-  applies to update too).
+- Validation: reuse lib.validate's six classes, fed {**intent, level: resolved layer} (the global gate applies
+  to update too); backticked cross-skill pointers resolve against the same two-layer store, with the
+  batch's own names (including the create's) pre-seeded so same-run references cannot false-positive.
 - Land (after pass): land intent subfiles first (paths re-gated; every landing parent resolved and
   escape-checked BEFORE any write — a pre-planted symlink rejects with zero writes) → materialize the
   evidence slice into references/evidence-<hash>.md (redacted again at this egress, content-addressed →
@@ -160,7 +161,7 @@ def _land(action, intent, body, level, name, root):
     ledger.append(level, name, _led(intent, evidence_ref), root)
 
 
-def promote(intent, *, roots=None, repo_name=None):
+def promote(intent, *, roots=None, repo_name=None, known_names=None):
     roots = roots or {}
     action = intent.get("action")
     name = intent.get("name")
@@ -195,11 +196,11 @@ def promote(intent, *, roots=None, repo_name=None):
         # Per-project drain locks cannot coordinate another project's edits to
         # the same global library. Keep local-only promotions independent.
         with lock.file_lock(layer.state_dir(level, roots.get(level)) / "promote.lock"):
-            return _promote_resolved(intent, action, name, level, roots, repo_name)
-    return _promote_resolved(intent, action, name, level, roots, repo_name)
+            return _promote_resolved(intent, action, name, level, roots, repo_name, known_names)
+    return _promote_resolved(intent, action, name, level, roots, repo_name, known_names)
 
 
-def _promote_resolved(intent, action, name, level, roots, repo_name):
+def _promote_resolved(intent, action, name, level, roots, repo_name, known_names):
     root = roots.get(level)
     try:
         body = _shape(intent, level, root)
@@ -228,6 +229,7 @@ def _promote_resolved(intent, action, name, level, roots, repo_name):
     verdict = validate.validate(
         {**intent, "level": level}, body,
         target_is_agent_created=target_created, repo_name=repo_name, base_dir=base_dir,
+        skill_roots=roots, known_names=known_names,
     )
     if not verdict["ok"]:
         return _reject(action, level, verdict["findings"])
@@ -300,11 +302,11 @@ def _environmental(exc):
                                          or getattr(exc, "winerror", None) in _ENVIRONMENTAL_WINERRORS)
 
 
-def _promote_one(intent, roots, repo_name):
+def _promote_one(intent, roots, repo_name, batch_names):
     if intent_queue.UNREADABLE in intent:
         return _reject(None, None, [("queue", f"unreadable queue line: {intent[intent_queue.UNREADABLE]!r}")])
     try:
-        return promote(intent, roots=roots, repo_name=repo_name)
+        return promote(intent, roots=roots, repo_name=repo_name, known_names=batch_names)
     except Exception as exc:
         if _environmental(exc):
             raise  # keep the queue so the next drain retries it
@@ -319,7 +321,8 @@ def _drain_run(run_id, *, roots, repo_name, proot):
     queue, so the next drain retries it instead of waiting for the orphans scan."""
     intents = intent_queue.take(run_id, proot)
     try:
-        verdicts = [_promote_one(i, roots, repo_name) for i in intents]
+        batch_names = {i.get("name") for i in intents}
+        verdicts = [_promote_one(i, roots, repo_name, batch_names) for i in intents]
         record = _account(run_id, intents, verdicts, proot) if intents else None
     except BaseException:
         intent_queue.release(run_id, proot)

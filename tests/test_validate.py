@@ -394,3 +394,77 @@ def test_nested_frontmatter_keys_are_not_top_level_fields():
     # nor a wrapped scalar line that happens to contain a colon
     body = "---\nname: foo\ndescription: Use when X\n  and Y: z\n---\n# Foo\n"
     assert set(validate._frontmatter(body)) == {"name", "description"}
+
+
+# cross-skill pointer resolution (#305): a name-shaped backticked span under the see/per/follow cue
+# (or matching an .archive/ name) must resolve through the same two-layer find the promoter routes
+# updates through — a reflector typo cannot land and stay.
+
+def _skill_env(monkeypatch, tmp_path):
+    g, p = tmp_path / "global", tmp_path / "project"
+    g.mkdir()
+    p.mkdir()
+    monkeypatch.setenv("AUTOHARNESS_GLOBAL_ROOT", str(g))
+    monkeypatch.setenv("AUTOHARNESS_PROJECT_ROOT", str(p))
+    return g, p
+
+
+def _store_skill(root, name):
+    s = root / "skills" / name
+    s.mkdir(parents=True)
+    (s / "SKILL.md").write_text("# S\n")
+
+
+def _ptr_body(*names):
+    return ("---\nname: foo\ndescription: Use when you need a sibling skill.\n---\n# Foo\n"
+            + "\n".join(f"(see `{n}`)" for n in names) + "\n")
+
+
+def test_missing_skill_pointer_rejected(monkeypatch, tmp_path):
+    g, _ = _skill_env(monkeypatch, tmp_path)
+    _store_skill(g, "regression-test-proves-the-bug")
+    body = _ptr_body("regression-test-fails-first")
+    msgs = [m for f, m in validate.validate(GOOD_INTENT, body, base_dir=tmp_path)["findings"]]
+    assert any(m == "referenced skill regression-test-fails-first does not exist" for m in msgs)
+
+
+def test_live_skill_pointer_from_the_other_layer_passes(monkeypatch, tmp_path):
+    g, _ = _skill_env(monkeypatch, tmp_path)
+    _store_skill(g, "regression-test-proves-the-bug")
+    v = validate.validate(GOOD_INTENT, _ptr_body("regression-test-proves-the-bug"), base_dir=tmp_path)
+    assert v["ok"], v["findings"]
+
+
+def test_ambiguous_two_layer_name_is_a_real_pointer(monkeypatch, tmp_path):
+    g, p = _skill_env(monkeypatch, tmp_path)
+    _store_skill(g, "both-layer-skill")
+    _store_skill(p, "both-layer-skill")
+    v = validate.validate(GOOD_INTENT, _ptr_body("both-layer-skill"), base_dir=tmp_path)
+    assert v["ok"], v["findings"]
+
+
+def test_name_shaped_span_without_cue_is_not_a_pointer(monkeypatch, tmp_path):
+    _skill_env(monkeypatch, tmp_path)
+    body = ("---\nname: foo\ndescription: use when composing a stack.\n---\n"
+            "Fuse `docker-compose` with the stack.\n")
+    v = validate.validate(GOOD_INTENT, body, base_dir=tmp_path)
+    assert v["ok"], v["findings"]
+
+
+def test_pointer_to_the_self_and_to_batch_names_is_exempt(monkeypatch, tmp_path):
+    _skill_env(monkeypatch, tmp_path)
+    v = validate.validate(GOOD_INTENT, _ptr_body("new-umbrella-skill"), base_dir=tmp_path,
+                          known_names={"new-umbrella-skill"})
+    assert v["ok"], v["findings"]
+    intent = {**GOOD_INTENT, "name": "new-umbrella-skill"}
+    v = validate.validate(intent, _ptr_body("new-umbrella-skill"), base_dir=tmp_path)
+    assert v["ok"], v["findings"]
+
+
+def test_archived_name_is_a_dangling_pointer_signal(monkeypatch, tmp_path):
+    p = _skill_env(monkeypatch, tmp_path)[1]
+    (p / "skills" / ".archive" / "retired-skill").mkdir(parents=True)
+    body = ("---\nname: foo\ndescription: d\n---\n"
+            "This used to live in `retired-skill` before the fold.\n")
+    msgs = [m for _, m in validate.validate(GOOD_INTENT, body, base_dir=tmp_path)["findings"]]
+    assert any("referenced skill retired-skill does not exist" in m for m in msgs)
