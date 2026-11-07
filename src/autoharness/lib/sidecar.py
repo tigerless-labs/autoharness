@@ -75,5 +75,19 @@ def bump_patch(lyr, name, root=None):
     return _bump(lyr, name, "patch", root)
 
 
+def credit(lyr, name, *, use=0, view=0, root=None):
+    """Add counts earned elsewhere to a live symbol, under the same lock the bumps take."""
+    if not (use or view):
+        return
+    lock_path = layer.symbol_lock_path(lyr, name, root)
+    with lock.file_lock(lock_path):
+        data = read(lyr, name, root)
+        if not data:
+            return
+        data["use"] = data.get("use", 0) + use
+        data["view"] = data.get("view", 0) + view
+        write(lyr, name, data, root)
+
+
 def is_agent_created(lyr, name, root=None):
     return read(lyr, name, root).get("created_by") == "agent"
