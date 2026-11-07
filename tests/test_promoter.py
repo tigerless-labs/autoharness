@@ -8,7 +8,15 @@ import time
 import pytest
 
 from autoharness.hook import promoter
-from autoharness.lib import counters, intent_queue, layer, ledger, sidecar, skill_store
+from autoharness.lib import (
+    counters,
+    intent_queue,
+    layer,
+    ledger,
+    lifecycle,
+    sidecar,
+    skill_store,
+)
 
 GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
 
@@ -626,6 +634,56 @@ def test_delete_with_live_umbrella_lands_and_ledgers(tmp_path):
     # the ledger travels with the archived dir, so retirement provenance stays readable
     led = ledger.read("project", "narrow", roots["project"], archived=True)[-1]
     assert led["absorbed_into"] == "umbrella"  # consolidated vs pruned, distinguishable
+
+
+def test_absorbing_a_skill_carries_its_use_and_view_counts_to_the_umbrella(tmp_path):
+    roots = _roots12(tmp_path)
+    proot = roots["project"]
+    _mk_agent(roots, "umbrella")
+    _mk_agent(roots, "narrow")
+    for _ in range(5):
+        sidecar.bump_use("project", "narrow", proot)
+    for _ in range(2):
+        sidecar.bump_view("project", "narrow", proot)
+    sidecar.bump_use("project", "umbrella", proot)
+
+    r = promoter.promote({"action": "delete", "name": "narrow", "reason": "merged",
+                          "evidence": "e", "absorbed_into": "umbrella"}, roots=roots)
+
+    assert r["ok"]
+    meta = sidecar.read("project", "umbrella", proot)
+    assert (meta["use"], meta["view"]) == (6, 2)
+
+
+def test_umbrella_that_absorbed_a_used_skill_survives_graduation_review(tmp_path):
+    roots = _roots12(tmp_path)
+    proot = roots["project"]
+    _mk_agent(roots, "umbrella")
+    _mk_agent(roots, "narrow")
+    sidecar.bump_use("project", "narrow", proot)
+    promoter.promote({"action": "delete", "name": "narrow", "reason": "merged",
+                      "evidence": "e", "absorbed_into": "umbrella"}, roots=roots)
+
+    meta = sidecar.read("project", "umbrella", proot)
+    members = [{"name": "umbrella", "anchor": meta["anchor"], "use": meta["use"], "view": meta["view"]}]
+    to_archive = lifecycle.evaluate(members, meta["anchor"] + 100, maturity=100, capacity=10)
+
+    assert to_archive == []
+
+
+def test_delete_without_absorbed_into_leaves_other_counters_alone(tmp_path):
+    roots = _roots12(tmp_path)
+    proot = roots["project"]
+    _mk_agent(roots, "bystander")
+    _mk_agent(roots, "narrow")
+    sidecar.bump_use("project", "narrow", proot)
+
+    r = promoter.promote({"action": "delete", "name": "narrow", "reason": "pruned", "evidence": "e"},
+                         roots=roots)
+
+    assert r["ok"]
+    meta = sidecar.read("project", "bystander", proot)
+    assert (meta["use"], meta["view"]) == (0, 0)
 
 
 def test_delete_with_hallucinated_umbrella_rejected(tmp_path):
