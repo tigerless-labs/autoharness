@@ -21,6 +21,7 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 
 MIN_PYTHON = (3, 11)  # tomllib (lib/redact.py) entered the stdlib here; README badge and CI matrix pin the same floor
 
@@ -51,6 +52,12 @@ from autoharness.lib import counters, layer  # noqa: E402
 
 _SANITIZE = re.compile(r"[^A-Za-z0-9_-]")
 _WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+_CHILD_ALLOWED_TOOLS = frozenset((
+    "Read",
+    "Grep",
+    "Glob",
+    "mcp__plugin_autoharness_stage_skill__stage_skill",
+))
 
 
 def _roots(roots):
@@ -62,7 +69,7 @@ def _run_id(result):
     sid = _SANITIZE.sub("", raw)
     if not sid:
         sid = hashlib.sha256(raw.encode()).hexdigest()[:8] if raw else "run"
-    return f"{sid}-{result.get('count', 0)}"
+    return f"{sid}-{result.get('count', 0)}-{uuid.uuid4().hex}"
 
 
 def _curate_run_id(event, pcount):
@@ -75,7 +82,12 @@ def _curate_run_id(event, pcount):
 
 def _is_reflector(event):
     at = str(event.get("agent_type") or "")
-    return at == config.REFLECTOR_AGENT or at.endswith(":reflector")
+    return at == config.REFLECTOR_AGENT
+
+
+def _is_curator(event):
+    at = str(event.get("agent_type") or "")
+    return at == config.CURATOR_AGENT
 
 
 def _detached_launch(transcript_path, session_id, run_id, roots):
@@ -111,6 +123,8 @@ def _consolidate_launch(run_id, roots):
 
 
 def dispatch(event, *, roots=None, reflect=None, consolidate=None):
+    if not isinstance(event, dict):
+        return {"ignored": True, "reason": "non-object hook input"}
     name = event.get("hook_event_name")
     roots = _roots(roots)
     proot = roots.get(layer.PROJECT)
@@ -125,8 +139,14 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
             if not config.DISABLE_GLOBAL:
                 counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG denominator (per turn)
             pcount = counters.bump_request(layer.PROJECT, proot)
-            promoter.drain(config.INTERACTIVE_RUN_ID, roots=roots)  # /learn and other in-session proposals; no-op when empty
+            drain_error = None
+            try:
+                promoter.drain(config.INTERACTIVE_RUN_ID, roots=roots)  # /learn and other in-session proposals; no-op when empty
+            except Exception as exc:  # the queue stays for the next Stop; this turn still counts and reflects
+                drain_error = f"{type(exc).__name__}: {exc}"
             result = on_stop.on_stop(event, root=proot)
+            if drain_error:
+                result = {**result, "drain_error": drain_error}
             launch_error = None
             if result.get("triggered"):
                 launch_result = fire(event, result, roots)
@@ -148,9 +168,12 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
         if name == "PreToolUse":
             tool = event.get("tool_name")
             child = bool(os.environ.get(config.CHILD_SESSION_ENV))
-            if tool in _WRITE_TOOLS and (child or _is_reflector(event)):
+            if child and tool not in _CHILD_ALLOWED_TOOLS:
+                return {"deny": True, "reason": "autoharness child may only read and stage intents"}
+            maintenance_agent = _is_reflector(event) or _is_curator(event)
+            if tool in _WRITE_TOOLS and (child or maintenance_agent):
                 return {"deny": True, "reason": "reflector may only stage intents, not write files"}
-            if not child:  # direction H: every main-session tool call advances the activity numerator
+            if not child and not maintenance_agent:  # direction H: every main-session tool call advances the activity numerator
                 sid = event.get("session_id")
                 if isinstance(sid, str) and sid:
                     try:
@@ -158,9 +181,11 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
                     except ValueError:
                         pass  # unsafe session id: skip counting, never crash the host hook
             if tool == "Skill":
+                if maintenance_agent:
+                    return {"handled": name, "result": {"counted": False, "reason": "recursion_guard"}}
                 return {"handled": name, "result": on_skill_call.on_skill_call(event, roots=roots)}
             if tool == "Read":
-                if _is_reflector(event):
+                if child or maintenance_agent:
                     return {"handled": name, "result": {"counted": False, "reason": "reflector_read"}}
                 return {"handled": name, "result": on_skill_call.on_skill_read(event, roots=roots)}
             return {"ignored": True, "reason": "untracked PreToolUse"}
@@ -192,6 +217,9 @@ def _emit(verdict):
 
 
 def main():
+    # the host writes UTF-8 JSON, whatever the locale codec (cp1252 on Windows) is; output is ASCII JSON
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     try:
         event = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):

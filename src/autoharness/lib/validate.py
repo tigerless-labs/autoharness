@@ -25,11 +25,13 @@ import re
 from autoharness import config
 from autoharness.lib import layer, redact, skills_guard
 
-_FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
+# A malformed first closing delimiter must not be skipped in favor of a later body rule.
+_FRONTMATTER = re.compile(r"\A---\r?\n((?:(?!^---).)*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL | re.MULTILINE)
 _PLACEHOLDER = re.compile(r"\b(TODO|FIXME|XXX):|<(?:TODO|FIXME|XXX|TBD|PLACEHOLDER|REPLACE[_ ]?ME|INSERT[_ ]?HERE|FILL[_ ]?IN)>")
 _ABS_PATH = re.compile(r"(?:/home/|/Users/|/root/)[^\s`)\]]+|[A-Za-z]:\\[^\s`)\]]+")
-_PY_REF = re.compile(r"[\w./-]+\.py")
-_SUBFILE_REF = re.compile(r"\b(?:{})/[A-Za-z0-9._/-]+".format("|".join(layer.SUBFILE_DIRS)))
+# not after ":" -- a URL (https://host/tool.py) names a remote file, not a path under the skill dir
+_PY_REF = re.compile(r"(?<![\w./:-])[\w./-]+\.py")
+_SUBFILE_REF = re.compile(r"(?<![A-Za-z0-9_./-])(?:\./)?(?:{})/[A-Za-z0-9._/-]+".format("|".join(layer.SUBFILE_DIRS)))
 _MODIFY = ("update", "patch", "remove_file", "delete")
 # description-as-trigger proxy: a firing description names WHEN to use it ("use when …") or lists a
 # literal phrase the user would type (quoted). A bare topic-label has neither and never fires.
@@ -41,18 +43,83 @@ def _has_cue(text):
     return bool(_WHEN.search(text) or _QUOTED_PHRASE.search(text))
 
 
+def _block_scalar(lines, start, parent_indent, header):
+    """Decode a flat string field's YAML literal/folded scalar, not a general YAML document."""
+    modifiers = header.split("#", 1)[0].strip()[1:]
+    explicit = next((int(ch) for ch in modifiers if ch.isdigit()), None)
+    end = start
+    while end < len(lines) and (not lines[end].strip(" ")
+                                or len(lines[end]) - len(lines[end].lstrip(" ")) > parent_indent):
+        end += 1
+    raw = lines[start:end]
+    first = next((i for i, line in enumerate(raw) if line.strip(" ")), None)
+    indent = parent_indent + explicit if explicit else (
+        len(raw[first]) - len(raw[first].lstrip(" ")) if first is not None else max([parent_indent + 1, *(len(line) for line in raw)])
+    )
+    if explicit is None and first is not None and any(len(line) > indent for line in raw[:first]):
+        raise ValueError("leading empty scalar line exceeds detected indentation")
+    for offset, line in enumerate(raw):
+        if (line.lstrip(" ").startswith("#")
+                and len(line) - len(line.lstrip(" ")) < indent):
+            raw, end = raw[:offset], start + offset
+            break  # a dedented trailing comment is outside the scalar
+    content = []
+    for line in raw:
+        if line.strip(" ") and len(line) - len(line.lstrip(" ")) < indent:
+            raise ValueError("block scalar line is less indented than its content")
+        content.append(line[indent:] if len(line) >= indent else "")
+    chunks, index = [], 0
+    while index < len(content):
+        line = content[index]
+        if not line:
+            chunks.append("\n")
+            index += 1
+            continue
+        chunks.append(line)
+        following = index + 1
+        while following < len(content) and not content[following]:
+            following += 1
+        if (header[0] == ">" and following < len(content)
+                and not line.startswith((" ", "\t"))
+                and not content[following].startswith((" ", "\t"))):
+            chunks.append(" " if following == index + 1 else "\n" * (following - index - 1))
+        else:
+            chunks.append("\n" * (following - index))
+        index = following
+    value = "".join(chunks)
+    if "-" in modifiers:
+        value = value.rstrip("\n")
+    elif "+" not in modifiers:
+        value = value.rstrip("\n")
+        if value:
+            value += "\n"
+    return value, end
+
+
 def _frontmatter(body):
+    """Read flat string fields: plain/quoted values and YAML literal/folded block scalars."""
     m = _FRONTMATTER.match(body)
     if not m:
         return None
     fm = {}
-    for line in m.group(1).splitlines():
+    lines = (m.group(1) + "\n").splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        index += 1
         s = line.strip()
         if not s or s.startswith("#") or ":" not in line:
             continue
+        if line[0] in " \t":
+            continue  # nested mapping or wrapped scalar line: not a top-level field of the skill
         key, value = line.split(":", 1)
         v = value.strip()
-        if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+        if re.fullmatch(r"[>|](?:[1-9][-+]?|[-+][1-9]?)?(?:[ \t]+#.*)?", v):
+            try:
+                v, index = _block_scalar(lines, index, len(line) - len(line.lstrip(" ")), v)
+            except ValueError:
+                return None
+        elif len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
             v = v[1:-1]
         fm[key.strip()] = v
     return fm
@@ -96,7 +163,9 @@ def check_remove_path(rel):
     return _evidence_slice_denied(rel)
 
 
-def check_files(files):
+def check_files(files, *, base_dir=None, creating=False):
+    """Carried subfiles. Only a name being created (a create, or a file not yet in base_dir) is held to
+    the new-name limits; an existing legacy file must stay updatable."""
     if files is None:
         return []
     if not isinstance(files, dict):
@@ -107,7 +176,7 @@ def check_files(files):
     total = 0
     for rel, content in files.items():
         try:
-            layer.check_subfile(rel)
+            layer.check_subfile(rel, new=creating or (base_dir is not None and not (base_dir / rel).exists()))
         except ValueError as exc:
             findings.append(("files", str(exc)))
             continue
@@ -122,6 +191,46 @@ def check_files(files):
     if total > config.STAGE_MAX_FILES_TOTAL_BYTES:
         findings.append(("files", f"subfiles exceed {config.STAGE_MAX_FILES_TOTAL_BYTES} bytes total"))
     return findings
+
+
+def _backtick_spans(text):
+    """Balanced backtick code spans; an unmatched/escaped opener is ordinary prose."""
+    ticks = list(re.finditer(r"`+", text))
+    spans, index = [], 0
+    while index < len(ticks):
+        opener = ticks[index]
+        prefix = text[:opener.start()]
+        if (len(prefix) - len(prefix.rstrip("\\"))) % 2:
+            index += 1
+            continue
+        closer = next((i for i in range(index + 1, len(ticks))
+                       if ticks[i].group() == opener.group()), None)
+        if closer is None:
+            index += 1
+            continue
+        spans.append((opener.end(), ticks[closer].start()))
+        index = closer + 1
+    return spans
+
+
+def subfile_references(body, *, base_dir, files=None):
+    """Resolve terminal prose punctuation against contextual paths for all consumers."""
+    base = base_dir.resolve()
+    code_spans, seen_refs = _backtick_spans(body), set()
+    for match in _SUBFILE_REF.finditer(body):
+        ref = match.group().removeprefix("./")
+        in_code = any(start <= match.start() < end for start, end in code_spans)
+        if not (base_dir / ref).resolve().is_relative_to(base):
+            continue
+        if not in_code and ref.endswith(".") and ref not in (files or {}) and not (base_dir / ref).is_file():
+            plain = ref.rstrip(".")
+            candidate = base_dir / plain
+            if candidate.resolve().is_relative_to(base) \
+                    and (plain in (files or {}) or candidate.is_file()):
+                ref = plain
+        if ref not in seen_refs:
+            seen_refs.add(ref)
+            yield ref
 
 
 def _structure(body, base_dir, files=None):
@@ -146,20 +255,30 @@ def _structure(body, base_dir, files=None):
             if not f.resolve().is_relative_to(base):
                 findings.append(("structure", f"referenced {ref} escapes the skill directory"))
                 continue
-            if f.is_file():
+            source = (files or {}).get(ref)
+            if isinstance(source, str) or f.is_file():
                 try:
-                    ast.parse(f.read_text())
+                    ast.parse(
+                        source if isinstance(source, str) else f.read_text(encoding="utf-8")
+                    )
                 except SyntaxError as exc:
                     findings.append(("structure", f"referenced {ref} has syntax error: {exc}"))
-        for ref in set(_SUBFILE_REF.findall(body)):
-            # escaping refs are skipped silently: writes are gated by the
-            # promoter's landing check, validation must not probe outside
-            if (base_dir / ref).resolve().is_relative_to(base) \
-                    and ref not in (files or {}) and not (base_dir / ref).is_file():
+                except UnicodeError as exc:
+                    findings.append(("structure", f"referenced {ref} could not be read: {exc}"))
+                except OSError as exc:
+                    # A live referenced file can become temporarily unreadable after is_file().
+                    # Preserve the original exception type for callers, but distinguish this read
+                    # failure from a permanently unlandable intent (bad name/path/permissions).
+                    exc._autoharness_retryable_read = True
+                    raise
+        for ref in subfile_references(body, base_dir=base_dir, files=files):
+            if ref not in (files or {}) and not (base_dir / ref).is_file():
                 findings.append(("structure", f"referenced {ref} neither carried in intent nor live"))
     for rel in files or {}:
-        if isinstance(rel, str) and rel not in body:
-            findings.append(("structure", f"carried subfile {rel} not referenced in SKILL.md body"))
+        if isinstance(rel, str):
+            pointer = re.compile(r"(?<![A-Za-z0-9_./-])(?:\./|\$\{CLAUDE_SKILL_DIR\}/)?" + re.escape(rel) + r"(?![A-Za-z0-9_/-])(?!\.[A-Za-z0-9_])")
+            if not pointer.search(body):
+                findings.append(("structure", f"carried subfile {rel} not referenced in SKILL.md body"))
     return findings
 
 
@@ -180,10 +299,12 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
             findings.append(("secret", secrets))
 
         findings += _structure(body, base_dir, files)
-        findings += check_files(files)
+        findings += check_files(files, base_dir=base_dir, creating=intent.get("action") == "create")
 
         if _PLACEHOLDER.search(body):
             findings.append(("completeness", "contains TODO/placeholder"))
+        if _body_lines(body) == 0:
+            findings.append(("completeness", "skill body is empty"))
 
         # altitude: create/update author the full body, so this is where rule-level is set. patch is a
         # delta to a live skill -- capping it would strand existing over-long skills (can't even fix them).
@@ -223,5 +344,7 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
 
     if intent.get("action") in _MODIFY and target_is_agent_created is not True:
         findings.append(("self_produced", "target live skill not created_by:agent"))
+    elif intent.get("action") == "create" and target_is_agent_created is False:
+        findings.append(("self_produced", "create would overwrite a skill not created_by:agent"))
 
     return {"ok": not findings, "findings": findings}

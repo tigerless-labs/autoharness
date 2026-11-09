@@ -6,6 +6,10 @@ read this one file — keep them aligned.
 
 ## Required frontmatter
 
+The dependency-free frontmatter reader supports flat string fields: existing single-line plain/quoted
+values, plus literal (`|`) and folded (`>`) block scalars with indentation and chomping indicators.
+This scalar support does not constitute general YAML collection, tag or anchor parsing.
+
 YAML frontmatter that parses, carrying at least:
 
 - `name` — short identifier for the skill.

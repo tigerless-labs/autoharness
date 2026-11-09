@@ -66,7 +66,6 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
     assert sidecar.is_agent_created("project", "learned", proot)
     assert ledger.read("project", "learned", proot)[0]["action"] == "create"
     assert counters.request_count(layer.PROJECT, proot) == 2              # denominator grew per Stop
-    print(f"[birth]  learned landed · denominator={counters.request_count(layer.PROJECT, proot)}")
 
     # BEAT 2 — use: PreToolUse(Skill) bumps the numerator
     for _ in range(2):
@@ -74,7 +73,6 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
                            "tool_input": {"name": "learned"}}, roots=roots)
     sc = sidecar.read("project", "learned", proot)
     assert sc["use"] == 2 and sc["view"] == 0
-    print(f"[use]    learned use={sidecar.read('project', 'learned', proot)['use']} view={sidecar.read('project', 'learned', proot)['view']}")
 
     # BEAT 3 — compete: a weak unused peer; MNG recompute (SessionStart) archives the loser.
     # learned landed with a real anchor (=2), so two more turns first to graduate it out of probation.
@@ -84,20 +82,16 @@ def test_full_skill_lifecycle_through_dispatch(tmp_path, capsys):
     sidecar.create("project", "weak", anchor=0, root=proot)              # mature (denom 4), zero calls
     req = counters.request_count(layer.PROJECT, proot)
     mat = config.MATURITY_THRESHOLD[layer.PROJECT]
-    for name in ("learned", "weak"):                                    # monitor MNG numerator/denominator
-        sc = sidecar.read("project", name, proot)
-        num, den = sc.get("use", 0), req - sc["anchor"]
-        print(f"[mng]    {name}: numerator(calls)={num} denominator(reqs)={den} "
-              f"rate={num / den:.2f} mature={den >= mat}")
+    for name in ("learned", "weak"):                                    # both past probation: capacity decides
+        den = req - sidecar.read("project", name, proot)["anchor"]
+        assert den >= mat, f"{name} still in probation: denominator {den} < maturity {mat}"
     out = dispatch.dispatch({"hook_event_name": "SessionStart"}, roots=roots)
     archived = out["result"]["archived"]["project"]
     assert "weak" in archived and "learned" not in archived            # lowest rate sheds, adhered-to kept
     assert not skill_store.exists("project", "weak", proot)             # moved out of live tree
     assert (layer.archive_dir("project", proot) / "weak").exists()
     assert skill_store.exists("project", "learned", proot)
-    print(f"[archive] capacity={config.CAPACITY[layer.PROJECT]} → archived={archived} · learned survives")
 
     # BEAT 4 — restore: archival is reversible
     skill_store.restore("project", "weak", proot)
     assert skill_store.exists("project", "weak", proot)
-    print("[restore] weak reactivated")
