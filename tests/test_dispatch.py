@@ -462,4 +462,6 @@ def test_torn_interactive_queue_line_no_longer_wedges_every_stop(tmp_path):
 
 def test_a_crashed_handler_is_reported_on_stderr(capsys):
     dispatch._emit({"error": "TypeError: boom"})
-    assert "TypeError: boom" in capsys.readouterr().err
+    lines = capsys.readouterr().err.splitlines()
+    assert len(lines) == 1
+    assert "TypeError: boom" in lines[0]
