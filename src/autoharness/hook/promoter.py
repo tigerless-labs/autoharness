@@ -215,6 +215,7 @@ def _promote_resolved(intent, action, name, level, roots, repo_name):
         target_created = sidecar.is_agent_created(level, name, root)
 
     absorbed = intent.get("absorbed_into")
+    umbrella_level = None
     if action == "delete" and absorbed:
         # fail-closed absorption claim (direction D, Hermes trust-chain tier 1): the umbrella must be
         # a live, self-produced skill distinct from the target — a hallucinated name rejects the intent.
@@ -226,6 +227,7 @@ def _promote_resolved(intent, action, name, level, roots, repo_name):
                 or not sidecar.is_agent_created(alevel, absorbed, roots.get(alevel)):
             return _reject(action, level,
                            [("absorbed_into", f"umbrella {absorbed!r} is not a live self-produced skill")])
+        umbrella_level = alevel
 
     verdict = validate.validate(
         {**intent, "level": level}, body,
@@ -234,10 +236,15 @@ def _promote_resolved(intent, action, name, level, roots, repo_name):
     if not verdict["ok"]:
         return _reject(action, level, verdict["findings"])
 
+    earned = sidecar.read(level, name, root) if umbrella_level else {}
     try:
         _land(action, intent, body, level, name, root)
     except ValueError as exc:
         return _reject(action, level, [("landing", str(exc))])
+    if umbrella_level:
+        # the umbrella inherits the evidence of use, or graduation review reads it as a zero-use skill
+        sidecar.credit(umbrella_level, absorbed, use=earned.get("use", 0), view=earned.get("view", 0),
+                       root=roots.get(umbrella_level))
     return {"ok": True, "action": action, "level": level, "findings": [], "notes": _notes(action, body)}
 
 
