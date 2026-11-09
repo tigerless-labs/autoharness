@@ -257,7 +257,8 @@ def _fake_curator_script(tmp_path):
         "              'new_string': 'body\\n## delta\\nabsorbed', 'reason': 'fold into umbrella',\n"
         "              'evidence': ev}, run_id=run_id, root=root)\n"
         "server.stage({'action': 'delete', 'name': 'widget-delta',\n"
-        "              'reason': 'absorbed into widgets', 'evidence': ev}, run_id=run_id, root=root)\n"
+        "              'reason': 'absorbed into widgets', 'absorbed_into': 'widgets', 'evidence': ev},\n"
+        "             run_id=run_id, root=root)\n"
         "sys.exit(0)\n"
     )
     return _executable(script)
