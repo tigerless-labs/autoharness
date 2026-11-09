@@ -20,7 +20,8 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
   os.replace carries the slices along). remove_file = drop one subfile (path re-gated + escape-checked;
   rejected while the live SKILL.md still references it; missing target = no-op, so crash replays stay
   idempotent) + evidence + LED with the removed path. Reject = zero writes, no stamp, no ledger.
-- Drain: read queue → promote one by one → clear at the end (at-least-once + atomic land = effectively
+- Drain: read queue → promote one by one (a delete folding into a skill the same run writes waits for
+  that write and falls with it) → clear at the end (at-least-once + atomic land = effectively
   exactly-once); on startup sweep orphan .tmp. On a crash, unprocessed intents stay in the durable queue
   and are retried next time; in the extreme of never running → zero land (fail-safe).
 
@@ -47,6 +48,7 @@ from autoharness.lib import (
 )
 
 _MODIFY = ("update", "patch", "remove_file", "delete")
+_WRITES = ("create", "update", "patch")
 
 
 def _reject(action, level, findings):
@@ -319,6 +321,43 @@ def _promote_one(intent, roots, repo_name):
         return _reject(intent.get("action"), None, [("crash", f"{type(exc).__name__}: {exc}")])
 
 
+def _written_name(intent):
+    name = intent.get("name")
+    return name if intent.get("action") in _WRITES and isinstance(name, str) else None
+
+
+def _waits_for_umbrella(intent, written):
+    # a delete of a skill the run also writes is a replacement, and only works in queue order
+    name, absorbed = intent.get("name"), intent.get("absorbed_into")
+    return (intent.get("action") == "delete" and isinstance(name, str) and name not in written
+            and isinstance(absorbed, str) and absorbed in written)
+
+
+def _promote_run(intents, roots, repo_name):
+    """Judge one run's intents; the verdicts come back in queue order.
+
+    Intents stand alone, except that a delete folding into a skill this run writes is the second half
+    of one move. It waits until the run's writes are judged and is rejected if one to its umbrella
+    was: the umbrella may well be live, but the skill's content never reached it."""
+    written = {_written_name(i) for i in intents} - {None}
+    verdicts = [None] * len(intents)
+    rejected = set()
+    held = []
+    for index, intent in enumerate(intents):
+        if _waits_for_umbrella(intent, written):
+            held.append(index)
+            continue
+        verdicts[index] = _promote_one(intent, roots, repo_name)
+        if not verdicts[index]["ok"] and _written_name(intent):
+            rejected.add(intent["name"])
+    for index in held:
+        umbrella = intents[index]["absorbed_into"]
+        verdicts[index] = (
+            _reject("delete", None, [("absorbed_into", f"umbrella {umbrella!r} was rejected in this run")])
+            if umbrella in rejected else _promote_one(intents[index], roots, repo_name))
+    return verdicts
+
+
 def _drain_run(run_id, *, roots, repo_name, proot):
     """Land one run's queued intents: take (atomic claim), promote, account, drop. Notification
     is the caller's job, so a fire-and-forget send never holds the drain lock. A promotion that
@@ -326,7 +365,7 @@ def _drain_run(run_id, *, roots, repo_name, proot):
     queue, so the next drain retries it instead of waiting for the orphans scan."""
     intents = intent_queue.take(run_id, proot)
     try:
-        verdicts = [_promote_one(i, roots, repo_name) for i in intents]
+        verdicts = _promote_run(intents, roots, repo_name)
         record = _account(run_id, intents, verdicts, proot) if intents else None
     except BaseException:
         intent_queue.release(run_id, proot)
