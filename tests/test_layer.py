@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -25,6 +26,42 @@ def test_default_roots_differ_between_layers():
     assert layer.default_root("global") != layer.default_root("project")
 
 
+# --- global root env override (sandboxed installs never reach the real ~/.claude) ---
+
+def test_global_root_env_overrides_home(monkeypatch, tmp_path):
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, str(tmp_path))
+    assert layer.default_root("global") == tmp_path
+    # every global path is derived from it, and none of them escape back to the real home
+    assert layer.skills_dir("global") == tmp_path / "skills"
+    assert layer.state_dir("global") == tmp_path / "autoharness"
+    assert layer.symbol_dir("global", "foo") == tmp_path / "skills" / "foo"
+
+
+def test_global_root_env_unset_keeps_home(monkeypatch):
+    monkeypatch.delenv(layer.GLOBAL_ROOT_ENV, raising=False)
+    assert layer.default_root("global") == Path.home() / ".claude"
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_global_root_env_blank_falls_back_to_home(monkeypatch, value):
+    # an empty value must not resolve to the cwd, or a stray `AUTOHARNESS_GLOBAL_ROOT=` in a settings
+    # block would silently re-root the global layer on whatever project the session happens to be in
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, value)
+    assert layer.default_root("global") == Path.home() / ".claude"
+
+
+def test_global_root_env_expands_tilde(monkeypatch):
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, "~/sandbox-claude")
+    assert layer.default_root("global") == Path.home() / "sandbox-claude"
+
+
+def test_global_root_env_leaves_project_layer_alone(monkeypatch, tmp_path):
+    # the project layer is keyed to the session cwd; an override for the global one must not shift it
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, str(tmp_path))
+    assert layer.default_root("project") != tmp_path
+    assert layer.default_root("project").name == ".claude"
+
+
 @pytest.mark.parametrize("fn", [layer.skills_dir, layer.archive_dir, layer.state_dir])
 def test_unknown_layer_rejected(fn):
     with pytest.raises(ValueError):
@@ -35,6 +72,31 @@ def test_unknown_layer_rejected(fn):
 def test_symbol_name_traversal_rejected(tmp_path, bad):
     with pytest.raises(ValueError):
         layer.symbol_dir("project", bad, tmp_path)
+
+
+@pytest.mark.parametrize("bad", ["a" * 101, "notes.", "con", "CON", "aux.md", "com1", "lpt9.txt", "nul"])
+def test_new_name_the_filesystem_would_refuse_is_rejected(bad):
+    # past NAME_MAX once mkstemp adds its suffix, or unusable on Windows: reject before creating it
+    with pytest.raises(ValueError):
+        layer.check_new_name(bad)
+
+
+@pytest.mark.parametrize("existing", ["a" * 101, "con", "notes."])
+def test_existing_names_still_resolve(tmp_path, existing):
+    # a user's skills/con/ or a long legacy name must not break reading the library
+    assert layer.symbol_dir("project", existing, tmp_path).name == existing
+
+
+def test_new_subfile_segment_the_filesystem_would_refuse_is_rejected():
+    for bad in ["references/" + "b" * 250 + ".md", "references/aux.md", "scripts/run."]:
+        with pytest.raises(ValueError):
+            layer.check_subfile(bad, new=True)
+        layer.check_subfile(bad)  # an existing file of that name can still be addressed
+
+
+def test_ordinary_new_names_near_the_limit_pass():
+    for ok in ["a" * 100, "console", "auxiliary-notes", "com10", "my.skill.v2"]:
+        layer.check_new_name(ok)
 
 
 def test_valid_symbol_name_ok(tmp_path):
@@ -113,6 +175,32 @@ def test_project_root_repo_subdir_stays_cwd_no_jump_to_repo_root(main_repo, monk
     assert _project_root_at(monkeypatch, sub) == sub / ".claude"
 
 
+def test_project_root_follows_host_project_dir_not_shell_cwd(main_repo, monkeypatch):
+    # the shell cwd persists across Bash calls: after `cd sub`, hooks must still land at the project
+    sub = main_repo / "sub"
+    sub.mkdir()
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(main_repo))
+    assert _project_root_at(monkeypatch, sub) == main_repo / ".claude"
+
+
+def test_project_root_host_project_dir_in_worktree_maps_to_main_root(linked_worktree, main_repo,
+                                                                      monkeypatch):
+    sub = linked_worktree / "src"
+    sub.mkdir()
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(linked_worktree))
+    assert _project_root_at(monkeypatch, sub) == main_repo / ".claude"
+
+
+def test_project_root_child_session_uses_spawn_pinned_root(main_repo, tmp_path, monkeypatch):
+    # a reflector child starts in the parent's shell cwd; its hooks must reuse the parent's root
+    sub = main_repo / "sub"
+    sub.mkdir()
+    pinned = tmp_path / "pinned" / ".claude"
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(sub))
+    monkeypatch.setenv(layer.PROJECT_ROOT_ENV, str(pinned))
+    assert _project_root_at(monkeypatch, sub) == pinned
+
+
 def test_project_root_linked_worktree_maps_to_main_root(linked_worktree, main_repo, monkeypatch):
     assert _project_root_at(monkeypatch, linked_worktree) == main_repo / ".claude"
 
@@ -162,3 +250,61 @@ def test_project_root_global_layer_unaffected(linked_worktree, monkeypatch):
     monkeypatch.chdir(linked_worktree)
     assert layer.default_root(layer.GLOBAL) == layer.default_root(layer.GLOBAL)
     assert ".claude/worktrees" not in str(layer.default_root(layer.GLOBAL))
+
+
+# --- project root: a session started inside the project's .claude dir ---
+
+def test_project_root_inside_claude_dir_maps_to_its_owner(main_repo, monkeypatch):
+    skills = main_repo / ".claude" / "skills"
+    skills.mkdir(parents=True)
+    assert _project_root_at(monkeypatch, skills) == main_repo / ".claude"
+
+
+def test_project_root_claude_dir_itself_maps_to_its_owner(main_repo, monkeypatch):
+    (main_repo / ".claude").mkdir()
+    assert _project_root_at(monkeypatch, main_repo / ".claude") == main_repo / ".claude"
+
+
+def test_project_root_claude_dir_as_its_own_repo_maps_to_its_owner(main_repo, monkeypatch):
+    config = main_repo / ".claude"
+    config.mkdir()
+    _git(config, "init", "-q")
+    skills = config / "skills"
+    skills.mkdir()
+    assert _project_root_at(monkeypatch, skills) == main_repo / ".claude"
+
+
+def test_project_root_separate_repo_inside_claude_dir_stays_cwd(main_repo, monkeypatch):
+    nested = main_repo / ".claude" / "plugins" / "tool"
+    nested.mkdir(parents=True)
+    _git(nested, "init", "-q")
+    assert _project_root_at(monkeypatch, nested) == nested / ".claude"
+
+
+def test_project_root_under_home_claude_dir_stays_cwd(main_repo, monkeypatch):
+    # the home .claude is the global layer: mapping to its owner would merge the two layers
+    monkeypatch.setenv("HOME", str(main_repo))
+    skills = main_repo / ".claude" / "skills"
+    skills.mkdir(parents=True)
+    layer._main_worktree_root_resolved.cache_clear()
+    assert _project_root_at(monkeypatch, skills) == skills / ".claude"
+
+
+def test_project_root_non_git_claude_dir_stays_cwd(tmp_path, monkeypatch):
+    skills = tmp_path / "proj" / ".claude" / "skills"
+    skills.mkdir(parents=True)
+    assert _project_root_at(monkeypatch, skills) == skills / ".claude"
+
+
+def test_project_root_inside_claude_dir_without_toplevel_stays_cwd(main_repo, monkeypatch):
+    skills = main_repo / ".claude" / "skills"
+    skills.mkdir(parents=True)
+    real_run = subprocess.run
+
+    def no_toplevel(cmd, *args, **kwargs):
+        if "--show-toplevel" in cmd:
+            return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="fatal: not a work tree")
+        return real_run(cmd, *args, **kwargs)
+    monkeypatch.setattr(layer.subprocess, "run", no_toplevel)
+    layer._main_worktree_root_resolved.cache_clear()
+    assert layer._main_worktree_root(str(skills)) == skills
