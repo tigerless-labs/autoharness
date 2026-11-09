@@ -1,12 +1,24 @@
+import errno
 import json
 import os
+import sys
 import threading
 import time
 
 import pytest
 
+from autoharness import config
 from autoharness.hook import promoter
-from autoharness.lib import counters, intent_queue, layer, ledger, sidecar, skill_store
+from autoharness.lib import (
+    counters,
+    intent_queue,
+    layer,
+    ledger,
+    lifecycle,
+    sidecar,
+    skill_store,
+)
+from autoharness.stage_skill import server
 
 GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
 
@@ -626,6 +638,56 @@ def test_delete_with_live_umbrella_lands_and_ledgers(tmp_path):
     assert led["absorbed_into"] == "umbrella"  # consolidated vs pruned, distinguishable
 
 
+def test_absorbing_a_skill_carries_its_use_and_view_counts_to_the_umbrella(tmp_path):
+    roots = _roots12(tmp_path)
+    proot = roots["project"]
+    _mk_agent(roots, "umbrella")
+    _mk_agent(roots, "narrow")
+    for _ in range(5):
+        sidecar.bump_use("project", "narrow", proot)
+    for _ in range(2):
+        sidecar.bump_view("project", "narrow", proot)
+    sidecar.bump_use("project", "umbrella", proot)
+
+    r = promoter.promote({"action": "delete", "name": "narrow", "reason": "merged",
+                          "evidence": "e", "absorbed_into": "umbrella"}, roots=roots)
+
+    assert r["ok"]
+    meta = sidecar.read("project", "umbrella", proot)
+    assert (meta["use"], meta["view"]) == (6, 2)
+
+
+def test_umbrella_that_absorbed_a_used_skill_survives_graduation_review(tmp_path):
+    roots = _roots12(tmp_path)
+    proot = roots["project"]
+    _mk_agent(roots, "umbrella")
+    _mk_agent(roots, "narrow")
+    sidecar.bump_use("project", "narrow", proot)
+    promoter.promote({"action": "delete", "name": "narrow", "reason": "merged",
+                      "evidence": "e", "absorbed_into": "umbrella"}, roots=roots)
+
+    meta = sidecar.read("project", "umbrella", proot)
+    members = [{"name": "umbrella", "anchor": meta["anchor"], "use": meta["use"], "view": meta["view"]}]
+    to_archive = lifecycle.evaluate(members, meta["anchor"] + 100, maturity=100, capacity=10)
+
+    assert to_archive == []
+
+
+def test_delete_without_absorbed_into_leaves_other_counters_alone(tmp_path):
+    roots = _roots12(tmp_path)
+    proot = roots["project"]
+    _mk_agent(roots, "bystander")
+    _mk_agent(roots, "narrow")
+    sidecar.bump_use("project", "narrow", proot)
+
+    r = promoter.promote({"action": "delete", "name": "narrow", "reason": "pruned", "evidence": "e"},
+                         roots=roots)
+
+    assert r["ok"]
+    meta = sidecar.read("project", "bystander", proot)
+    assert (meta["use"], meta["view"]) == (0, 0)
+
+
 def test_delete_with_hallucinated_umbrella_rejected(tmp_path):
     roots = _roots12(tmp_path)
     _mk_agent(roots, "narrow")
@@ -668,6 +730,137 @@ def test_drain_writes_run_account_and_last_run(tmp_path):
     assert [v["ok"] for v in run["verdicts"]] == [True, False]
     last = json.loads((state / "last_run.json").read_text())
     assert last["landed"] == 1 and last["rejected"] == 1
+
+
+# --- a fold is one move: its deletes wait for the umbrella's write and fall with it (#296) ---
+
+def _write_umbrella(name="umbrella", body=None):
+    body = body or f"---\nname: {name}\ndescription: use when {name}\n---\nrule"
+    return {"action": "create", "name": name, "level": "project", "body": body, "reason": "r", "evidence": "e"}
+
+
+def _rejected_patch(name="umbrella"):
+    return {"action": "patch", "name": name, "old_string": "not in the body", "new_string": "x",
+            "reason": "r", "evidence": "e"}
+
+
+def _fold(name="narrow", into="umbrella"):
+    return {"action": "delete", "name": name, "reason": "merged", "evidence": "e", "absorbed_into": into}
+
+
+def _drain_intents(roots, *intents):
+    for intent in intents:
+        intent_queue.append("fold", intent, roots["project"])
+    return promoter.drain("fold", roots=roots)
+
+
+@pytest.mark.parametrize("delete_first", [False, True])
+def test_fold_stays_live_when_the_umbrella_create_is_rejected(tmp_path, delete_first):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    create = _write_umbrella(body="no frontmatter")
+    intents = [_fold(), create] if delete_first else [create, _fold()]
+    verdicts = _drain_intents(roots, *intents)
+    assert [v["ok"] for v in verdicts] == [False, False]
+    assert _families(verdicts[intents.index(_fold())]) == {"absorbed_into"}
+    assert skill_store.exists("project", "narrow", roots["project"])
+    last = json.loads((layer.state_dir("project", roots["project"]) / "last_run.json").read_text())
+    assert last["landed"] == 0 and last["absorbed"] == 0
+
+
+def test_fold_stated_only_in_the_reason_never_archives_the_skill(tmp_path):
+    # the #296 run: the create passes staging, the promoter rejects it on altitude, and the delete
+    # names the umbrella in prose. Staged through the real tool, with the curator retrying as told.
+    roots = _roots12(tmp_path)
+    proot = roots["project"]
+    _mk_agent(roots, "narrow")
+    transcript = "\n".join(f"step {i}" for i in range(config.SKILL_BODY_MAX_LINES + 1))
+    body = f"---\nname: umbrella\ndescription: use when umbrella\n---\n{transcript}\n"
+    assert server.stage(_write_umbrella(body=body), run_id="fold", root=proot)["ok"]
+    delete = {"action": "delete", "name": "narrow", "evidence": "e",
+              "reason": "Absorbed into umbrella as its unit-test section."}
+    assert not server.stage(delete, run_id="fold", root=proot)["ok"]
+    assert server.stage({**delete, "absorbed_into": "umbrella"}, run_id="fold", root=proot)["ok"]
+    verdicts = promoter.drain("fold", roots=roots)
+    assert [(v["ok"], sorted(_families(v))) for v in verdicts] == [(False, ["altitude"]), (False, ["absorbed_into"])]
+    assert skill_store.exists("project", "narrow", proot)
+
+
+def test_fold_stays_live_when_the_patch_to_a_live_umbrella_is_rejected(tmp_path):
+    # the umbrella passes the liveness check, but the sibling's content never reached it
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "umbrella")
+    _mk_agent(roots, "narrow")
+    verdicts = _drain_intents(roots, _rejected_patch(), _fold())
+    assert [v["ok"] for v in verdicts] == [False, False]
+    assert "was rejected in this run" in verdicts[1]["findings"][0][1]
+    assert skill_store.exists("project", "narrow", roots["project"])
+
+
+def test_fold_staged_before_its_umbrella_lands_with_queue_order_verdicts(tmp_path):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    verdicts = _drain_intents(roots, _fold(), _write_umbrella())
+    assert [(v["action"], v["ok"]) for v in verdicts] == [("delete", True), ("create", True)]
+    assert not skill_store.exists("project", "narrow", roots["project"])
+    last = json.loads((layer.state_dir("project", roots["project"]) / "last_run.json").read_text())
+    assert last["absorbed"] == 1
+
+
+def test_rejected_write_only_holds_back_the_folds_into_that_skill(tmp_path):
+    roots = _roots12(tmp_path)
+    for name in ("umbrella", "other", "narrow", "retired"):
+        _mk_agent(roots, name)
+    verdicts = _drain_intents(
+        roots,
+        _rejected_patch("other"),
+        {"action": "patch", "name": "umbrella", "old_string": "rule", "new_string": "rules",
+         "reason": "r", "evidence": "e"},
+        _fold(),
+        {"action": "delete", "name": "retired", "reason": "stale", "evidence": "e"},
+    )
+    assert [v["ok"] for v in verdicts] == [False, True, True, True]
+
+
+def test_umbrella_deleted_in_the_same_run_fails_the_fold_into_it(tmp_path):
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    verdicts = _drain_intents(
+        roots, _write_umbrella(), _fold(),
+        {"action": "delete", "name": "umbrella", "reason": "stale", "evidence": "e"},
+    )
+    assert [v["ok"] for v in verdicts] == [True, False, True]
+    assert skill_store.exists("project", "narrow", roots["project"])
+
+
+def test_delete_then_create_of_the_same_name_keeps_its_order(tmp_path):
+    # a replacement, even when the delete also points at a skill the run writes
+    roots = _roots12(tmp_path)
+    _mk_agent(roots, "narrow")
+    _mk_agent(roots, "umbrella")
+    body = "---\nname: narrow\ndescription: use when rewritten\n---\nnew"
+    verdicts = _drain_intents(
+        roots, _fold(),
+        {"action": "patch", "name": "umbrella", "old_string": "rule", "new_string": "rules",
+         "reason": "r", "evidence": "e"},
+        _write_umbrella("narrow", body),
+    )
+    assert [v["ok"] for v in verdicts] == [True, True, True]
+    assert skill_store.read_body("project", "narrow", roots["project"]) == body
+
+
+def test_malformed_fields_beside_a_write_are_accounted_not_raised(tmp_path):
+    roots = _roots12(tmp_path)
+    verdicts = _drain_intents(
+        roots,
+        _write_umbrella(),
+        {"action": "delete", "name": ["not", "a", "name"], "reason": 5, "evidence": "e", "absorbed_into": "umbrella"},
+        {"action": "delete", "name": "umbrella-too", "reason": "r", "evidence": "e", "absorbed_into": ["umbrella"]},
+        {"action": "patch", "name": ["not", "a", "name"], "old_string": "a", "new_string": "b",
+         "reason": "r", "evidence": "e"},
+    )
+    assert [v["ok"] for v in verdicts] == [True, False, False, False]
+    assert skill_store.exists("project", "umbrella", roots["project"])
 
 
 CATEGORIZED_BODY = ("---\nname: foo\ndescription: Use when formatting a date as ISO.\n"
@@ -737,6 +930,125 @@ def test_update_can_still_rewrite_an_existing_legacy_subfile(tmp_path):
     assert "files" in _families(promoter.promote(bad, roots=roots))  # a new over-long name is still refused
 
 
+def test_drain_accounts_a_malformed_intent_once_and_lands_the_rest(tmp_path):
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    intent_queue.append("r1", _create(), proot)
+    intent_queue.append("r1", {"action": "patch", "name": "foo", "old_string": 5, "new_string": ["x"],
+                               "reason": "r", "evidence": "e"}, proot)  # bypassed stage_skill's schema
+    with (layer.state_dir("project", proot) / "intents" / "r1.jsonl").open("a", encoding="utf-8") as f:
+        f.write('{"torn": \n')
+    intent_queue.append("r1", _create(name="bar", body=GOOD_BODY.replace("name: foo", "name: bar")), proot)
+    verdicts = promoter.drain("r1", roots=roots)
+    assert [v["ok"] for v in verdicts] == [True, False, False, True]
+    assert verdicts[1]["findings"][0][0] == "crash" and "TypeError" in verdicts[1]["findings"][0][1]
+    assert verdicts[2]["findings"][0][0] == "queue"
+    assert skill_store.exists("project", "bar", proot)  # intents after the bad ones still land
+    assert intent_queue.read("r1", proot) == []  # cleared: the next drain does not replay the garbage
+
+
+def test_drain_crash_verdict_for_an_intent_that_raises(tmp_path, monkeypatch):
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    intent_queue.append("r1", _create(), proot)
+    monkeypatch.setattr(promoter, "promote", lambda *a, **k: (_ for _ in ()).throw(TypeError("bad delta")))
+    verdicts = promoter.drain("r1", roots=roots)
+    assert verdicts[0]["findings"] == [("crash", "TypeError: bad delta")]
+    assert intent_queue.read("r1", proot) == []
+
+
+def test_drain_accounts_an_oserror_that_belongs_to_the_intent(tmp_path, monkeypatch):
+    # a read-only skill dir, a name the filesystem refuses: it would fail on every Stop, so account it
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    intent_queue.append("r1", _create(), proot)
+
+    def denied(*a, **k):
+        raise PermissionError(errno.EACCES, "Permission denied", "references")
+    monkeypatch.setattr(promoter, "promote", denied)
+    verdicts = promoter.drain("r1", roots=roots)
+    assert verdicts[0]["findings"][0][0] == "crash" and "PermissionError" in verdicts[0]["findings"][0][1]
+    assert intent_queue.read("r1", proot) == []
+
+
+@pytest.mark.parametrize("winerror, kept", [(32, True), (33, True), (19, True), (23, True), (29, True),
+                                             (30, True), (108, True), (5, False), (65, False)])
+def test_windows_eacces_is_split_by_its_native_code(tmp_path, monkeypatch, winerror, kept):
+    # Windows folds sharing/lock and device/media failures into EACCES; only a real denial is final
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    intent_queue.append("r1", _create(), proot)
+
+    def fail(*a, **k):
+        exc = PermissionError(errno.EACCES, "Windows error")
+        exc.winerror = winerror
+        raise exc
+    monkeypatch.setattr(promoter, "promote", fail)
+    if kept:
+        with pytest.raises(PermissionError):
+            promoter.drain("r1", roots=roots)
+    else:
+        assert promoter.drain("r1", roots=roots)[0]["findings"][0][0] == "crash"
+    assert bool(intent_queue.read("r1", proot)) is kept
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="NAME_MAX semantics are POSIX")
+def test_drain_does_not_wedge_on_a_name_the_filesystem_refuses(tmp_path):
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    long_name = "a" * 256  # passes the name regex, exceeds NAME_MAX
+    intent_queue.append("r1", _create(), proot)
+    intent_queue.append("r1", _create(name=long_name, body=GOOD_BODY.replace("name: foo", f"name: {long_name}")), proot)
+    intent_queue.append("r1", _create(name="bar", body=GOOD_BODY.replace("name: foo", "name: bar")), proot)
+    verdicts = promoter.drain("r1", roots=roots)
+    assert [v["ok"] for v in verdicts] == [True, False, True]
+    assert skill_store.exists("project", "bar", proot)
+    assert intent_queue.read("r1", proot) == []
+
+
+def test_drain_keeps_the_queue_on_an_environmental_error(tmp_path, monkeypatch):
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    intent_queue.append("r1", _create(), proot)
+
+    def disk_full(*a, **k):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(promoter, "promote", disk_full)
+    with pytest.raises(OSError):
+        promoter.drain("r1", roots=roots)
+    assert intent_queue.read("r1", proot)  # kept: the next drain retries it
+
+
+def test_drain_waits_for_an_append_in_flight(tmp_path):
+    # a stage_skill append caught mid-line must not read as a torn line and be cleared away
+    roots = _roots(tmp_path)
+    proot = roots["project"]
+    q = layer.state_dir("project", proot) / "intents" / "r1.jsonl"
+    q.parent.mkdir(parents=True)
+    line = json.dumps(_create()) + "\n"
+    started, go = threading.Event(), threading.Event()
+
+    def writer():
+        with intent_queue.locked("r1", proot), q.open("a", encoding="utf-8") as f:
+            f.write(line[:30])
+            f.flush()
+            started.set()
+            go.wait(5)
+            f.write(line[30:])
+
+    w = threading.Thread(target=writer)
+    w.start()
+    assert started.wait(5)
+    out = {}
+    d = threading.Thread(target=lambda: out.update(v=promoter.drain("r1", roots=roots)))
+    d.start()
+    d.join(0.3)
+    assert d.is_alive()  # waiting on the append lock, not reading half a line
+    go.set()
+    w.join(5)
+    d.join(5)
+    assert [v["ok"] for v in out["v"]] == [True]
+    assert skill_store.exists("project", "foo", proot)
 def test_create_rejects_a_name_live_in_the_other_layer(tmp_path):
     # the user's global foo plus a project create foo would leave the name ambiguous for every later
     # update, patch, delete and load count

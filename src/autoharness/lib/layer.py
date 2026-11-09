@@ -48,7 +48,7 @@ _WINDOWS_RESERVED = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 1
 
 
 def _check_name(name):
-    if not isinstance(name, str) or ".." in name or not _SAFE_NAME.match(name):
+    if not isinstance(name, str) or ".." in name or not _SAFE_NAME.fullmatch(name):
         raise ValueError(f"unsafe symbol name: {name!r}")
 
 
@@ -70,7 +70,7 @@ def _main_worktree_root_resolved(cwd):
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "--git-dir", "--git-common-dir"],
-            cwd=cwd, capture_output=True, text=True, timeout=5,
+            cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
         )
         lines = proc.stdout.splitlines()
         if proc.returncode != 0 or len(lines) < 2:
@@ -95,7 +95,7 @@ def _owner_of_config_dir(path):
         return path
     proc = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
-        cwd=path, capture_output=True, text=True, timeout=5,
+        cwd=path, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
     )
     toplevel = proc.stdout.strip()
     if proc.returncode != 0 or not toplevel:

@@ -20,12 +20,14 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
   os.replace carries the slices along). remove_file = drop one subfile (path re-gated + escape-checked;
   rejected while the live SKILL.md still references it; missing target = no-op, so crash replays stay
   idempotent) + evidence + LED with the removed path. Reject = zero writes, no stamp, no ledger.
-- Drain: read queue → promote one by one → clear at the end (at-least-once + atomic land = effectively
+- Drain: read queue → promote one by one (a delete folding into a skill the same run writes waits for
+  that write and falls with it) → clear at the end (at-least-once + atomic land = effectively
   exactly-once); on startup sweep orphan .tmp. On a crash, unprocessed intents stay in the durable queue
   and are retried next time; in the extreme of never running → zero land (fail-safe).
 
 ponytail: one drain per project root is now serialized through lib.lock (see drain). LED watermark still pends true values from CAP; the create anchor reads the layer request counter at land time (probation is fiction without a true anchor). Whole-run clear, the tiny crash window (between land and clear) may re-append the LED — per-item idempotent watermark pending the intent-queue granularity being finalized (validate-store open).
 """
+import errno
 import hashlib
 import json
 
@@ -39,12 +41,14 @@ from autoharness.lib import (
     lock,
     notify,
     redact,
+    run_owners,
     sidecar,
     skill_store,
     validate,
 )
 
 _MODIFY = ("update", "patch", "remove_file", "delete")
+_WRITES = ("create", "update", "patch")
 
 
 def _reject(action, level, findings):
@@ -211,6 +215,7 @@ def _promote_resolved(intent, action, name, level, roots, repo_name):
         target_created = sidecar.is_agent_created(level, name, root)
 
     absorbed = intent.get("absorbed_into")
+    umbrella_level = None
     if action == "delete" and absorbed:
         # fail-closed absorption claim (direction D, Hermes trust-chain tier 1): the umbrella must be
         # a live, self-produced skill distinct from the target — a hallucinated name rejects the intent.
@@ -222,6 +227,7 @@ def _promote_resolved(intent, action, name, level, roots, repo_name):
                 or not sidecar.is_agent_created(alevel, absorbed, roots.get(alevel)):
             return _reject(action, level,
                            [("absorbed_into", f"umbrella {absorbed!r} is not a live self-produced skill")])
+        umbrella_level = alevel
 
     verdict = validate.validate(
         {**intent, "level": level}, body,
@@ -230,10 +236,15 @@ def _promote_resolved(intent, action, name, level, roots, repo_name):
     if not verdict["ok"]:
         return _reject(action, level, verdict["findings"])
 
+    earned = sidecar.read(level, name, root) if umbrella_level else {}
     try:
         _land(action, intent, body, level, name, root)
     except ValueError as exc:
         return _reject(action, level, [("landing", str(exc))])
+    if umbrella_level:
+        # the umbrella inherits the evidence of use, or graduation review reads it as a zero-use skill
+        sidecar.credit(umbrella_level, absorbed, use=earned.get("use", 0), view=earned.get("view", 0),
+                       root=roots.get(umbrella_level))
     return {"ok": True, "action": action, "level": level, "findings": [], "notes": _notes(action, body)}
 
 
@@ -282,6 +293,71 @@ def _account(run_id, intents, verdicts, proot):
     return record
 
 
+# the environment, not the intent: disk, quota, I/O, a read-only mount, transient pressure. Keep the
+# queue and retry. Any other OSError (permissions, a name too long, not a directory, ...) belongs to
+# this intent and would fail again on every Stop, wedging everything queued behind it.
+_ENVIRONMENTAL_ERRNOS = {getattr(errno, n) for n in ("ENOSPC", "EDQUOT", "EIO", "EROFS", "EAGAIN", "EINTR",
+                                                      "EBUSY", "ENFILE", "EMFILE") if hasattr(errno, n)}
+# Windows folds device, media, sharing and lock failures into EACCES (CPython PC/errmap.h); those are
+# transient too. A plain access denial (5, 65) and the rest stay with the intent.
+_ENVIRONMENTAL_WINERRORS = {*range(19, 37), 83, 108, 132, 167}
+
+
+def _environmental(exc):
+    return isinstance(exc, OSError) and (getattr(exc, "_autoharness_retryable_read", False)
+                                         or exc.errno in _ENVIRONMENTAL_ERRNOS
+                                         or getattr(exc, "winerror", None) in _ENVIRONMENTAL_WINERRORS)
+
+
+def _promote_one(intent, roots, repo_name):
+    if intent_queue.UNREADABLE in intent:
+        return _reject(None, None, [("queue", f"unreadable queue line: {intent[intent_queue.UNREADABLE]!r}")])
+    try:
+        return promote(intent, roots=roots, repo_name=repo_name)
+    except Exception as exc:
+        if _environmental(exc):
+            raise  # keep the queue so the next drain retries it
+        # a malformed or unlandable intent: account it once instead of replaying it on every Stop
+        return _reject(intent.get("action"), None, [("crash", f"{type(exc).__name__}: {exc}")])
+
+
+def _written_name(intent):
+    name = intent.get("name")
+    return name if intent.get("action") in _WRITES and isinstance(name, str) else None
+
+
+def _waits_for_umbrella(intent, written):
+    # a delete of a skill the run also writes is a replacement, and only works in queue order
+    name, absorbed = intent.get("name"), intent.get("absorbed_into")
+    return (intent.get("action") == "delete" and isinstance(name, str) and name not in written
+            and isinstance(absorbed, str) and absorbed in written)
+
+
+def _promote_run(intents, roots, repo_name):
+    """Judge one run's intents; the verdicts come back in queue order.
+
+    Intents stand alone, except that a delete folding into a skill this run writes is the second half
+    of one move. It waits until the run's writes are judged and is rejected if one to its umbrella
+    was: the umbrella may well be live, but the skill's content never reached it."""
+    written = {_written_name(i) for i in intents} - {None}
+    verdicts = [None] * len(intents)
+    rejected = set()
+    held = []
+    for index, intent in enumerate(intents):
+        if _waits_for_umbrella(intent, written):
+            held.append(index)
+            continue
+        verdicts[index] = _promote_one(intent, roots, repo_name)
+        if not verdicts[index]["ok"] and _written_name(intent):
+            rejected.add(intent["name"])
+    for index in held:
+        umbrella = intents[index]["absorbed_into"]
+        verdicts[index] = (
+            _reject("delete", None, [("absorbed_into", f"umbrella {umbrella!r} was rejected in this run")])
+            if umbrella in rejected else _promote_one(intents[index], roots, repo_name))
+    return verdicts
+
+
 def _drain_run(run_id, *, roots, repo_name, proot):
     """Land one run's queued intents: take (atomic claim), promote, account, drop. Notification
     is the caller's job, so a fire-and-forget send never holds the drain lock. A promotion that
@@ -289,7 +365,7 @@ def _drain_run(run_id, *, roots, repo_name, proot):
     queue, so the next drain retries it instead of waiting for the orphans scan."""
     intents = intent_queue.take(run_id, proot)
     try:
-        verdicts = [promote(i, roots=roots, repo_name=repo_name) for i in intents]
+        verdicts = _promote_run(intents, roots, repo_name)
         record = _account(run_id, intents, verdicts, proot) if intents else None
     except BaseException:
         intent_queue.release(run_id, proot)
@@ -312,11 +388,14 @@ def drain(run_id, *, roots=None, repo_name=None):
         # directory for good; land them here under the dead run's own id, which is the at-least-once
         # recovery the module docstring promises (atomic land makes the replay idempotent). A run
         # whose spawn parent still holds its live lock is not abandoned: it drains itself when the
-        # child exits, and a foreign drain would land its intents mid-flight (orphans also covers
-        # a .draining claim left by a drain that crashed before drop).
+        # child exits, and a foreign drain would land its intents mid-flight. Tracked detached runs
+        # use the stronger process-group recovery policy, so ordinary drains leave them to
+        # SessionStart even after the supervisor lock disappears (orphans also covers a .draining
+        # claim left by a drain that crashed before drop).
         landed = [_drain_run(orphan, roots=roots, repo_name=repo_name, proot=proot)
                   for orphan in intent_queue.orphans(proot)
-                  if orphan != run_id and not intent_queue.is_live(orphan, proot)]
+                  if (orphan != run_id and not intent_queue.is_live(orphan, proot)
+                      and not run_owners.tracked(orphan, proot))]
         verdicts, record = _drain_run(run_id, roots=roots, repo_name=repo_name, proot=proot)
         landed.append((verdicts, record))
     # after clear and outside the lock: the notification is fire-and-forget and must not hold

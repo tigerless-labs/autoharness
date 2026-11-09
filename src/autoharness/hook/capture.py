@@ -44,6 +44,22 @@ def _bounded_records(lines, cap):
     return "\n".join([marker, *reversed(kept)])
 
 
+def _bounded_records(lines, cap):
+    """Fit a newest-first tail without cutting into its first retained record."""
+    if len("\n".join(lines).encode("utf-8")) <= cap:
+        return "\n".join(lines)
+    marker = TRUNCATION_MARK.encode("utf-8")[:cap].decode("utf-8")
+    remaining = cap - len(marker.encode("utf-8"))
+    kept = []
+    for line in reversed(lines):
+        cost = len(line.encode("utf-8")) + 1
+        if cost > remaining:
+            break
+        kept.append(line)
+        remaining -= cost
+    return "\n".join([marker, *reversed(kept)])
+
+
 def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes=None,
            rules_path=None):
     record_cap = max_record_bytes or config.CAPTURE_MAX_RECORD_BYTES
@@ -123,7 +139,7 @@ def digest(transcript_path, end_offset, *, max_exchanges=None, max_record_chars=
             continue
         role, text = entry
         rendered = f"{role}: {text}"
-        total += len(rendered) + 1
+        total += len(rendered.encode("utf-8")) + 1
         if total > digest_cap:
             kept.append(TRUNCATION_MARK)
             break
@@ -132,4 +148,11 @@ def digest(transcript_path, end_offset, *, max_exchanges=None, max_record_chars=
             users_seen += 1
             if users_seen >= exchanges:
                 break
-    return redact.redact("\n".join(reversed(kept)), rules_path) if kept else ""
+    text = redact.redact(_bounded_records(list(reversed(kept)), digest_cap), rules_path) if kept else ""
+    encoded = text.encode("utf-8")
+    if len(encoded) > digest_cap:
+        marker = TRUNCATION_MARK.encode("utf-8")[:digest_cap]
+        budget = digest_cap - len(marker)
+        tail = encoded[-budget:].decode("utf-8", errors="ignore") if budget else ""
+        text = marker.decode("utf-8") + tail
+    return text

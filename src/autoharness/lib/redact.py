@@ -9,8 +9,12 @@ credit_card), keeping sequences that fail the check in the stream as evidence.
 Rules are collected against the original text and applied in one pass, so no rule ever sees another
 rule's placeholder: the placeholder is the only record of what was removed, and a sequential sweep
 let a later rule (api_key_assignment) match the `secret:<name>` inside an earlier rule's placeholder
-and rewrite it as a nested, generic one.
+and rewrite it as a nested, generic one. Overlapping matches merge into one span named by the earliest
+rule in the file: no match is ever dropped, or the part of it no other rule covered would stay raw.
+Placeholders already in the input are not rematched: redacted text is fed back in (capture redacts the
+window, the promoter redacts the evidence quoted from it again).
 """
+import bisect
 import functools
 import re
 import tomllib
@@ -38,7 +42,7 @@ _VALIDATORS = {"luhn": _passes_luhn}
 @functools.lru_cache(maxsize=4)
 def _rules(rules_path):
     path = Path(rules_path) if rules_path else config.REDACTION_RULES
-    data = tomllib.loads(path.read_text())
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     compiled = []
     for category in ("secret", "pii"):
         for rule in data.get(category, []):
@@ -57,25 +61,94 @@ def _token(category, name):
     return f"[REDACTED:{category}:{name}]"
 
 
-def _overlaps(spans, start, end):
-    return any(start < span[1] and span[0] < end for span in spans)
+@functools.lru_cache(maxsize=4)
+def _placeholder(key):
+    # only this rule set's own tokens: a made-up `[REDACTED:secret:<a real key>]` is still raw text
+    return re.compile("|".join(re.escape(_token(category, name)) for category, name, _, _ in _rules(key)))
+
+
+def _raw(text, key):
+    """Predicate: is a match raw text, not lying wholly inside one of this rule set's placeholders?
+    A match that reaches outside one (a key block around a redacted Comment line) is raw."""
+    held = [match.span() for match in _placeholder(key).finditer(text)]
+    starts = [start for start, _ in held]
+
+    def raw(match):
+        i = bisect.bisect_right(starts, match.start()) - 1  # placeholders never overlap: one candidate
+        return i < 0 or match.end() > held[i][1]
+
+    return raw
+
+
+def _kept(rx, validator, text):
+    """Matches of *rx* in *text* that the rule's validator keeps, overlapping ones included where a
+    match can hide another. A validated rule resumes one character on: finditer skipped a card right
+    after a phone number (one digit run whose first window fails luhn), and resuming after a kept window
+    that happens to pass luhn would skip the rest of a real card it overlaps. A rule with a `key` group
+    resumes after its key: {"token":"client_secret=<value>"} matched token -> "client_secret", and the
+    inner assignment holding the value starts inside that match. Overlapping kept matches merge into one
+    span. Resuming one character on for every rule would go quadratic (xoxb- repeated is one slack token)."""
+    if validator is None and "key" not in rx.groupindex:
+        yield from rx.finditer(text)
+        return
+    pos = 0
+    while (match := rx.search(text, pos)) is not None:
+        if validator is None or validator(match.group(0)):
+            yield match
+        pos = match.start() + 1 if validator is not None else max(match.end("key"), match.start() + 1)
+
+
+def _spans(text, key):
+    """Disjoint [start, end, rank, token] spans covering every rule match in *text*, in order.
+
+    Matches in the same category are unioned so a narrower match cannot expose the rest of a wider
+    secret. Secret spans retain their existing precedence over overlapping PII spans: for example, the
+    e-mail-shaped tail of URL credentials must not consume the non-secret host name.
+    """
+    raw = _raw(text, key)
+    rules = _rules(key)
+    found = {
+        category: sorted(
+            (match.start(), match.end(), rank, _token(category, name))
+            for rank, (rule_category, name, rx, validator) in enumerate(rules)
+            if rule_category == category
+            for match in _kept(rx, validator, text)
+            if raw(match)
+        )
+        for category in ("secret", "pii")
+    }
+
+    def merge(matches):
+        spans = []
+        for start, end, rank, token in matches:
+            if spans and start < spans[-1][1]:
+                last = spans[-1]
+                last[1] = max(last[1], end)
+                if rank < last[2]:
+                    last[2:] = [rank, token]
+            else:
+                spans.append([start, end, rank, token])
+        return spans
+
+    secrets = merge(found["secret"])
+    secret_starts = [start for start, _, _, _ in secrets]
+
+    def overlaps_secret(match):
+        start, end, _, _ = match
+        i = bisect.bisect_right(secret_starts, start) - 1
+        return (i >= 0 and secrets[i][1] > start) or (
+            i + 1 < len(secrets) and secrets[i + 1][0] < end
+        )
+
+    pii = merge(match for match in found["pii"] if not overlaps_secret(match))
+    return sorted([*secrets, *pii], key=lambda span: span[0])
 
 
 def redact(text, rules_path=None):
-    spans = []
     key = str(Path(rules_path if rules_path else config.REDACTION_RULES).resolve())
-    for category, name, rx, validator in _rules(key):
-        for match in rx.finditer(text):
-            if validator is not None and not validator(match.group(0)):
-                continue
-            if _overlaps(spans, match.start(), match.end()):
-                continue
-            spans.append((match.start(), match.end(), _token(category, name)))
-    spans.sort(key=lambda span: span[0])
-
     out = []
     cursor = 0
-    for start, end, token in spans:
+    for start, end, _, token in _spans(text, key):
         out.append(text[cursor:start])
         out.append(token)
         cursor = end
@@ -86,9 +159,10 @@ def redact(text, rules_path=None):
 def secret_hits(text, rules_path=None):
     """Names of the secret rules *text* matches — a gate, not a rewrite (PII stays redact-only)."""
     key = str(Path(rules_path if rules_path else config.REDACTION_RULES).resolve())
+    raw = _raw(text, key)
     return [
         name
         for category, name, rx, validator in _rules(key)
         if category == "secret"
-        and any(validator is None or validator(match.group(0)) for match in rx.finditer(text))
+        and any(raw(match) for match in _kept(rx, validator, text))
     ]

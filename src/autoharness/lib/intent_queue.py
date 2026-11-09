@@ -2,23 +2,30 @@
 
 Durable (recovers after a crash): only appends to a per-run file in the repo-layer state area, never
 touches the skill tree. promoter runs claim → land (atomic, idempotent) → drop: a crash between
-claim and drop leaves the claim file in place, and the next run's orphans scan recovers it
-(at-least-once + atomic land = effectively exactly-once); in the extreme case where nothing ran,
-zero land (fail-safe).
+claim and drop leaves the claim file in place. SessionStart retries tracked detached POSIX runs only
+after all registered writer groups disappear; the next ordinary drain can recover untracked queues
+(at-least-once + atomic land = effectively exactly-once). If nothing runs, zero land (fail-safe).
 """
 import json
 import os
 import re
 
-from autoharness.lib import atomic, layer, lock
+from autoharness.lib import atomic, layer, lock, run_owners
 
 _SAFE_RUN = re.compile(r"^[A-Za-z0-9_-]+$")
+UNREADABLE = "unreadable"  # key of the marker decoding returns for a line that is not a JSON object
 
 
 def _path(run_id, root=None):
-    if not isinstance(run_id, str) or not _SAFE_RUN.match(run_id):
+    if not isinstance(run_id, str) or not _SAFE_RUN.fullmatch(run_id):
         raise ValueError(f"unsafe run id: {run_id!r}")
     return layer.state_dir(layer.PROJECT, root) / "intents" / f"{run_id}.jsonl"
+
+
+def locked(run_id, root=None):
+    """The run's queue lock, shared by append, atomic claim, and claim release."""
+    p = _path(run_id, root)
+    return lock.file_lock(p.with_suffix(p.suffix + ".lock"))
 
 
 def append(run_id, intent, root=None):
@@ -27,16 +34,41 @@ def append(run_id, intent, root=None):
     # O_APPEND only keeps a write whole up to PIPE_BUF, and a staged skill body
     # runs well past that. Two overlapping reflector runs could interleave
     # mid-line, and the unparseable line jams every later drain of this run.
-    with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
+    with run_owners.writer(run_id, root), locked(run_id, root):
+        # a torn tail with no newline would swallow this intent into its own unreadable line
+        torn = p.exists() and p.stat().st_size > 0 and _last_byte(p) != b"\n"
         with p.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(intent, ensure_ascii=False) + "\n")
+            f.write(("\n" if torn else "") + json.dumps(intent, ensure_ascii=False) + "\n")
+
+
+def _last_byte(p):
+    with p.open("rb") as f:
+        f.seek(-1, 2)
+        return f.read(1)
 
 
 def read(run_id, root=None):
     p = _path(run_id, root)
     if not p.exists():
         return []
-    return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return _decode(p.read_text(encoding="utf-8", errors="replace"))
+
+
+def _decode(text):
+    out = []
+    # written as UTF-8 whatever the locale; a torn append (crash or full disk mid-line) must not take
+    # the whole queue down with it, so an unreadable line comes back as a marker the drain accounts
+    # "\n" only: json.dumps escapes newlines inside strings but writes U+2028 and friends raw, and
+    # splitlines() would cut one intent in two
+    for line in text.split("\n"):
+        if not line.strip():
+            continue
+        try:
+            intent = json.loads(line)
+        except json.JSONDecodeError:
+            intent = None
+        out.append(intent if isinstance(intent, dict) else {UNREADABLE: line[:200]})
+    return out
 
 
 def clear(run_id, root=None):
@@ -48,6 +80,11 @@ def clear(run_id, root=None):
 def _claim_path(run_id, root=None):
     p = _path(run_id, root)
     return p.with_name(f"{p.stem}.draining")
+
+
+def pending(run_id, root=None):
+    """True when a live queue or an atomic drain claim still needs resolution."""
+    return _path(run_id, root).exists() or _claim_path(run_id, root).exists()
 
 
 def _live_path(run_id, root=None):
@@ -67,15 +104,15 @@ def take(run_id, root=None):
     """
     p = _path(run_id, root)
     claimed = _claim_path(run_id, root)
-    with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
+    with locked(run_id, root):
         if claimed.exists():
-            lines = claimed.read_text(encoding="utf-8").splitlines()
+            source = claimed
         elif p.exists():
             os.replace(p, claimed)
-            lines = claimed.read_text(encoding="utf-8").splitlines()
+            source = claimed
         else:
-            lines = []
-    return [json.loads(line) for line in lines if line.strip()]
+            return []
+        return _decode(source.read_text(encoding="utf-8", errors="replace"))
 
 
 def drop(run_id, root=None):
@@ -95,12 +132,12 @@ def release(run_id, root=None):
     """
     p = _path(run_id, root)
     claimed = _claim_path(run_id, root)
-    with lock.file_lock(p.with_suffix(p.suffix + ".lock")):
+    with locked(run_id, root):
         if not claimed.exists():
             return
-        lines = claimed.read_text(encoding="utf-8").splitlines()
+        lines = claimed.read_text(encoding="utf-8", errors="replace").split("\n")
         if p.exists():
-            lines += p.read_text(encoding="utf-8").splitlines()
+            lines += p.read_text(encoding="utf-8", errors="replace").split("\n")
         atomic.write_text(p, "".join(line + "\n" for line in lines if line.strip()))
         claimed.unlink()
 

@@ -25,7 +25,8 @@ import re
 from autoharness import config
 from autoharness.lib import layer, redact, skills_guard
 
-_FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n)?", re.DOTALL)
+# A malformed first closing delimiter must not be skipped in favor of a later body rule.
+_FRONTMATTER = re.compile(r"\A---\r?\n((?:(?!^---).)*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL | re.MULTILINE)
 _PLACEHOLDER = re.compile(r"\b(TODO|FIXME|XXX):|<(?:TODO|FIXME|XXX|TBD|PLACEHOLDER|REPLACE[_ ]?ME|INSERT[_ ]?HERE|FILL[_ ]?IN)>")
 _ABS_PATH = re.compile(r"(?:/home/|/Users/|/root/)[^\s`)\]]+|[A-Za-z]:\\[^\s`)\]]+")
 # not after ":" -- a URL (https://host/tool.py) names a remote file, not a path under the skill dir
@@ -262,13 +263,22 @@ def _structure(body, base_dir, files=None):
             if not f.resolve().is_relative_to(base):
                 findings.append(("structure", f"referenced {ref} escapes the skill directory"))
                 continue
-            if f.is_file():
+            source = (files or {}).get(ref)
+            if isinstance(source, str) or f.is_file():
                 try:
-                    ast.parse(f.read_text())
+                    ast.parse(
+                        source if isinstance(source, str) else f.read_text(encoding="utf-8")
+                    )
                 except SyntaxError as exc:
                     findings.append(("structure", f"referenced {ref} has syntax error: {exc}"))
                 except UnicodeError as exc:
                     findings.append(("structure", f"referenced {ref} could not be read: {exc}"))
+                except OSError as exc:
+                    # A live referenced file can become temporarily unreadable after is_file().
+                    # Preserve the original exception type for callers, but distinguish this read
+                    # failure from a permanently unlandable intent (bad name/path/permissions).
+                    exc._autoharness_retryable_read = True
+                    raise
         for ref in subfile_references(body, base_dir=base_dir, files=files):
             if ref not in (files or {}) and not (base_dir / ref).is_file():
                 findings.append(("structure", f"referenced {ref} neither carried in intent nor live"))

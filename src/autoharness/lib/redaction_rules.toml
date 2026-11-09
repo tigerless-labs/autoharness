@@ -31,9 +31,10 @@ pattern = '''(?i)bearer\s+[A-Za-z0-9._-]{20,}'''
 [[secret]]
 name = "api_key_assignment"
 # the key may itself be quoted ("api_key": ...), and inside a JSONL transcript record the quotes arrive
-# backslash-escaped (\"api_key\": \"...\"), so allow an optional (escaped) quote after the key and before the value.
+# backslash-escaped (\"api_key\": \"...\"), so allow an optional (escaped) quote after the key and before the value;
+# the `key` group lets the scan resume after the key, since the value it matched may hold the next assignment.
 # secret[_-]?key covers names such as AWS_SECRET_ACCESS_KEY and STRIPE_SECRET_KEY, where "secret" is not the last word.
-pattern = '''(?i)(api[_-]?key|secret(?:[_-]?access)?[_-]?key|secret|token|password)(?:\\?['"])?\s*[:=]\s*(?:\\?['"])?[A-Za-z0-9._\-/+]{12,}'''
+pattern = '''(?i)(?P<key>api[_-]?key|secret(?:[_-]?access)?[_-]?key|secret|token|password)(?:\\?['"])?\s*[:=]\s*(?:\\?['"])?[A-Za-z0-9._\-/+]{12,}'''
 
 # Keys with a recognizable vendor prefix are matched on their own shape, so they are redacted when they
 # appear bare in prose or a log line, not only when assigned to a variable the rule above can see. These come
@@ -72,7 +73,11 @@ name = "url_credentials"
 # the last @ that can introduce a host, so malformed but commonly pasted passwords containing raw
 # @ or / characters are still removed. A URI scheme and a host-shaped suffix keep this from
 # treating ordinary prose containing user:password@host as a secret URL.
-pattern = '''(?i)\b[a-z][a-z0-9+.-]*://[^\s:/@]+:[^\s]+@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]]|$))'''
+# Both runs are capped: an unbounded scheme gets backtracked at every word boundary against
+# letter/digit/dot/dash stretches to the end of the string, and an unbounded `[^\s]+@` scans to
+# the end of the non-space run whenever no @ follows. Real schemes stay under 32 chars, a
+# username:password run under 512 (the same rationale as the e-mail local-part cap above).
+pattern = '''(?i)\b[a-z][a-z0-9+.-]{0,31}://[^\s:/@]+:[^\s]{1,512}@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]]|$))'''
 
 [[pii]]
 name = "email"

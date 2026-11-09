@@ -17,9 +17,10 @@ import subprocess
 import sys
 import tarfile
 from pathlib import Path
+from types import SimpleNamespace
 
 from autoharness import config
-from autoharness.hook import capture, promoter
+from autoharness.hook import capture, promoter, recovery
 from autoharness.lib import (
     atomic,
     counters,
@@ -44,9 +45,15 @@ def description_index(roots=None, *, agent_only=False):
             continue
         for path in sorted(skills.glob(f"*/{skill_store.SKILL_FILE}")):
             symbol = path.parent.name
+            if agent_only:
+                try:
+                    layer._check_name(symbol)
+                except ValueError:
+                    continue  # handwritten skills cannot belong to the managed pool
             if agent_only and not sidecar.is_agent_created(lyr, symbol, root):
                 continue  # curator only ever sees its own skills; native/user stay out of the pool
-            fm = validate._frontmatter(path.read_text()) or {}
+            # anyone's skill can sit here; a latin-1 SKILL.md must not take the whole reflection down
+            fm = validate._frontmatter(path.read_text(encoding="utf-8", errors="replace")) or {}
             name = fm.get("name") or symbol
             desc = fm.get("description") or "(no description)"
             lines.append(f"- {name} [{lyr}]: {desc}")
@@ -129,7 +136,8 @@ def _spawn_error(proc, argv):
 
 def _detached_spawn(argv, env, bundle):
     """Run the reflector child to completion; report a crash on stderr instead of discarding it."""
-    proc = subprocess.run(argv, input=bundle, text=True, env=env, capture_output=True, check=False)
+    proc = subprocess.run(argv, input=bundle, text=True, encoding="utf-8", errors="replace",
+                          env=env, capture_output=True, check=False)
     if proc.returncode != 0:
         error = _spawn_error(proc, argv)
         print(f"reflector child {error['argv0']} exited {proc.returncode}: "
@@ -150,16 +158,25 @@ def _record_spawn_failure(run_id, roots, proc, argv):
     runs = state / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     account = runs / f"{run_id}.json"
-    record = json.loads(account.read_text()) if account.exists() else {"run_id": run_id}
+    record = json.loads(account.read_text(encoding="utf-8")) if account.exists() else {"run_id": run_id}
     record["spawn_error"] = _spawn_error(proc, argv)
     atomic.write_text(account, json.dumps(record, ensure_ascii=False, indent=2))
+
+
+def _invoke_spawn(spawn_fn, argv, env, payload, run_id, roots):
+    try:
+        return spawn_fn(argv, env, payload)
+    except OSError as exc:
+        proc = SimpleNamespace(returncode=None, stderr=f"{type(exc).__name__}: {exc}")
+        _record_spawn_failure(run_id, roots, proc, argv)
+        raise
 
 
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
         spec_path=None, digest="", session_id=None, carrier=None, spawn_fn=None):
     roots = roots or {}
     proot = roots.get(layer.PROJECT)
-    spec = (spec_path or config.FORMAT_SPEC).read_text()
+    spec = (spec_path or config.FORMAT_SPEC).read_text(encoding="utf-8")
 
     carrier = carrier or config.REFLECTOR_CARRIER
     if carrier == "fork" and session_id:  # no session to fork -> bundle chain (fail-safe)
@@ -175,7 +192,7 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     # a foreign drain (the main session's Stop) leaves this queue alone instead of landing the
     # child's intents mid-flight or racing its appends
     with intent_queue.live_lock(run_id, proot):
-        proc = (spawn_fn or _detached_spawn)(argv, env, payload)
+        proc = _invoke_spawn(spawn_fn or _detached_spawn, argv, env, payload, run_id, roots)
         verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
         _record_spawn_failure(run_id, roots, proc, argv)
     return verdicts
@@ -207,14 +224,14 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
         pass  # a transient disk issue must not silently disable curation
     except Exception:
         log.exception('unexpected snapshot error; curator running without safety net')
-    spec = (spec_path or config.FORMAT_SPEC).read_text()
+    spec = (spec_path or config.FORMAT_SPEC).read_text(encoding="utf-8")
     bundle = build_curator_bundle(description_index(roots, agent_only=True), spec)
 
     argv = build_command(agent=agent or config.CURATOR_AGENT,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
     env = child_env(run_id, roots.get(layer.PROJECT))
     with intent_queue.live_lock(run_id, roots.get(layer.PROJECT)):  # same liveness marker as reflection
-        proc = (spawn_fn or _detached_spawn)(argv, env, bundle)
+        proc = _invoke_spawn(spawn_fn or _detached_spawn, argv, env, bundle, run_id, roots)
         verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
         _record_spawn_failure(run_id, roots, proc, argv)
     return verdicts
@@ -224,14 +241,19 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "--curate":
         run_id, proot, groot = argv[1:]
-        return run_curator(run_id, roots={layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)})
+        owner = recovery.track(run_id, Path(proot))
+        result = run_curator(run_id, roots={layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)})
+        recovery.complete(owner)
+        return result
     transcript_path, session_id, run_id, proot, groot = argv
     roots = {layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)}
+    owner = recovery.track(run_id, roots[layer.PROJECT])
     offset = counters.session_offset(session_id, roots[layer.PROJECT])
     window_text, new_offset = capture.window(transcript_path, offset)
     result = run(window_text, run_id, roots=roots, session_id=session_id,
                  digest=capture.digest(transcript_path, offset))
     counters.write_session_offset(session_id, new_offset, roots[layer.PROJECT])
+    recovery.complete(owner)
     return result
 
 

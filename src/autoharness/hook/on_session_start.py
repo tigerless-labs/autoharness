@@ -11,12 +11,16 @@ zero intrusion).
 ponytail: GC of orphan session counts (residue from crashed sessions) needs a session-liveness signal to sweep safely (a naive sweep would wrongly delete a concurrent session's live count), so it is deferred until that signal exists — the clear_session primitive is ready (Phase 4), policy left open in cap.md/mng.md.
 """
 import json
+import logging
 import os
 import uuid
 from pathlib import Path
 
 from autoharness import config
+from autoharness.hook import recovery
 from autoharness.lib import counters, layer, lifecycle, sidecar, skill_store, validate
+
+log = logging.getLogger(__name__)
 
 # Recall self-injection (mng.md §召回面自持): the host's native description recall stays untouched;
 # this compact index of self-produced skills rides SessionStart additionalContext so "whether the
@@ -86,13 +90,22 @@ def recall_index(roots, cwd=None):
         for path in skills.glob(f"*/{skill_store.SKILL_FILE}"):
             name = path.parent.name
             try:
+                layer._check_name(name)
+            except ValueError:
+                continue  # handwritten skills are outside the managed pool
+            try:
                 managed = sidecar.is_agent_created(lyr, name, root)
-                body = path.read_text(encoding="utf-8")
             except (OSError, UnicodeError, ValueError, TypeError, AttributeError):
+                log.warning("skipping skill with unreadable sidecar: %s", path.parent)
                 continue
             if not managed:
                 continue
-            fm = validate._frontmatter(body) or {}
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                log.warning("skipping unreadable skill description: %s", path)
+                continue
+            fm = validate._frontmatter(text) or {}
             desc = _fit(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
             groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]: {desc}")
@@ -123,7 +136,7 @@ def last_run_summary(roots):
     except OSError:
         return None
     try:
-        last = json.loads(consumed.read_text())
+        last = json.loads(consumed.read_text(encoding="utf-8"))
     except (ValueError, OSError):
         return None
     finally:
@@ -150,6 +163,10 @@ def _members(lyr, root):
     members = []
     for path in skills.glob(f"*/{skill_store.SKILL_FILE}"):
         name = path.parent.name
+        try:
+            layer._check_name(name)
+        except ValueError:
+            continue
         if not sidecar.is_agent_created(lyr, name, root):
             continue
         s = sidecar.read(lyr, name, root)
@@ -164,6 +181,7 @@ def on_session_start(event=None, *, roots=None):
         # beside the parent, or get a second index on top of its bundle
         return {"archived": {}, "context": None, "reason": "recursion_guard"}
     roots = roots or {}
+    recovery.recover(roots=roots)
     archived = {}
     for lyr in config.active_layers():
         root = roots.get(lyr)
