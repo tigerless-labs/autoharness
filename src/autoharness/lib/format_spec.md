@@ -33,8 +33,10 @@ YAML frontmatter that parses, carrying at least:
 The description is the routing signal, and it **is the index line**: the session-start index renders
 one line per skill from it, and the host preloads it too. So it has exactly one job — make the right
 task match — and one budget: `INDEX_DESC_MAX_CHARS`. Over budget, the index truncates to
-`INDEX_DESC_MAX_CHARS - 3` + `...` and the routing signal dies mid-clause, so a `create`/`update`
-over it is **rejected**. `patch` is exempt, so a legacy over-long description stays fixable.
+`INDEX_DESC_MAX_CHARS`; for legacy descriptions it keeps a recognized trigger cue in that fixed-size
+window when possible. A `create`/`update` over budget is still **rejected**: cue recovery is a safety
+net for existing content, not permission to make new routing paragraphs. `patch` is exempt, so a
+legacy over-long description stays fixable.
 
 Write **one sentence, trigger first, ending in a period**. Name the concrete objects and the words a
 user would actually type — the nouns, verbs, tools and file types. Detail goes in the body; the

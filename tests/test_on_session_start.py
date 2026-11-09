@@ -261,6 +261,89 @@ def test_index_leaves_a_fitting_description_alone(tmp_path):
     assert "Use when auditing a repo." in ctx and "..." not in ctx
 
 
+def test_index_preserves_a_late_trigger_from_a_legacy_description(tmp_path):
+    roots = _roots(tmp_path)
+    trigger = "Use when tracing Claude session JSONL archaeology."
+    long = ("Indexes session history and recovery artifacts with a detailed workflow for "
+            f"investigation. {trigger}")
+    assert len(long) > config.INDEX_DESC_MAX_CHARS
+    assert trigger not in long[:config.INDEX_DESC_MAX_CHARS]
+
+    _seed_desc(roots, "legacy-session-history", long)
+    ctx = on_session_start.recall_index(roots)
+    entries = [line for line in ctx.splitlines() if line.startswith("- ")]
+    rendered = entries[0].split(": ", 1)[1]
+
+    assert len(entries) == 1
+    assert trigger in rendered
+    assert len(rendered) <= config.INDEX_DESC_MAX_CHARS
+
+
+def test_index_retention_keeps_layers_distinct_and_counters_unchanged(tmp_path):
+    roots = _roots(tmp_path)
+    late = ("Deploys a prepared knowledge bundle after checking every prerequisite. "
+            "Use when running a deployment pre-sync.")
+    _seed_desc(roots, "deployment-pre-sync", late, lvl="project")
+    _seed_desc(roots, "iso-date", "Use when formatting an ISO date.", lvl="global")
+    for lvl, name in (("project", "deployment-pre-sync"), ("global", "iso-date")):
+        data = sidecar.read(lvl, name, roots[lvl])
+        data.update(use=3, view=2, patch=1)
+        sidecar.write(lvl, name, data, roots[lvl])
+    before = {lvl: sidecar.read(lvl, name, roots[lvl])
+              for lvl, name in (("project", "deployment-pre-sync"), ("global", "iso-date"))}
+
+    ctx = on_session_start.recall_index(roots)
+
+    assert ctx.count("- deployment-pre-sync [project]:") == 1
+    assert ctx.count("- iso-date [global]:") == 1
+    assert "deployment-pre-sync [global]" not in ctx
+    assert "iso-date [project]" not in ctx
+    after = {lvl: sidecar.read(lvl, name, roots[lvl])
+             for lvl, name in (("project", "deployment-pre-sync"), ("global", "iso-date"))}
+    assert after == before
+
+
+def test_index_description_boundaries_and_special_characters_stay_bounded(tmp_path):
+    roots = _roots(tmp_path)
+    exact = "x" * config.INDEX_DESC_MAX_CHARS
+    over = "y" * (config.INDEX_DESC_MAX_CHARS + 1)
+    special = "Use when handling <xml> & Unicode 雪."
+    _seed_desc(roots, "empty", "")
+    _seed_desc(roots, "exact", exact)
+    _seed_desc(roots, "over", over)
+    _seed_desc(roots, "special", special)
+
+    ctx = on_session_start.recall_index(roots)
+    descriptions = {line.split(" [", 1)[0][2:]: line.split(": ", 1)[1]
+                    for line in ctx.splitlines() if line.startswith("- ")}
+
+    assert descriptions["empty"] == "(no description)"
+    assert descriptions["exact"] == exact
+    assert descriptions["over"].endswith("...")
+    assert descriptions["special"] == special
+    assert all(len(description) <= config.INDEX_DESC_MAX_CHARS
+               for description in descriptions.values())
+
+
+def test_unreadable_skill_metadata_does_not_suppress_valid_entries(tmp_path):
+    roots = _roots(tmp_path)
+    _seed_desc(roots, "valid", "Use when the other metadata entry is unreadable.")
+    bad = skill_store.skill_path("project", "bad-utf8", roots["project"])
+    bad.parent.mkdir(parents=True)
+    bad.write_bytes(b"---\nname: bad-utf8\ndescription: " + bytes([255]) + b"\n---\nRule.\n")
+    sidecar.create("project", "bad-utf8", 0, roots["project"])
+    skill_store.write_body("project", "bad-sidecar",
+                           "---\nname: bad-sidecar\ndescription: Use when broken.\n---\nRule.\n",
+                           roots["project"])
+    sidecar.path("project", "bad-sidecar", roots["project"]).write_text("[]")
+
+    ctx = on_session_start.recall_index(roots)
+
+    assert "- valid [project]: Use when the other metadata" in ctx
+    assert "bad-utf8" not in ctx
+    assert "bad-sidecar" not in ctx
+
+
 def test_index_suspended_injects_nothing_but_keeps_counting(tmp_path, monkeypatch):
     # the A/B arm E9 needs: the recall index off while every other part of the pipeline — the
     # lifecycle pass, the use/view counters, the last-run summary — behaves identically. Without it

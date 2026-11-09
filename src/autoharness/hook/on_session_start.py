@@ -37,13 +37,32 @@ def _sanitize(text, limit):
 
 
 def _fit(text, limit):
-    """Truncate with an ellipsis so a cut line reads as cut (hermes' index does the same).
+    """Fit one description, retaining a validated trigger cue when the prefix would lose it.
 
-    New descriptions are held inside the budget by the promoter, so this only fires on skills that
-    predate the gate — and there it matters that the reader can tell the line was severed rather
-    than take a fragment for the whole trigger."""
+    Create/update descriptions fit the budget already. Legacy and patch-exempt descriptions may not;
+    keep their first recognized cue on the scan surface without expanding the per-entry budget."""
     flat = " ".join(str(text).split())
-    return flat if len(flat) <= limit else flat[:limit - 3] + "..."
+    if len(flat) <= limit:
+        return flat
+
+    def clipped(value, budget):
+        return value if len(value) <= budget else value[:budget - 3] + "..."
+
+    cue_start = validate.trigger_cue_start(flat)
+    if cue_start in (None, 0):
+        return clipped(flat, limit)
+
+    omission = "... "
+    cue_text = flat[cue_start:].strip()
+    cue_budget = limit - len(omission)
+    if cue_budget <= 3:
+        return clipped(flat, limit)
+    if len(cue_text) > cue_budget:
+        return omission + clipped(cue_text, cue_budget)
+
+    prefix_budget = cue_budget - len(cue_text)
+    prefix = flat[:cue_start].strip()[:prefix_budget]
+    return prefix + omission + cue_text
 
 
 def _read_hint(roots, cwd):
@@ -74,7 +93,12 @@ def recall_index(roots, cwd=None):
                 layer._check_name(name)
             except ValueError:
                 continue  # handwritten skills are outside the managed pool
-            if not sidecar.is_agent_created(lyr, name, root):
+            try:
+                managed = sidecar.is_agent_created(lyr, name, root)
+            except (OSError, UnicodeError, ValueError, TypeError, AttributeError):
+                log.warning("skipping skill with unreadable sidecar: %s", path.parent)
+                continue
+            if not managed:
                 continue
             try:
                 text = path.read_text(encoding="utf-8")
