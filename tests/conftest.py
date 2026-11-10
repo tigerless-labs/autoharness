@@ -7,6 +7,7 @@ from autoharness import config
 _PLACEMENT_ENV = (
     "AUTOHARNESS_PROJECT_DIR",
     "AUTOHARNESS_STATE_HOME",
+    "AUTOHARNESS_INDEX_BODY_PATHS",
     "CLAUDE_CONFIG_DIR",
 )
 
@@ -36,6 +37,7 @@ def _no_host_project_dir(monkeypatch):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(config, "SKILL_PREFIX", "")
     monkeypatch.setattr(config, "CHILD_ISOLATION", False)
+    monkeypatch.setattr(config, "INDEX_BODY_PATHS", False)
 
 
 @pytest.fixture(autouse=True)

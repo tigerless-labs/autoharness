@@ -68,6 +68,7 @@ def _bool_env(name, default):
 
 
 INDEX_SUSPENDED = _bool_env("AUTOHARNESS_INDEX_SUSPENDED", False)
+INDEX_BODY_PATHS = _bool_env("AUTOHARNESS_INDEX_BODY_PATHS", False)
 DISABLE_GLOBAL = _bool_env("AUTOHARNESS_DISABLE_GLOBAL", False)
 
 

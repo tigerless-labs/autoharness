@@ -22,7 +22,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from autoharness import config
-from autoharness.hook import capture, promoter, recovery
+from autoharness.hook import capture, on_session_start, promoter, recovery
 from autoharness.lib import (
     atomic,
     counters,
@@ -36,9 +36,82 @@ from autoharness.lib import (
 
 log = logging.getLogger(__name__)
 
+BODY_PATH_INSTRUCTION = (
+    "Before modifying or merging a skill, or claiming it is already covered, Read its listed "
+    "SKILL.md. For an UNREADABLE entry, explain that in the staged reason and do not claim you "
+    "compared against it."
+)
 
-def description_index(roots=None, *, agent_only=False):
+
+def _body_paths_enabled():
+    return config.INDEX_BODY_PATHS or config.CHILD_ISOLATION
+
+
+def _absolute_unresolved(path):
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _safe_body_path(lyr, symbol, root):
+    skills = _absolute_unresolved(layer.skills_dir(lyr, root))
+    try:
+        layer._check_name(symbol)
+        body = _absolute_unresolved(skill_store.skill_path(lyr, symbol, root))
+        body.relative_to(skills)
+    except ValueError:
+        return None, "unsafe skill directory name"
+    if body.parent.is_symlink() or body.is_symlink():
+        try:
+            escaped = not body.resolve(strict=False).is_relative_to(skills.resolve(strict=False))
+        except OSError:
+            escaped = True
+        reason = "symlink target is outside the skill store" if escaped else "symlinked skill bodies are not followed"
+        return None, reason
+    try:
+        if not body.resolve(strict=False).is_relative_to(skills.resolve(strict=False)):
+            return None, "SKILL.md resolves outside the skill store"
+    except OSError:
+        return None, "SKILL.md path cannot be resolved safely"
+    return body, None
+
+
+def _unreadable_reason(exc):
+    if isinstance(exc, FileNotFoundError):
+        return "SKILL.md is missing"
+    if isinstance(exc, PermissionError):
+        return "permission denied"
+    if isinstance(exc, UnicodeError):
+        return "SKILL.md is not valid UTF-8"
+    return "SKILL.md could not be read"
+
+
+def _one_line(value):
+    text = str(value)
+    return on_session_start._sanitize(text, max(1, len(text)))
+
+
+def _body_index_entry(lyr, symbol, root):
+    body_path, unsafe = _safe_body_path(lyr, symbol, root)
+    entry = {"name": _one_line(symbol), "layer": lyr}
+    if unsafe:
+        entry.update(status="UNREADABLE", reason=unsafe)
+        return f"- {json.dumps(entry, ensure_ascii=False)}"
+    try:
+        text = body_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        entry.update(status="UNREADABLE", reason=_unreadable_reason(exc), skill_md=str(body_path))
+        return f"- {json.dumps(entry, ensure_ascii=False)}"
+    fm = validate._frontmatter(text) or {}
+    entry.update(
+        name=_one_line(fm.get("name") or symbol),
+        description=_one_line(fm.get("description") or "(no description)"),
+        skill_md=str(body_path),
+    )
+    return f"- {json.dumps(entry, ensure_ascii=False)}"
+
+
+def description_index(roots=None, *, agent_only=False, include_body_paths=None):
     roots = roots or {}
+    include_body_paths = _body_paths_enabled() if include_body_paths is None else include_body_paths
     lines = []
     for lyr in config.active_layers():
         root = roots.get(lyr)
@@ -54,12 +127,18 @@ def description_index(roots=None, *, agent_only=False):
                     continue  # handwritten skills cannot belong to the managed pool
             if agent_only and not sidecar.is_agent_created(lyr, symbol, root):
                 continue  # curator only ever sees its own skills; native/user stay out of the pool
+            if include_body_paths:
+                lines.append(_body_index_entry(lyr, symbol, root))
+                continue
             # anyone's skill can sit here; a latin-1 SKILL.md must not take the whole reflection down
             fm = validate._frontmatter(path.read_text(encoding="utf-8", errors="replace")) or {}
             name = fm.get("name") or symbol
             desc = fm.get("description") or "(no description)"
-            lines.append(f"- {name} [{lyr}]: {desc} ({path})")
-    return "\n".join(lines) if lines else "(no live skills yet)"
+            lines.append(f"- {name} [{lyr}]: {desc}")
+    if not lines:
+        return "(no live skills yet)"
+    index = "\n".join(lines)
+    return f"{BODY_PATH_INSTRUCTION}\n\n{index}" if include_body_paths else index
 
 
 def build_bundle(window, index, spec, digest=""):

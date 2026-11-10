@@ -110,6 +110,15 @@ def _seed_desc(roots, name, desc, lvl="project", category=None, agent=True):
         sidecar.create(lvl, name, 0, root)
 
 
+def test_child_body_path_switches_do_not_change_session_start_recall(tmp_path, monkeypatch):
+    roots = _roots(tmp_path)
+    _seed_desc(roots, "stable", "Use when stable.")
+    baseline = on_session_start.recall_index(roots)
+    monkeypatch.setattr(config, "INDEX_BODY_PATHS", True)
+    monkeypatch.setattr(config, "CHILD_ISOLATION", True)
+    assert on_session_start.recall_index(roots) == baseline
+
+
 def test_index_lists_agent_skills_grouped_by_category(tmp_path):
     roots = _roots(tmp_path)
     _seed_desc(roots, "b-skill", "use when b", category="ops")
