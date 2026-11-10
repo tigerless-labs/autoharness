@@ -1,3 +1,4 @@
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -284,6 +285,23 @@ def test_state_home_keeps_roots_and_layers_apart(tmp_path, monkeypatch):
     a, b = tmp_path / "a" / ".agents", tmp_path / "b" / ".agents"
     assert layer.state_dir("project", a) != layer.state_dir("project", b)
     assert layer.state_dir("project", a) != layer.state_dir("global", a)
+
+
+def test_state_home_hashes_resolved_root_paths(tmp_path, monkeypatch, dir_link):
+    monkeypatch.setenv("AUTOHARNESS_STATE_HOME", str(tmp_path / "state"))
+    first = tmp_path / "a" / "b-c"
+    second = tmp_path / "a-b" / "c"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+
+    first_state = layer.state_dir("project", first)
+    second_state = layer.state_dir("project", second)
+    assert first_state.name == hashlib.sha256(str(first.resolve()).encode("utf-8")).hexdigest()
+    assert first_state.name != second_state.name
+
+    alias = tmp_path / "alias"
+    dir_link(alias, first)
+    assert layer.state_dir("project", alias) == first_state
 
 
 # --- project root: a session started inside the project's .claude dir ---

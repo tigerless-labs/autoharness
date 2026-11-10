@@ -131,6 +131,10 @@ def _state_home():
     return Path(configured).expanduser() if configured else None
 
 
+def _state_key(root):
+    return hashlib.sha256(str(Path(root).resolve()).encode("utf-8")).hexdigest()
+
+
 def _root(layer, root):
     _check_layer(layer)
     return Path(root) if root is not None else default_root(layer)
@@ -150,8 +154,7 @@ def state_dir(layer, root=None):
     home = _state_home()
     if home is None:
         return _root(layer, root) / "autoharness"
-    key = re.sub(r"[^A-Za-z0-9._-]", "-", str(_root(layer, root).resolve())).strip("-")
-    return home / layer / key
+    return home / layer / _state_key(_root(layer, root))
 
 
 def symbol_dir(layer, name, root=None):
