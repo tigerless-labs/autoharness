@@ -55,6 +55,22 @@ def test_bool_env_accepts_0_and_1():
             assert len(w) == 0
 
 
+def test_child_isolation_uses_bool_env_validation():
+    import importlib
+
+    from autoharness import config as cfg
+    try:
+        with patch.dict(os.environ, {"AUTOHARNESS_CHILD_ISOLATION": "2"}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                importlib.reload(cfg)
+        assert cfg.CHILD_ISOLATION is False
+        assert any("AUTOHARNESS_CHILD_ISOLATION=2 should be 0 or 1" in str(item.message)
+                   for item in caught)
+    finally:
+        importlib.reload(cfg)
+
+
 def test_int_env_rejects_values_below_minimum():
     from autoharness import config as cfg
     with patch.dict(os.environ, {"AUTOHARNESS_TEST_MIN": "-3"}):

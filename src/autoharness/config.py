@@ -109,7 +109,7 @@ SKILL_PREFIX = os.environ.get("AUTOHARNESS_SKILL_PREFIX", "")
 # no user hooks, no project settings — only this plugin, loaded by --plugin-dir, running from its
 # state directory so no project CLAUDE.md is read. Opt-in because it also drops settings a child may
 # rely on, such as an apiKeyHelper; OAuth and environment credentials are unaffected.
-CHILD_ISOLATION = bool(_int_env("AUTOHARNESS_CHILD_ISOLATION", 0))
+CHILD_ISOLATION = _bool_env("AUTOHARNESS_CHILD_ISOLATION", False)
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 _LIB = Path(__file__).parent / "lib"
