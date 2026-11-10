@@ -80,6 +80,22 @@ name = "url_credentials"
 pattern = '''(?i)\b[a-z][a-z0-9+.-]{0,31}://[^\s:/@]+:[^\s]{1,512}@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]]|$))'''
 
 [[pii]]
+name = "claude_ai_url"
+pattern = '''(?i)(?<![A-Za-z0-9-])(?:https?://)?(?:[a-z0-9-]{1,63}\.){0,4}claude\.ai(?:/[^\s)\]'"`>]{0,2048})?'''
+
+[[pii]]
+name = "anthropic_api_url"
+pattern = '''(?i)(?<![A-Za-z0-9-])(?:https?://)?api\.anthropic\.com(?:/[^\s)\]'"`>]{0,2048})?'''
+
+[[pii]]
+name = "uuid"
+pattern = '''(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b'''
+
+[[pii]]
+name = "cloud_session_id"
+pattern = '''\bcse_[A-Za-z0-9]{16,128}(?![A-Za-z0-9])'''
+
+[[pii]]
 name = "email"
 # the local part is capped at 64 chars (RFC 5321): the unbounded `+` backtracks
 # quadratically on long runs with no usable `@` (every start position scans to

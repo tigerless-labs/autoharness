@@ -24,6 +24,17 @@ def test_redacts_secrets_and_pii():
     assert "[REDACTED:" in out
 
 
+def test_claude_addresses_and_identifiers_are_redact_only_pii():
+    raw = (
+        "open https://claude.ai/design/p/abc, call https://api.anthropic.com/v1/messages, "
+        "session 123e4567-e89b-12d3-a456-426614174000, bridge cse_0123456789abcdefghijKL"
+    )
+    assert redact.secret_hits(raw) == []
+    out = redact.redact(raw)
+    for leak in ("claude.ai", "api.anthropic.com", "123e4567", "cse_0123456789abcdefghijKL"):
+        assert leak not in out
+
+
 _BODY = ["b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ", "QyNTUxOQAAACDq1J2v9xR8fGqJ6p3W", "AAECAw=="]  # short tail line
 _BEGIN, _END = "-----BEGIN OPENSSH PRIVATE KEY-----", "-----END OPENSSH PRIVATE KEY-----"
 

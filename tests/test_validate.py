@@ -409,6 +409,14 @@ def test_pii_alone_does_not_reject():
     assert validate.validate(GOOD_INTENT, body)["ok"]
 
 
+def test_claude_identifiers_do_not_reject_a_normal_skill_body():
+    body = (GOOD_BODY
+            + "\nCall https://api.anthropic.com/v1/messages and inspect "
+              "https://claude.ai/code/session_abc.\n"
+            + "Track 123e4567-e89b-12d3-a456-426614174000 or cse_0123456789abcdefghijKL.\n")
+    assert validate.validate(GOOD_INTENT, body)["ok"]
+
+
 def test_nested_frontmatter_keys_are_not_top_level_fields():
     # a nested `name:` must not satisfy the required top-level name
     body = "---\ndescription: Use when X.\nmetadata:\n  name: foo\n---\n# Foo\n"
