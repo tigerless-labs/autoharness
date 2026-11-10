@@ -170,6 +170,19 @@ def description_findings(desc):
     return findings
 
 
+def name_findings(action, name, body):
+    """Keep the filesystem identity, frontmatter identity, and configured prefix aligned."""
+    findings = []
+    if action == "create" and config.SKILL_PREFIX and not str(name or "").startswith(config.SKILL_PREFIX):
+        findings.append(("prefix", f"skill name must start with {config.SKILL_PREFIX!r}, e.g. "
+                                   f"{config.SKILL_PREFIX}{name}"))
+    if action in ("create", "update") and isinstance(body, str):
+        declared = (_frontmatter(body) or {}).get("name")
+        if declared and declared != name:
+            findings.append(("structure", f"frontmatter name {declared!r} must equal the skill name {name!r}"))
+    return findings
+
+
 def _evidence_slice_denied(rel):
     if rel.startswith(layer.EVIDENCE_PREFIX):
         return [("files", f"{rel}: promoter-materialized evidence slices are off-limits to intents")]
@@ -342,7 +355,7 @@ def structure(body, files=None):
 
 def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None,
              skill_roots=None):
-    findings = []
+    findings = name_findings(intent.get("action"), intent.get("name"), body)
     files = intent.get("files")
     if files is not None and not isinstance(files, dict):
         findings += check_files(files)

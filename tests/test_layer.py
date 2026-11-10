@@ -1,3 +1,4 @@
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -250,6 +251,57 @@ def test_project_root_global_layer_unaffected(linked_worktree, monkeypatch):
     monkeypatch.chdir(linked_worktree)
     assert layer.default_root(layer.GLOBAL) == layer.default_root(layer.GLOBAL)
     assert ".claude/worktrees" not in str(layer.default_root(layer.GLOBAL))
+
+
+def test_project_dir_knob_renames_the_layer_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTOHARNESS_PROJECT_DIR", ".agents")
+    assert _project_root_at(monkeypatch, tmp_path) == tmp_path / ".agents"
+
+
+def test_global_root_follows_claude_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "profile"))
+    assert layer.default_root(layer.GLOBAL) == tmp_path / "profile"
+
+
+def test_global_root_override_wins_over_claude_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "profile"))
+    monkeypatch.setenv(layer.GLOBAL_ROOT_ENV, str(tmp_path / "sandbox"))
+    assert layer.default_root(layer.GLOBAL) == tmp_path / "sandbox"
+
+
+@pytest.mark.parametrize("lyr", layer.LAYERS)
+def test_state_home_moves_state_and_archive_out_of_the_root(tmp_path, monkeypatch, lyr):
+    monkeypatch.setenv("AUTOHARNESS_STATE_HOME", str(tmp_path / "state"))
+    root = tmp_path / "repo" / ".agents"
+    state = layer.state_dir(lyr, root)
+    assert state.is_relative_to(tmp_path / "state")
+    assert not state.is_relative_to(root)
+    assert layer.archive_dir(lyr, root).is_relative_to(state)
+    assert layer.skills_dir(lyr, root) == root / "skills"
+
+
+def test_state_home_keeps_roots_and_layers_apart(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUTOHARNESS_STATE_HOME", str(tmp_path / "state"))
+    a, b = tmp_path / "a" / ".agents", tmp_path / "b" / ".agents"
+    assert layer.state_dir("project", a) != layer.state_dir("project", b)
+    assert layer.state_dir("project", a) != layer.state_dir("global", a)
+
+
+def test_state_home_hashes_resolved_root_paths(tmp_path, monkeypatch, dir_link):
+    monkeypatch.setenv("AUTOHARNESS_STATE_HOME", str(tmp_path / "state"))
+    first = tmp_path / "a" / "b-c"
+    second = tmp_path / "a-b" / "c"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+
+    first_state = layer.state_dir("project", first)
+    second_state = layer.state_dir("project", second)
+    assert first_state.name == hashlib.sha256(str(first.resolve()).encode("utf-8")).hexdigest()
+    assert first_state.name != second_state.name
+
+    alias = tmp_path / "alias"
+    dir_link(alias, first)
+    assert layer.state_dir("project", alias) == first_state
 
 
 # --- project root: a session started inside the project's .claude dir ---

@@ -1,5 +1,6 @@
 import pytest
 
+from autoharness import config
 from autoharness.lib import validate
 
 GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
@@ -13,6 +14,32 @@ def _families(verdict):
 def test_clean_create_passes():
     v = validate.validate(GOOD_INTENT, GOOD_BODY)
     assert v["ok"], v["findings"]
+
+
+def test_create_without_the_configured_prefix_is_rejected(monkeypatch):
+    monkeypatch.setattr(config, "SKILL_PREFIX", "ah-")
+    v = validate.validate(GOOD_INTENT, GOOD_BODY)
+    assert not v["ok"] and "prefix" in _families(v)
+
+
+def test_create_with_the_configured_prefix_passes(monkeypatch):
+    monkeypatch.setattr(config, "SKILL_PREFIX", "ah-")
+    intent = {**GOOD_INTENT, "name": "ah-foo"}
+    body = GOOD_BODY.replace("name: foo", "name: ah-foo")
+    v = validate.validate(intent, body)
+    assert v["ok"], v["findings"]
+
+
+def test_prefix_is_not_demanded_of_an_existing_skill(monkeypatch):
+    monkeypatch.setattr(config, "SKILL_PREFIX", "ah-")
+    v = validate.validate({**GOOD_INTENT, "action": "update"}, GOOD_BODY,
+                          target_is_agent_created=True)
+    assert v["ok"], v["findings"]
+
+
+def test_frontmatter_name_must_equal_the_skill_name():
+    v = validate.validate({**GOOD_INTENT, "name": "bar"}, GOOD_BODY)
+    assert not v["ok"] and "structure" in _families(v)
 
 
 def test_safety_rejects_injection():
@@ -382,6 +409,14 @@ def test_pii_alone_does_not_reject():
     assert validate.validate(GOOD_INTENT, body)["ok"]
 
 
+def test_claude_identifiers_do_not_reject_a_normal_skill_body():
+    body = (GOOD_BODY
+            + "\nCall https://api.anthropic.com/v1/messages and inspect "
+              "https://claude.ai/code/session_abc.\n"
+            + "Track 123e4567-e89b-12d3-a456-426614174000 or cse_0123456789abcdefghijKL.\n")
+    assert validate.validate(GOOD_INTENT, body)["ok"]
+
+
 def test_nested_frontmatter_keys_are_not_top_level_fields():
     # a nested `name:` must not satisfy the required top-level name
     body = "---\ndescription: Use when X.\nmetadata:\n  name: foo\n---\n# Foo\n"
@@ -454,7 +489,8 @@ def test_name_shaped_span_without_cue_is_not_a_pointer(monkeypatch, tmp_path):
 def test_pointer_to_the_self_is_exempt(monkeypatch, tmp_path):
     _skill_env(monkeypatch, tmp_path)
     intent = {**GOOD_INTENT, "name": "new-umbrella-skill"}
-    v = validate.validate(intent, _ptr_body("new-umbrella-skill"), base_dir=tmp_path)
+    body = _ptr_body("new-umbrella-skill").replace("name: foo", "name: new-umbrella-skill")
+    v = validate.validate(intent, body, base_dir=tmp_path)
     assert v["ok"], v["findings"]
 
 

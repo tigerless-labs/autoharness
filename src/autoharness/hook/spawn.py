@@ -10,17 +10,19 @@ here: the reflector only appends intents, the promoter exclusively validates and
 
 ponytail: run() is the body of the "detached background job" (synchronous spawn→wait→drain); the "do not block the host Stop" detach is started in the background at the hook top level by the Phase 7 dispatch calling run(). spawn_fn is injectable (system tests use a fake reflector script in place of the real claude). Precise handling of the transcript upper-bound race (cap.md open) is still tolerated at v0.
 """
+import functools
 import json
 import logging
 import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
 from autoharness import config
-from autoharness.hook import capture, promoter, recovery
+from autoharness.hook import capture, on_session_start, promoter, recovery
 from autoharness.lib import (
     atomic,
     counters,
@@ -34,9 +36,82 @@ from autoharness.lib import (
 
 log = logging.getLogger(__name__)
 
+BODY_PATH_INSTRUCTION = (
+    "Before modifying or merging a skill, or claiming it is already covered, Read its listed "
+    "SKILL.md. For an UNREADABLE entry, explain that in the staged reason and do not claim you "
+    "compared against it."
+)
 
-def description_index(roots=None, *, agent_only=False):
+
+def _body_paths_enabled():
+    return config.INDEX_BODY_PATHS or config.CHILD_ISOLATION
+
+
+def _absolute_unresolved(path):
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _safe_body_path(lyr, symbol, root):
+    skills = _absolute_unresolved(layer.skills_dir(lyr, root))
+    try:
+        layer._check_name(symbol)
+        body = _absolute_unresolved(skill_store.skill_path(lyr, symbol, root))
+        body.relative_to(skills)
+    except ValueError:
+        return None, "unsafe skill directory name"
+    if body.parent.is_symlink() or body.is_symlink():
+        try:
+            escaped = not body.resolve(strict=False).is_relative_to(skills.resolve(strict=False))
+        except OSError:
+            escaped = True
+        reason = "symlink target is outside the skill store" if escaped else "symlinked skill bodies are not followed"
+        return None, reason
+    try:
+        if not body.resolve(strict=False).is_relative_to(skills.resolve(strict=False)):
+            return None, "SKILL.md resolves outside the skill store"
+    except OSError:
+        return None, "SKILL.md path cannot be resolved safely"
+    return body, None
+
+
+def _unreadable_reason(exc):
+    if isinstance(exc, FileNotFoundError):
+        return "SKILL.md is missing"
+    if isinstance(exc, PermissionError):
+        return "permission denied"
+    if isinstance(exc, UnicodeError):
+        return "SKILL.md is not valid UTF-8"
+    return "SKILL.md could not be read"
+
+
+def _one_line(value):
+    text = str(value)
+    return on_session_start._sanitize(text, max(1, len(text)))
+
+
+def _body_index_entry(lyr, symbol, root):
+    body_path, unsafe = _safe_body_path(lyr, symbol, root)
+    entry = {"name": _one_line(symbol), "layer": lyr}
+    if unsafe:
+        entry.update(status="UNREADABLE", reason=unsafe)
+        return f"- {json.dumps(entry, ensure_ascii=False)}"
+    try:
+        text = body_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        entry.update(status="UNREADABLE", reason=_unreadable_reason(exc), skill_md=str(body_path))
+        return f"- {json.dumps(entry, ensure_ascii=False)}"
+    fm = validate._frontmatter(text) or {}
+    entry.update(
+        name=_one_line(fm.get("name") or symbol),
+        description=_one_line(fm.get("description") or "(no description)"),
+        skill_md=str(body_path),
+    )
+    return f"- {json.dumps(entry, ensure_ascii=False)}"
+
+
+def description_index(roots=None, *, agent_only=False, include_body_paths=None):
     roots = roots or {}
+    include_body_paths = _body_paths_enabled() if include_body_paths is None else include_body_paths
     lines = []
     for lyr in config.active_layers():
         root = roots.get(lyr)
@@ -52,12 +127,18 @@ def description_index(roots=None, *, agent_only=False):
                     continue  # handwritten skills cannot belong to the managed pool
             if agent_only and not sidecar.is_agent_created(lyr, symbol, root):
                 continue  # curator only ever sees its own skills; native/user stay out of the pool
+            if include_body_paths:
+                lines.append(_body_index_entry(lyr, symbol, root))
+                continue
             # anyone's skill can sit here; a latin-1 SKILL.md must not take the whole reflection down
             fm = validate._frontmatter(path.read_text(encoding="utf-8", errors="replace")) or {}
             name = fm.get("name") or symbol
             desc = fm.get("description") or "(no description)"
             lines.append(f"- {name} [{lyr}]: {desc}")
-    return "\n".join(lines) if lines else "(no live skills yet)"
+    if not lines:
+        return "(no live skills yet)"
+    index = "\n".join(lines)
+    return f"{BODY_PATH_INSTRUCTION}\n\n{index}" if include_body_paths else index
 
 
 def build_bundle(window, index, spec, digest=""):
@@ -96,9 +177,15 @@ FORK_INSTRUCTION = (
 )
 
 
+def isolation_args():
+    if not config.CHILD_ISOLATION:
+        return []
+    return ["--setting-sources", "", "--plugin-dir", str(config.PLUGIN_ROOT), "--no-session-persistence"]
+
+
 def build_fork_command(*, session_id, claude_bin):
     return [claude_bin, "-p", "--resume", str(session_id), "--fork-session",
-            "--dangerously-skip-permissions"]
+            "--dangerously-skip-permissions", *isolation_args()]
 
 
 def build_fork_prompt(index, spec):
@@ -113,7 +200,7 @@ def build_command(*, agent, claude_bin):
     # (Read/Grep/Glob/stage_skill) + the top-level PreToolUse write backstop, not by the prompt.
     # (live e2e: a reflector's real stage_skill call gets blocked by the permission gate and can only
     # "narrate"; only with this flag does it land.)
-    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions"]
+    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions", *isolation_args()]
 
 
 def child_env(run_id, root, *, base_env=None):
@@ -134,15 +221,39 @@ def _spawn_error(proc, argv):
     }
 
 
-def _detached_spawn(argv, env, bundle):
+def _detached_spawn(argv, env, bundle, cwd=None):
     """Run the reflector child to completion; report a crash on stderr instead of discarding it."""
     proc = subprocess.run(argv, input=bundle, text=True, encoding="utf-8", errors="replace",
-                          env=env, capture_output=True, check=False)
+                          env=env, cwd=cwd, capture_output=True, check=False)
     if proc.returncode != 0:
         error = _spawn_error(proc, argv)
         print(f"reflector child {error['argv0']} exited {proc.returncode}: "
               f"{error['stderr_tail']}", file=sys.stderr)
     return proc
+
+
+def _isolated_cwd(proot):
+    project = Path(proot).resolve().parent
+    key = layer._state_key(proot)
+    candidates = (
+        layer.state_dir(layer.PROJECT, proot),
+        Path(tempfile.gettempdir()) / "autoharness-child" / key,
+        Path.home() / ".cache" / "autoharness-child" / key,
+    )
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.is_relative_to(project):
+            continue
+        resolved.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return resolved
+    raise OSError(f"no isolated child working directory outside {project}")
+
+
+def _launcher(spawn_fn, proot, *, keep_cwd=False):
+    """Run isolated bundle children from state; forks retain the cwd used to find the session."""
+    if spawn_fn or keep_cwd or not config.CHILD_ISOLATION:
+        return spawn_fn or _detached_spawn
+    return functools.partial(_detached_spawn, cwd=str(_isolated_cwd(proot)))
 
 
 def _record_spawn_failure(run_id, roots, proc, argv):
@@ -179,7 +290,8 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     spec = (spec_path or config.FORMAT_SPEC).read_text(encoding="utf-8")
 
     carrier = carrier or config.REFLECTOR_CARRIER
-    if carrier == "fork" and session_id:  # no session to fork -> bundle chain (fail-safe)
+    forked = carrier == "fork" and bool(session_id)
+    if forked:  # no session to fork -> bundle chain (fail-safe)
         argv = build_fork_command(session_id=session_id, claude_bin=claude_bin or config.CLAUDE_BIN)
         payload = build_fork_prompt(description_index(roots), spec)  # -p reads the prompt from stdin
     else:
@@ -192,7 +304,8 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     # a foreign drain (the main session's Stop) leaves this queue alone instead of landing the
     # child's intents mid-flight or racing its appends
     with intent_queue.live_lock(run_id, proot):
-        proc = _invoke_spawn(spawn_fn or _detached_spawn, argv, env, payload, run_id, roots)
+        proc = _invoke_spawn(_launcher(spawn_fn, proot, keep_cwd=forked),
+                             argv, env, payload, run_id, roots)
         verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
         _record_spawn_failure(run_id, roots, proc, argv)
     return verdicts
@@ -231,7 +344,8 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
     env = child_env(run_id, roots.get(layer.PROJECT))
     with intent_queue.live_lock(run_id, roots.get(layer.PROJECT)):  # same liveness marker as reflection
-        proc = _invoke_spawn(spawn_fn or _detached_spawn, argv, env, bundle, run_id, roots)
+        proc = _invoke_spawn(_launcher(spawn_fn, roots.get(layer.PROJECT)),
+                             argv, env, bundle, run_id, roots)
         verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
         _record_spawn_failure(run_id, roots, proc, argv)
     return verdicts

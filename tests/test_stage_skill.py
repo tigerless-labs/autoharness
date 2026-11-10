@@ -444,3 +444,15 @@ def test_non_string_fields_are_rejected_at_stage_time(tmp_path):
                {"body": {"not": "text"}}, {"level": 1}):
         v = server.stage(_params(**kw), run_id=RUN, root=tmp_path)
         assert not v["ok"] and "schema" in _errs(v), kw
+
+
+def test_stage_hands_the_prefix_rule_back_to_the_author(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SKILL_PREFIX", "ah-")
+    v = server.stage(_params(), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "prefix" in _errs(v)
+    assert _queue(tmp_path) == []
+
+
+def test_stage_rejects_a_frontmatter_name_that_is_not_the_skill_name(tmp_path):
+    v = server.stage(_params(name="bar"), run_id=RUN, root=tmp_path)
+    assert not v["ok"] and "structure" in _errs(v)

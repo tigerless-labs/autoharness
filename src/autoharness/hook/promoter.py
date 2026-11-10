@@ -36,6 +36,7 @@ from autoharness import config
 from autoharness.lib import (
     atomic,
     counters,
+    git_exclude,
     intent_queue,
     layer,
     ledger,
@@ -158,7 +159,9 @@ def _land(action, intent, body, level, name, root):
     _land_files(level, name, intent.get("files"), root)
     evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
     skill_store.write_body(level, name, body, root)
-    if action != "create":
+    if action == "create":
+        git_exclude.ensure(layer.skills_dir(level, root), config.SKILL_PREFIX)
+    else:
         sidecar.bump_patch(level, name, root)  # update/patch: feeds the reuse-after-improvement pair
     ledger.append(level, name, _led(intent, evidence_ref), root)
 

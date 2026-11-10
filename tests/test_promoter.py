@@ -27,7 +27,8 @@ def _roots(tmp_path):
     return {"global": tmp_path / "g", "project": tmp_path / "p"}
 
 
-def _create(name="foo", level="project", body=GOOD_BODY):
+def _create(name="foo", level="project", body=None):
+    body = GOOD_BODY.replace("name: foo", f"name: {name}") if body is None else body
     return {"action": "create", "name": name, "level": level, "body": body,
             "reason": "captured repeat", "evidence": "led slice"}
 

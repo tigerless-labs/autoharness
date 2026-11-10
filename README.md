@@ -88,10 +88,12 @@ claude plugin marketplace remove autoharness
 ```
 
 Uninstalling only stops it from running — the skills it landed and its own state live **outside** the
-plugin and stay on disk. To clear those too, delete its state dir (`~/.claude/autoharness/` global,
-`<repo>/.claude/autoharness/` per project) and the self-authored skills under `.claude/skills/` (each
-carries a `self-authored` ledger marker, so they're easy to tell from yours). Your own skills are
-never touched.
+plugin and stay on disk. To clear those too, delete its state dir (`~/.claude/autoharness/` global —
+or `$CLAUDE_CONFIG_DIR/autoharness/` when that is set — and `<repo>/.claude/autoharness/` per project,
+or everything under `AUTOHARNESS_STATE_HOME` if you set it) and the self-authored skills under
+`.claude/skills/` (each carries a `self-authored` ledger marker, so they're easy to tell from yours).
+If you configured a skill prefix, also drop the one line it added to the repository's
+`.git/info/exclude`. Your own skills are never touched.
 
 ## Configuration
 
@@ -103,7 +105,11 @@ configure unless you want to change the pace.
 | Variable | Default | What it does |
 |---|---|---|
 | `AUTOHARNESS_DISABLE_GLOBAL` | `0` | Set to `1` for a project-only deployment. Global create intents are rejected before staging and landing; global request/use/view counters, archiving, orphan sweeps, recall, curator snapshots, and metrics are skipped. Existing global skills stay untouched. Project-layer learning continues normally. |
-| `AUTOHARNESS_GLOBAL_ROOT` | _(unset)_ | Replaces `~/.claude` as the global layer's root. Unset, or set to blank, is stock behaviour — the real home. Set it when autoharness itself has to run sandboxed (a pinned clone, CI, an evaluation harness) and the production skills library must stay untouched. The project layer is unaffected: it is still keyed to the session's own checkout. |
+| `AUTOHARNESS_GLOBAL_ROOT` | _(unset)_ | Replaces the global layer root. Unset or blank follows `$CLAUDE_CONFIG_DIR` when set, otherwise `~/.claude`. Set it when autoharness itself has to run sandboxed (a pinned clone, CI, an evaluation harness) and the production skills library must stay untouched. The project layer is unaffected. |
+| `AUTOHARNESS_PROJECT_DIR` | `.claude` | Directory under the project root whose `skills/` holds the project layer. For example, `.agents` shares the library with other agent runtimes. |
+| `AUTOHARNESS_STATE_HOME` | _(unset)_ | Moves counters, intent queues, run accounts, snapshots, and the archive outside the layer roots into one directory per layer and root. Unset keeps state under each layer root. |
+| `AUTOHARNESS_SKILL_PREFIX` | _(unset)_ | Prefix required for every new skill name, such as `ah-`. On first landing in a Git repository, the matching skill-directory pattern is added to the clone-local shared `info/exclude`; hand-written skills remain visible to Git. |
+| `AUTOHARNESS_CHILD_ISOLATION` | `0` | Set to `1` to launch reflector and curator children without user or project settings sources, with only this plugin loaded and no session persistence. Off by default because a child may depend on settings such as an `apiKeyHelper`. |
 
 **Cadence — when it learns**
 
@@ -119,6 +125,7 @@ configure unless you want to change the pace.
 | Variable | Default | What it does |
 |---|---|---|
 | `AUTOHARNESS_INDEX_SUSPENDED` | `0` | Set to `1` to stop injecting the index entirely. Everything else keeps running — the lifecycle pass, the use/view counters, the last-run summary — so this is the switch for measuring what the index is actually worth, and for anyone unwilling to spend the context on it. |
+| `AUTOHARNESS_INDEX_BODY_PATHS` | `0` | Set to `1` to include absolute `SKILL.md` paths in reflector and curator indexes so child sessions can read bodies before modifying, merging, or deduplicating them. Child isolation enables these paths automatically. The session-start recall index is unaffected. |
 | `AUTOHARNESS_INDEX_DESC_MAX_CHARS` | `60` | Per-line description budget in the session-start index. The index is a scan surface, not the full trigger text — raise it for longer lines, at the cost of context on every session. |
 | `AUTOHARNESS_SKILL_DESC_MAX_CHARS` | `1024` | Hard cap on a skill's own description, matching the host's documented limit; a longer one is rejected rather than silently truncated at load. |
 | `AUTOHARNESS_SKILL_BODY_MAX_LINES` | `25` | Altitude cap: a `SKILL.md` body over this many non-blank lines is rejected as a transcript rather than a rule. Backing detail belongs in the skill's `references/`. |

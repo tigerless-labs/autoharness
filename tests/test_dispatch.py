@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoharness import config
-from autoharness.hook import dispatch
+from autoharness.hook import dispatch, spawn
 from autoharness.lib import counters, layer, sidecar, skill_store
 
 
@@ -340,6 +340,36 @@ def test_child_session_read_and_stage_allowlist_is_not_denied(tmp_path, monkeypa
     v = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": tool,
                            "tool_input": {}, "session_id": "s7"}, roots=_roots(tmp_path))
     assert not v.get("deny")
+
+
+def test_child_dispatch_allows_listed_body_read_but_denies_outside_write_and_bash(tmp_path, monkeypatch):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    monkeypatch.setattr(config, "INDEX_BODY_PATHS", True)
+    roots = _roots(tmp_path)
+    body = skill_store.skill_path("project", "listed", roots["project"])
+    skill_store.write_body(
+        "project", "listed",
+        "---\nname: listed\ndescription: Use when listed.\n---\nRule.\n",
+        roots["project"],
+    )
+    assert str(body) in spawn.description_index(roots)
+
+    read = dispatch.dispatch({
+        "hook_event_name": "PreToolUse", "tool_name": "Read",
+        "tool_input": {"file_path": str(body)}, "session_id": "child",
+    }, roots=roots)
+    assert not read.get("deny")
+
+    outside = tmp_path / "outside.txt"
+    write = dispatch.dispatch({
+        "hook_event_name": "PreToolUse", "tool_name": "Write",
+        "tool_input": {"file_path": str(outside), "content": "x"}, "session_id": "child",
+    }, roots=roots)
+    bash = dispatch.dispatch({
+        "hook_event_name": "PreToolUse", "tool_name": "Bash",
+        "tool_input": {"command": f"touch {outside}"}, "session_id": "child",
+    }, roots=roots)
+    assert write.get("deny") and bash.get("deny")
 
 
 def _interactive_intent(name="learned"):
