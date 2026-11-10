@@ -754,6 +754,34 @@ def _drain_intents(roots, *intents):
     return promoter.drain("fold", roots=roots)
 
 
+def _pointer_create(name, target, *, valid=True):
+    body = (f"---\nname: {name}\ndescription: use when testing pointers\n---\n"
+            f"See `{target}` for the next step.\n")
+    return _write_umbrella(name, body if valid else "no frontmatter")
+
+
+def test_same_batch_pointer_waits_until_its_target_lands(tmp_path):
+    roots = _roots12(tmp_path)
+    verdicts = _drain_intents(
+        roots,
+        _pointer_create("source-skill", "target-skill"),
+        _write_umbrella("target-skill"),
+    )
+    assert [v["ok"] for v in verdicts] == [True, True]
+    assert skill_store.exists("project", "source-skill", roots["project"])
+
+
+def test_rejected_batch_target_does_not_exempt_a_pointer(tmp_path):
+    roots = _roots12(tmp_path)
+    verdicts = _drain_intents(
+        roots,
+        _pointer_create("source-skill", "target-skill"),
+        _pointer_create("target-skill", "unused-skill", valid=False),
+    )
+    assert [v["ok"] for v in verdicts] == [False, False]
+    assert not skill_store.exists("project", "source-skill", roots["project"])
+
+
 @pytest.mark.parametrize("delete_first", [False, True])
 def test_fold_stays_live_when_the_umbrella_create_is_rejected(tmp_path, delete_first):
     roots = _roots12(tmp_path)

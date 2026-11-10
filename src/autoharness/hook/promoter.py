@@ -8,8 +8,9 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
 - Shaping: create/update = intent body; patch = read live + apply delta; delete = None (removal).
 - Layer resolution: create takes the intent `level`; update/patch/delete go through skill_store.find
   (same name across layers errors, missing is rejected).
-- Validation: reuse lib.validate's six classes, fed {**intent, level: resolved layer} (the global gate
-  applies to update too).
+- Validation: reuse lib.validate's six classes, fed {**intent, level: resolved layer} (the global gate applies
+  to update too); backticked cross-skill pointers resolve against the same two-layer store, with the
+  batch's own names (including the create's) pre-seeded so same-run references cannot false-positive.
 - Land (after pass): land intent subfiles first (paths re-gated; every landing parent resolved and
   escape-checked BEFORE any write — a pre-planted symlink rejects with zero writes) → materialize the
   evidence slice into references/evidence-<hash>.md (redacted again at this egress, content-addressed →
@@ -232,6 +233,7 @@ def _promote_resolved(intent, action, name, level, roots, repo_name):
     verdict = validate.validate(
         {**intent, "level": level}, body,
         target_is_agent_created=target_created, repo_name=repo_name, base_dir=base_dir,
+        skill_roots=roots,
     )
     if not verdict["ok"]:
         return _reject(action, level, verdict["findings"])
@@ -333,6 +335,14 @@ def _waits_for_umbrella(intent, written):
             and isinstance(absorbed, str) and absorbed in written)
 
 
+def _waits_for_skill_pointer(verdict, written):
+    """A missing pointer into this run may become valid after its target lands."""
+    prefix, suffix = "referenced skill ", " does not exist"
+    return any(family == "structure" and detail.startswith(prefix) and detail.endswith(suffix)
+               and detail[len(prefix):-len(suffix)] in written
+               for family, detail in verdict.get("findings", []))
+
+
 def _promote_run(intents, roots, repo_name):
     """Judge one run's intents; the verdicts come back in queue order.
 
@@ -341,15 +351,31 @@ def _promote_run(intents, roots, repo_name):
     was: the umbrella may well be live, but the skill's content never reached it."""
     written = {_written_name(i) for i in intents} - {None}
     verdicts = [None] * len(intents)
-    rejected = set()
-    held = []
+    held, pointer_waiters = [], []
     for index, intent in enumerate(intents):
         if _waits_for_umbrella(intent, written):
             held.append(index)
             continue
         verdicts[index] = _promote_one(intent, roots, repo_name)
-        if not verdicts[index]["ok"] and _written_name(intent):
-            rejected.add(intent["name"])
+        if _waits_for_skill_pointer(verdicts[index], written):
+            pointer_waiters.append(index)
+
+    # A source may precede its target, and dependency chains may be reversed. Retry only after
+    # another waiter actually lands; a rejected target never becomes an exemption.
+    while pointer_waiters:
+        pending, progress = [], False
+        for index in pointer_waiters:
+            verdicts[index] = _promote_one(intents[index], roots, repo_name)
+            if verdicts[index]["ok"]:
+                progress = True
+            elif _waits_for_skill_pointer(verdicts[index], written):
+                pending.append(index)
+        if not progress:
+            break
+        pointer_waiters = pending
+
+    rejected = {intent["name"] for intent, verdict in zip(intents, verdicts, strict=True)
+                if verdict is not None and not verdict["ok"] and _written_name(intent)}
     for index in held:
         umbrella = intents[index]["absorbed_into"]
         verdicts[index] = (

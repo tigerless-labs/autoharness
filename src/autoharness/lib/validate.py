@@ -18,12 +18,18 @@ gate via layer.check_subfile, count/size caps) + the pointer rule (every carried
 referenced in the body) + per-subfile safety and global scans — otherwise subfiles would be a trivial
 bypass of both gates. Promoter-materialized `references/evidence-*` slices are off-limits to intents
 in both directions: carrying one in `files` and removing one via remove_file are rejected.
+
+When base_dir is present, `_skill_ptr_findings` also resolves backticked cross-skill pointers (cue
+see/per/follow or an .archive/ name) against the two-layer store (`skill_store.find`), so a
+misremembered skill name is rejected at the gate instead of dangling in a landed skill. The promoter
+retries a same-run dependent only after its target actually lands, so a rejected target cannot create
+a false exemption.
 """
 import ast
 import re
 
 from autoharness import config
-from autoharness.lib import layer, redact, skills_guard
+from autoharness.lib import layer, redact, skill_store, skills_guard
 
 # A malformed first closing delimiter must not be skipped in favor of a later body rule.
 _FRONTMATTER = re.compile(r"\A---\r?\n((?:(?!^---).)*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL | re.MULTILINE)
@@ -37,6 +43,13 @@ _MODIFY = ("update", "patch", "remove_file", "delete")
 # literal phrase the user would type (quoted). A bare topic-label has neither and never fires.
 _QUOTED_PHRASE = re.compile(r'"[^"]+"|\'[^\']+\'|`[^`]+`')
 _WHEN = re.compile(r"(?i)\bwhen")
+# cross-skill pointers: a kebab-case name (`regression-test-proves-the-bug`) the reflector wrote back.
+# Recall only loads skills, so "see `some-name`" into a nonexistent one is a dangling pointer a
+# session follows to nothing. The cue (see/per/follow within a few words) keeps ordinary code spans
+# (`docker-compose`, `gh-cli`) out; when no cue is present, an .archive/ name is enough signal — it
+# names a skill that once existed, the exact mark of a reflector referencing history it misremembers.
+_SKILL_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+")
+_SKILL_CUE = re.compile(r"(?i)\b(?:see|per|follow)\b[^\n`]{0,40}$")
 _USE_WHEN = re.compile(r"(?i)\buse\s+when\b")
 
 
@@ -221,6 +234,38 @@ def _backtick_spans(text):
     return spans
 
 
+def _archived_name(name, roots):
+    return any((layer.archive_dir(lyr, roots.get(lyr)) / name).is_dir()
+               for lyr in config.active_layers())
+
+
+def _skill_ptr_findings(body, roots, exempt_names):
+    """Backticked pointers into the handoff graph (issue #305: a reflector-typoed skill name lands
+    and stays, ten days eighty requests, until a human reads it). Name-shaped spans carrying the
+    cross-skill cue, or matching an .archive/ name, must resolve with the same cross-layer find the
+    promoter routes updates through; ambiguity (live in both layers) is a real pointer. Names the
+    caller explicitly exempts only the skill's own name; same-run dependencies are retried by the
+    promoter after their targets actually land."""
+    findings = []
+    cue_room = 49  # chars before the opening tick (excluded here): a few words, not a paragraph scan
+    for start, end in _backtick_spans(body):
+        name = body[start:end]
+        if not _SKILL_NAME.fullmatch(name):
+            continue
+        text = body[max(0, start - cue_room):start - 1]
+        if not _SKILL_CUE.search(text) and not _archived_name(name, roots):
+            continue
+        if name in exempt_names:
+            continue
+        try:
+            live = skill_store.find(name, roots)
+        except ValueError:
+            live = "ambiguous"  # same name live in both layers: it exists, routing is find's error
+        if live is None:
+            findings.append(("structure", f"referenced skill {name} does not exist"))
+    return findings
+
+
 def subfile_references(body, *, base_dir, files=None):
     """Resolve terminal prose punctuation against contextual paths for all consumers."""
     base = base_dir.resolve()
@@ -241,7 +286,7 @@ def subfile_references(body, *, base_dir, files=None):
             yield ref
 
 
-def _structure(body, base_dir, files=None):
+def _structure(body, base_dir, files=None, roots=None, exempt_names=()):
     findings = []
     fm = _frontmatter(body)
     if fm is None:
@@ -282,6 +327,7 @@ def _structure(body, base_dir, files=None):
         for ref in subfile_references(body, base_dir=base_dir, files=files):
             if ref not in (files or {}) and not (base_dir / ref).is_file():
                 findings.append(("structure", f"referenced {ref} neither carried in intent nor live"))
+        findings += _skill_ptr_findings(body, roots or {}, exempt_names)
     for rel in files or {}:
         if isinstance(rel, str):
             pointer = re.compile(r"(?<![A-Za-z0-9_./-])(?:\./|\$\{CLAUDE_SKILL_DIR\}/)?" + re.escape(rel) + r"(?![A-Za-z0-9_/-])(?!\.[A-Za-z0-9_])")
@@ -294,7 +340,8 @@ def structure(body, files=None):
     return _structure(body, None, files)
 
 
-def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None):
+def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None,
+             skill_roots=None):
     findings = []
     files = intent.get("files")
 
@@ -306,7 +353,8 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
         if secrets:
             findings.append(("secret", secrets))
 
-        findings += _structure(body, base_dir, files)
+        findings += _structure(body, base_dir, files, roots=skill_roots,
+                               exempt_names={intent.get("name")})
         findings += check_files(files, base_dir=base_dir, creating=intent.get("action") == "create")
 
         if _PLACEHOLDER.search(body):
