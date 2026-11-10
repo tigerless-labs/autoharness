@@ -1,3 +1,4 @@
+import errno
 import os
 import sys
 import time
@@ -54,6 +55,27 @@ def test_archive_restore_roundtrip_preserves_sidecar(tmp_path):
     assert skill_store.read_body("project", "foo", tmp_path) == "real"    # reversible
     assert sidecar.read("project", "foo", tmp_path)["anchor"] == 3        # sidecar rode along
     assert not (layer.archive_dir("project", tmp_path) / "foo").exists()  # archive slot cleared
+
+
+def test_archive_restore_falls_back_across_filesystems(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    state = tmp_path / "state"
+    monkeypatch.setenv("AUTOHARNESS_STATE_HOME", str(state))
+    skill_store.write_body("project", "foo", "real", root)
+
+    def cross_device(_src, _dest):
+        raise OSError(errno.EXDEV, "cross-device link")
+
+    monkeypatch.setattr(skill_store.os, "replace", cross_device)
+    archived = skill_store.archive("project", "foo", root)
+    assert archived.is_relative_to(state)
+    assert archived.joinpath("SKILL.md").read_text(encoding="utf-8") == "real"
+    assert not skill_store.exists("project", "foo", root)
+
+    restored = skill_store.restore("project", "foo", root)
+    assert restored == layer.symbol_dir("project", "foo", root)
+    assert skill_store.read_body("project", "foo", root) == "real"
+    assert not archived.exists()
 
 
 def test_sweep_orphans_removes_tmp_keeps_live(tmp_path):

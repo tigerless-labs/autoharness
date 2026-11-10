@@ -4,9 +4,11 @@ Persistence uses atomic (same-dir temp + os.replace) in this one place, so live 
 find extends Hermes's `_find_skill` to the union of the global+project layers; the same name across
 both layers → error (promoter uses this to disambiguate the layer when resolving update/delete).
 apply_delta requires old_string to match uniquely (rejects both not-found and multiple-match
-ambiguity), a deterministic rebuild. archive atomically moves symbol_dir into `.archive` (preserving
-LED/sidecar); landing a delete and MNG (Phase 6) eviction share this one path.
+ambiguity), a deterministic rebuild. archive atomically moves symbol_dir into `.archive` when both
+locations share a filesystem, with a cross-filesystem fallback for AUTOHARNESS_STATE_HOME; landing a
+delete and MNG (Phase 6) eviction share this one path.
 """
+import errno
 import json
 import os
 import shutil
@@ -28,6 +30,15 @@ def _collision_safe_dest(dest):
         candidate = dest.with_name(f"{dest.name}.{suffix}.{counter}")
         counter += 1
     return candidate
+
+
+def _move(src, dest):
+    try:
+        os.replace(src, dest)
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+        shutil.move(src, dest)
 
 
 def skill_path(lyr, name, root=None):
@@ -78,7 +89,7 @@ def archive(lyr, name, root=None):
         dest = layer.archive_dir(lyr, root) / name
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest = _collision_safe_dest(dest)
-        os.replace(sdir, dest)
+        _move(sdir, dest)
         return dest
 
 
@@ -89,7 +100,7 @@ def restore(lyr, name, root=None):
     dest = layer.symbol_dir(lyr, name, root)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest = _collision_safe_dest(dest)
-    os.replace(src, dest)
+    _move(src, dest)
     return dest
 
 
