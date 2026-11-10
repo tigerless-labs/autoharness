@@ -164,3 +164,18 @@ def test_unavailable_sidecar_does_not_break_observation_or_overwrite_it(tmp_path
         result = on_skill_call.on_skill_read(_read_event(root / "skills" / "foo" / "SKILL.md"), roots=roots)
     assert result == {"counted": False, "reason": "sidecar_unavailable"}
     assert path.read_text(encoding="utf-8") == stored
+
+
+def test_archive_between_ownership_check_and_bump_skips_observation(tmp_path, monkeypatch):
+    roots = _roots(tmp_path)
+    root = _seed_agent_skill(roots)
+    original = sidecar.bump_use
+
+    def moved(*args, **kwargs):
+        skill_store.archive("project", "foo", root)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(sidecar, "bump_use", moved)
+    result = on_skill_call.on_skill_call({"skill_name": "foo"}, roots=roots)
+    assert result == {"counted": False, "reason": "sidecar_unavailable"}
+    assert not (root / "skills" / "foo").exists()

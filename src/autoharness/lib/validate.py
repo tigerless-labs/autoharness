@@ -18,27 +18,50 @@ gate via layer.check_subfile, count/size caps) + the pointer rule (every carried
 referenced in the body) + per-subfile safety and global scans — otherwise subfiles would be a trivial
 bypass of both gates. Promoter-materialized `references/evidence-*` slices are off-limits to intents
 in both directions: carrying one in `files` and removing one via remove_file are rejected.
+
+When base_dir is present, `_skill_ptr_findings` also resolves backticked cross-skill pointers (cue
+see/per/follow or an .archive/ name) against the two-layer store (`skill_store.find`), so a
+misremembered skill name is rejected at the gate instead of dangling in a landed skill. The promoter
+retries a same-run dependent only after its target actually lands, so a rejected target cannot create
+a false exemption.
 """
 import ast
 import re
 
 from autoharness import config
-from autoharness.lib import layer, redact, skills_guard
+from autoharness.lib import layer, redact, skill_store, skills_guard
 
-_FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n)?", re.DOTALL)
+# A malformed first closing delimiter must not be skipped in favor of a later body rule.
+_FRONTMATTER = re.compile(r"\A---\r?\n((?:(?!^---).)*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL | re.MULTILINE)
 _PLACEHOLDER = re.compile(r"\b(TODO|FIXME|XXX):|<(?:TODO|FIXME|XXX|TBD|PLACEHOLDER|REPLACE[_ ]?ME|INSERT[_ ]?HERE|FILL[_ ]?IN)>")
 _ABS_PATH = re.compile(r"(?:/home/|/Users/|/root/)[^\s`)\]]+|[A-Za-z]:\\[^\s`)\]]+")
-_PY_REF = re.compile(r"[\w./-]+\.py")
+# not after ":" -- a URL (https://host/tool.py) names a remote file, not a path under the skill dir
+_PY_REF = re.compile(r"(?<![\w./:-])[\w./-]+\.py")
 _SUBFILE_REF = re.compile(r"(?<![A-Za-z0-9_./-])(?:\./)?(?:{})/[A-Za-z0-9._/-]+".format("|".join(layer.SUBFILE_DIRS)))
 _MODIFY = ("update", "patch", "remove_file", "delete")
 # description-as-trigger proxy: a firing description names WHEN to use it ("use when …") or lists a
 # literal phrase the user would type (quoted). A bare topic-label has neither and never fires.
 _QUOTED_PHRASE = re.compile(r'"[^"]+"|\'[^\']+\'|`[^`]+`')
 _WHEN = re.compile(r"(?i)\bwhen")
+# cross-skill pointers: a kebab-case name (`regression-test-proves-the-bug`) the reflector wrote back.
+# Recall only loads skills, so "see `some-name`" into a nonexistent one is a dangling pointer a
+# session follows to nothing. The cue (see/per/follow within a few words) keeps ordinary code spans
+# (`docker-compose`, `gh-cli`) out; when no cue is present, an .archive/ name is enough signal — it
+# names a skill that once existed, the exact mark of a reflector referencing history it misremembers.
+_SKILL_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+")
+_SKILL_CUE = re.compile(r"(?i)\b(?:see|per|follow)\b[^\n`]{0,40}$")
+_USE_WHEN = re.compile(r"(?i)\buse\s+when\b")
+
+
+def trigger_cue_start(text):
+    """Return the first cue boundary, using the same proxy as description validation."""
+    matches = [match for pattern in (_USE_WHEN, _WHEN, _QUOTED_PHRASE)
+               if (match := pattern.search(text))]
+    return min((match.start() for match in matches), default=None)
 
 
 def _has_cue(text):
-    return bool(_WHEN.search(text) or _QUOTED_PHRASE.search(text))
+    return trigger_cue_start(text) is not None
 
 
 def _block_scalar(lines, start, parent_indent, header):
@@ -108,6 +131,8 @@ def _frontmatter(body):
         s = line.strip()
         if not s or s.startswith("#") or ":" not in line:
             continue
+        if line[0] in " \t":
+            continue  # nested mapping or wrapped scalar line: not a top-level field of the skill
         key, value = line.split(":", 1)
         v = value.strip()
         if re.fullmatch(r"[>|](?:[1-9][-+]?|[-+][1-9]?)?(?:[ \t]+#.*)?", v):
@@ -209,6 +234,38 @@ def _backtick_spans(text):
     return spans
 
 
+def _archived_name(name, roots):
+    return any((layer.archive_dir(lyr, roots.get(lyr)) / name).is_dir()
+               for lyr in config.active_layers())
+
+
+def _skill_ptr_findings(body, roots, exempt_names):
+    """Backticked pointers into the handoff graph (issue #305: a reflector-typoed skill name lands
+    and stays, ten days eighty requests, until a human reads it). Name-shaped spans carrying the
+    cross-skill cue, or matching an .archive/ name, must resolve with the same cross-layer find the
+    promoter routes updates through; ambiguity (live in both layers) is a real pointer. Names the
+    caller explicitly exempts only the skill's own name; same-run dependencies are retried by the
+    promoter after their targets actually land."""
+    findings = []
+    cue_room = 49  # chars before the opening tick (excluded here): a few words, not a paragraph scan
+    for start, end in _backtick_spans(body):
+        name = body[start:end]
+        if not _SKILL_NAME.fullmatch(name):
+            continue
+        text = body[max(0, start - cue_room):start - 1]
+        if not _SKILL_CUE.search(text) and not _archived_name(name, roots):
+            continue
+        if name in exempt_names:
+            continue
+        try:
+            live = skill_store.find(name, roots)
+        except ValueError:
+            live = "ambiguous"  # same name live in both layers: it exists, routing is find's error
+        if live is None:
+            findings.append(("structure", f"referenced skill {name} does not exist"))
+    return findings
+
+
 def subfile_references(body, *, base_dir, files=None):
     """Resolve terminal prose punctuation against contextual paths for all consumers."""
     base = base_dir.resolve()
@@ -229,7 +286,7 @@ def subfile_references(body, *, base_dir, files=None):
             yield ref
 
 
-def _structure(body, base_dir, files=None):
+def _structure(body, base_dir, files=None, roots=None, exempt_names=()):
     findings = []
     fm = _frontmatter(body)
     if fm is None:
@@ -251,17 +308,31 @@ def _structure(body, base_dir, files=None):
             if not f.resolve().is_relative_to(base):
                 findings.append(("structure", f"referenced {ref} escapes the skill directory"))
                 continue
-            if f.is_file():
+            source = (files or {}).get(ref)
+            if isinstance(source, str) or f.is_file():
                 try:
-                    ast.parse(f.read_text())
+                    ast.parse(
+                        source if isinstance(source, str) else f.read_text(encoding="utf-8")
+                    )
                 except SyntaxError as exc:
                     findings.append(("structure", f"referenced {ref} has syntax error: {exc}"))
+                except UnicodeError as exc:
+                    findings.append(("structure", f"referenced {ref} could not be read: {exc}"))
+                except OSError as exc:
+                    # A live referenced file can become temporarily unreadable after is_file().
+                    # Preserve the original exception type for callers, but distinguish this read
+                    # failure from a permanently unlandable intent (bad name/path/permissions).
+                    exc._autoharness_retryable_read = True
+                    raise
         for ref in subfile_references(body, base_dir=base_dir, files=files):
             if ref not in (files or {}) and not (base_dir / ref).is_file():
                 findings.append(("structure", f"referenced {ref} neither carried in intent nor live"))
+        findings += _skill_ptr_findings(body, roots or {}, exempt_names)
     for rel in files or {}:
-        if isinstance(rel, str) and rel not in body:
-            findings.append(("structure", f"carried subfile {rel} not referenced in SKILL.md body"))
+        if isinstance(rel, str):
+            pointer = re.compile(r"(?<![A-Za-z0-9_./-])(?:\./|\$\{CLAUDE_SKILL_DIR\}/)?" + re.escape(rel) + r"(?![A-Za-z0-9_/-])(?!\.[A-Za-z0-9_])")
+            if not pointer.search(body):
+                findings.append(("structure", f"carried subfile {rel} not referenced in SKILL.md body"))
     return findings
 
 
@@ -269,7 +340,8 @@ def structure(body, files=None):
     return _structure(body, None, files)
 
 
-def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None):
+def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None,
+             skill_roots=None):
     findings = []
     files = intent.get("files")
 
@@ -281,11 +353,14 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
         if secrets:
             findings.append(("secret", secrets))
 
-        findings += _structure(body, base_dir, files)
+        findings += _structure(body, base_dir, files, roots=skill_roots,
+                               exempt_names={intent.get("name")})
         findings += check_files(files, base_dir=base_dir, creating=intent.get("action") == "create")
 
         if _PLACEHOLDER.search(body):
             findings.append(("completeness", "contains TODO/placeholder"))
+        if _body_lines(body) == 0:
+            findings.append(("completeness", "skill body is empty"))
 
         # altitude: create/update author the full body, so this is where rule-level is set. patch is a
         # delta to a live skill -- capping it would strand existing over-long skills (can't even fix them).
@@ -325,5 +400,7 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
 
     if intent.get("action") in _MODIFY and target_is_agent_created is not True:
         findings.append(("self_produced", "target live skill not created_by:agent"))
+    elif intent.get("action") == "create" and target_is_agent_created is False:
+        findings.append(("self_produced", "create would overwrite a skill not created_by:agent"))
 
     return {"ok": not findings, "findings": findings}

@@ -11,11 +11,16 @@ zero intrusion).
 ponytail: GC of orphan session counts (residue from crashed sessions) needs a session-liveness signal to sweep safely (a naive sweep would wrongly delete a concurrent session's live count), so it is deferred until that signal exists — the clear_session primitive is ready (Phase 4), policy left open in cap.md/mng.md.
 """
 import json
+import logging
+import os
 import uuid
 from pathlib import Path
 
 from autoharness import config
+from autoharness.hook import recovery
 from autoharness.lib import counters, layer, lifecycle, sidecar, skill_store, validate
+
+log = logging.getLogger(__name__)
 
 # Recall self-injection (mng.md §召回面自持): the host's native description recall stays untouched;
 # this compact index of self-produced skills rides SessionStart additionalContext so "whether the
@@ -32,13 +37,32 @@ def _sanitize(text, limit):
 
 
 def _fit(text, limit):
-    """Truncate with an ellipsis so a cut line reads as cut (hermes' index does the same).
+    """Fit one description, retaining a validated trigger cue when the prefix would lose it.
 
-    New descriptions are held inside the budget by the promoter, so this only fires on skills that
-    predate the gate — and there it matters that the reader can tell the line was severed rather
-    than take a fragment for the whole trigger."""
+    Create/update descriptions fit the budget already. Legacy and patch-exempt descriptions may not;
+    keep their first recognized cue on the scan surface without expanding the per-entry budget."""
     flat = " ".join(str(text).split())
-    return flat if len(flat) <= limit else flat[:limit - 3] + "..."
+    if len(flat) <= limit:
+        return flat
+
+    def clipped(value, budget):
+        return value if len(value) <= budget else value[:budget - 3] + "..."
+
+    cue_start = validate.trigger_cue_start(flat)
+    if cue_start in (None, 0):
+        return clipped(flat, limit)
+
+    omission = "... "
+    cue_text = flat[cue_start:].strip()
+    cue_budget = limit - len(omission)
+    if cue_budget <= 3:
+        return clipped(flat, limit)
+    if len(cue_text) > cue_budget:
+        return omission + clipped(cue_text, cue_budget)
+
+    prefix_budget = cue_budget - len(cue_text)
+    prefix = flat[:cue_start].strip()[:prefix_budget]
+    return prefix + omission + cue_text
 
 
 def _read_hint(roots, cwd):
@@ -65,9 +89,23 @@ def recall_index(roots, cwd=None):
             continue
         for path in skills.glob(f"*/{skill_store.SKILL_FILE}"):
             name = path.parent.name
-            if not sidecar.is_agent_created(lyr, name, root):
+            try:
+                layer._check_name(name)
+            except ValueError:
+                continue  # handwritten skills are outside the managed pool
+            try:
+                managed = sidecar.is_agent_created(lyr, name, root)
+            except (OSError, UnicodeError, ValueError, TypeError, AttributeError):
+                log.warning("skipping skill with unreadable sidecar: %s", path.parent)
                 continue
-            fm = validate._frontmatter(path.read_text()) or {}
+            if not managed:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                log.warning("skipping unreadable skill description: %s", path)
+                continue
+            fm = validate._frontmatter(text) or {}
             desc = _fit(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
             groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]: {desc}")
@@ -98,7 +136,9 @@ def last_run_summary(roots):
     except OSError:
         return None
     try:
-        last = json.loads(consumed.read_text())
+        last = json.loads(consumed.read_text(encoding="utf-8"))
+        if not isinstance(last, dict):
+            return None
     except (ValueError, OSError):
         return None
     finally:
@@ -106,10 +146,12 @@ def last_run_summary(roots):
             consumed.unlink()
         except OSError:
             pass
-    line = (f"autoharness last run: landed {last.get('landed', 0)}, "
+    # name the run so the numbers stay traceable when a Stop drained a dead sibling's queue
+    line = (f"autoharness last run ({last.get('run_id', 'unknown')}): landed {last.get('landed', 0)}, "
             f"rejected {last.get('rejected', 0)}")
-    if last.get("families"):
-        line += f" ({', '.join(last['families'])})"
+    families = last.get("families")
+    if isinstance(families, list) and families and all(isinstance(f, str) for f in families):
+        line += f" ({', '.join(families)})"
     if last.get("absorbed"):
         line += f"; merged {last['absorbed']} into umbrellas"
     if last.get("uncategorized"):
@@ -124,6 +166,10 @@ def _members(lyr, root):
     members = []
     for path in skills.glob(f"*/{skill_store.SKILL_FILE}"):
         name = path.parent.name
+        try:
+            layer._check_name(name)
+        except ValueError:
+            continue
         if not sidecar.is_agent_created(lyr, name, root):
             continue
         s = sidecar.read(lyr, name, root)
@@ -133,7 +179,12 @@ def _members(lyr, root):
 
 
 def on_session_start(event=None, *, roots=None):
+    if os.environ.get(config.CHILD_SESSION_ENV):
+        # a reflector/curator child: it must not consume the user's last-run line, run the archive pass
+        # beside the parent, or get a second index on top of its bundle
+        return {"archived": {}, "context": None, "reason": "recursion_guard"}
     roots = roots or {}
+    recovery.recover(roots=roots)
     archived = {}
     for lyr in config.active_layers():
         root = roots.get(lyr)

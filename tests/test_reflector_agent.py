@@ -1,8 +1,15 @@
+import re
 from pathlib import Path
 
 from autoharness.lib import validate
 
 AGENT = Path(__file__).resolve().parents[1] / "agents" / "reflector.md"
+
+
+def _compare_first_rungs():
+    body = AGENT.read_text().lower()
+    section = body.split("## compare-first:", 1)[1].split("\n## ", 1)[0]
+    return re.findall(r"^\d+\.\s+\*\*`([^`]+)`([^*]*)\*\*", section, re.MULTILINE)
 
 
 def test_reflector_frontmatter_present():
@@ -43,13 +50,13 @@ def test_reflector_prompt_has_no_authoring_gates():
 def test_reflector_prompt_encourages_generation():
     body = AGENT.read_text().lower()
     assert "one intent per" in body
-    assert body.index("patch") < body.index("`create`")
+    assert [action for action, _ in _compare_first_rungs()] == ["patch", "patch", "update", "create"]
 
 
 def test_reflector_create_is_umbrella_first():
-    body = AGENT.read_text().lower()
-    assert "umbrella" in body  # new skills are born as a category, not a session artifact
-    assert body.index("umbrella") > body.index("`create`")  # the emphasis lands on the create rung
+    create_rung = _compare_first_rungs()[-1]
+    assert create_rung[0] == "create"
+    assert "umbrella" in create_rung[1]  # the emphasis lands on the create rung itself
 
 
 def test_reflector_can_consolidate_existing_overlap():

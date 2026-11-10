@@ -52,8 +52,8 @@ def test_summary_claim_survives_a_second_run_and_reader(tmp_path, monkeypatch):
     assert not second.is_alive()
     assert not errors
     assert results == {
-        0: "autoharness last run: landed 1, rejected 0",
-        1: "autoharness last run: landed 2, rejected 0",
+        0: "autoharness last run (first-run): landed 1, rejected 0",
+        1: "autoharness last run (second-run): landed 2, rejected 0",
     }
     assert on_session_start.last_run_summary(roots) is None
     assert not list((tmp_path / "autoharness").glob("*.consuming"))

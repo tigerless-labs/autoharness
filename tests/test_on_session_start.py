@@ -8,6 +8,11 @@ from autoharness.hook import on_session_start
 from autoharness.lib import layer, sidecar, skill_store
 
 
+@pytest.fixture(autouse=True)
+def _not_a_child(monkeypatch):
+    monkeypatch.delenv(config.CHILD_SESSION_ENV, raising=False)  # ambient may set it
+
+
 def _roots(base):
     return {"global": base / "g", "project": base / "p"}
 
@@ -205,6 +210,18 @@ def test_summary_shown_even_with_empty_library(tmp_path):
     assert out["context"] and "rejected 3" in out["context"]  # anti-silence beats empty-index None
 
 
+def test_summary_names_the_run_that_drained(tmp_path):
+    # a Stop that drained a dead sibling's queue leaves the dead run's account as last_run;
+    # the line has to name it or the next session reads the numbers as its own
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "last_run.json").write_text(json.dumps(
+        {"run_id": "deadrun", "landed": 1, "rejected": 0, "absorbed": 0, "families": []}))
+    line = on_session_start.last_run_summary(roots)
+    assert "deadrun" in line and "landed 1" in line
+
+
 def test_summary_line_reports_uncategorized_landings(tmp_path):
     # fail-open still has to be visible: a run that landed skills without a category says so
     roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
@@ -242,6 +259,89 @@ def test_index_leaves_a_fitting_description_alone(tmp_path):
     _seed_desc(roots, "modern", "Use when auditing a repo.")
     ctx = on_session_start.recall_index(roots)
     assert "Use when auditing a repo." in ctx and "..." not in ctx
+
+
+def test_index_preserves_a_late_trigger_from_a_legacy_description(tmp_path):
+    roots = _roots(tmp_path)
+    trigger = "Use when tracing Claude session JSONL archaeology."
+    long = ("Indexes session history and recovery artifacts with a detailed workflow for "
+            f"investigation. {trigger}")
+    assert len(long) > config.INDEX_DESC_MAX_CHARS
+    assert trigger not in long[:config.INDEX_DESC_MAX_CHARS]
+
+    _seed_desc(roots, "legacy-session-history", long)
+    ctx = on_session_start.recall_index(roots)
+    entries = [line for line in ctx.splitlines() if line.startswith("- ")]
+    rendered = entries[0].split(": ", 1)[1]
+
+    assert len(entries) == 1
+    assert trigger in rendered
+    assert len(rendered) <= config.INDEX_DESC_MAX_CHARS
+
+
+def test_index_retention_keeps_layers_distinct_and_counters_unchanged(tmp_path):
+    roots = _roots(tmp_path)
+    late = ("Deploys a prepared knowledge bundle after checking every prerequisite. "
+            "Use when running a deployment pre-sync.")
+    _seed_desc(roots, "deployment-pre-sync", late, lvl="project")
+    _seed_desc(roots, "iso-date", "Use when formatting an ISO date.", lvl="global")
+    for lvl, name in (("project", "deployment-pre-sync"), ("global", "iso-date")):
+        data = sidecar.read(lvl, name, roots[lvl])
+        data.update(use=3, view=2, patch=1)
+        sidecar.write(lvl, name, data, roots[lvl])
+    before = {lvl: sidecar.read(lvl, name, roots[lvl])
+              for lvl, name in (("project", "deployment-pre-sync"), ("global", "iso-date"))}
+
+    ctx = on_session_start.recall_index(roots)
+
+    assert ctx.count("- deployment-pre-sync [project]:") == 1
+    assert ctx.count("- iso-date [global]:") == 1
+    assert "deployment-pre-sync [global]" not in ctx
+    assert "iso-date [project]" not in ctx
+    after = {lvl: sidecar.read(lvl, name, roots[lvl])
+             for lvl, name in (("project", "deployment-pre-sync"), ("global", "iso-date"))}
+    assert after == before
+
+
+def test_index_description_boundaries_and_special_characters_stay_bounded(tmp_path):
+    roots = _roots(tmp_path)
+    exact = "x" * config.INDEX_DESC_MAX_CHARS
+    over = "y" * (config.INDEX_DESC_MAX_CHARS + 1)
+    special = "Use when handling <xml> & Unicode 雪."
+    _seed_desc(roots, "empty", "")
+    _seed_desc(roots, "exact", exact)
+    _seed_desc(roots, "over", over)
+    _seed_desc(roots, "special", special)
+
+    ctx = on_session_start.recall_index(roots)
+    descriptions = {line.split(" [", 1)[0][2:]: line.split(": ", 1)[1]
+                    for line in ctx.splitlines() if line.startswith("- ")}
+
+    assert descriptions["empty"] == "(no description)"
+    assert descriptions["exact"] == exact
+    assert descriptions["over"].endswith("...")
+    assert descriptions["special"] == special
+    assert all(len(description) <= config.INDEX_DESC_MAX_CHARS
+               for description in descriptions.values())
+
+
+def test_unreadable_skill_metadata_does_not_suppress_valid_entries(tmp_path):
+    roots = _roots(tmp_path)
+    _seed_desc(roots, "valid", "Use when the other metadata entry is unreadable.")
+    bad = skill_store.skill_path("project", "bad-utf8", roots["project"])
+    bad.parent.mkdir(parents=True)
+    bad.write_bytes(b"---\nname: bad-utf8\ndescription: " + bytes([255]) + b"\n---\nRule.\n")
+    sidecar.create("project", "bad-utf8", 0, roots["project"])
+    skill_store.write_body("project", "bad-sidecar",
+                           "---\nname: bad-sidecar\ndescription: Use when broken.\n---\nRule.\n",
+                           roots["project"])
+    sidecar.path("project", "bad-sidecar", roots["project"]).write_text("[]")
+
+    ctx = on_session_start.recall_index(roots)
+
+    assert "- valid [project]: Use when the other metadata" in ctx
+    assert "bad-utf8" not in ctx
+    assert "bad-sidecar" not in ctx
 
 
 def test_index_suspended_injects_nothing_but_keeps_counting(tmp_path, monkeypatch):
@@ -308,3 +408,19 @@ def test_a_users_skill_with_a_windows_reserved_name_does_not_break_session_start
     (user / "SKILL.md").write_text("---\nname: con\ndescription: mine\n---\nb")
     out = on_session_start.on_session_start(roots=roots)
     assert "- foo [project]" in out["context"]
+
+
+def test_child_session_start_touches_nothing(tmp_path, monkeypatch):
+    # spawn marks reflector/curator children; their SessionStart fires against the parent's root
+    _small_knobs(monkeypatch)
+    roots = _roots(tmp_path)
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "last_run.json").write_text(json.dumps({"run_id": "s1-50", "landed": 1, "rejected": 0}))
+    _set_requests(roots, "project", 100)
+    _seed(roots, "dead", calls=0)  # mature, zero use: a parent SessionStart would archive it
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    out = on_session_start.on_session_start(roots=roots)
+    assert out["context"] is None and out["archived"] == {}
+    assert (state / "last_run.json").exists()  # the user still gets the summary
+    assert skill_store.exists("project", "dead", roots["project"])

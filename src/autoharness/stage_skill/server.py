@@ -19,6 +19,7 @@ ponytail: the MCP stdio process shell (serve) + .mcp.json registration is deferr
 """
 import json
 import os
+import re
 import sys
 
 from autoharness import config
@@ -65,6 +66,15 @@ def _nonempty(params, key):
     return isinstance(v, str) and bool(v.strip())
 
 
+# Only absorbed_into gets checked against the library, so a fold stated in prose alone would pass as a
+# plain retirement and archive the skill even if its umbrella never landed.
+_FOLD_CLAIM = re.compile(r"\b(?:absorbed|folded|merged|consolidated)\s+(?:into|to|by)\b|合并到|并入|吸收到", re.IGNORECASE)
+
+
+def _claims_a_fold(reason):
+    return isinstance(reason, str) and _FOLD_CLAIM.search(reason) is not None
+
+
 def _schema_errors(params):
     action = params.get("action")
     if action not in _ACTIONS:
@@ -80,6 +90,13 @@ def _schema_errors(params):
     if not _nonempty(params, "reason") or not _nonempty(params, "evidence"):
         errors.append(("schema", "LED reason+evidence required"))
 
+    # a non-string here would pass every `is not None` check below and crash the drain later
+    mistyped = [("schema", f"{key} must be a string")
+                for key in ("body", "old_string", "new_string", "path", "level", "absorbed_into")
+                if params.get(key) is not None and not isinstance(params[key], str)]
+    if mistyped:
+        return errors + mistyped
+
     has_body = params.get("body") is not None
     has_delta = params.get("old_string") is not None or params.get("new_string") is not None
     has_files = params.get("files") is not None
@@ -87,6 +104,8 @@ def _schema_errors(params):
         errors.append(("schema", f"{action} takes no path (path is remove_file only)"))
     if action != "delete" and params.get("absorbed_into") is not None:
         errors.append(("schema", f"{action} takes no absorbed_into (delete only)"))
+    if action == "delete" and not params.get("absorbed_into") and _claims_a_fold(params.get("reason")):
+        errors.append(("schema", "reason says this skill was folded into another: name it in absorbed_into"))
     if action in _BODY_ACTIONS:
         if not has_body:
             errors.append(("schema", f"{action} requires body"))
@@ -133,6 +152,8 @@ def _content_errors(params):
     errors += validate.check_files(files, creating=params["action"] == "create")
     errors += validate.structure(body, files)
     if params.get("action") in ("create", "update"):
+        if not validate._body_lines(body):
+            errors.append(("completeness", "skill body is empty after frontmatter"))
         # The promoter is the authority, but it runs after this session is gone: a description gate
         # enforced only there is one the model can never learn from — it stages, exits, and the
         # verdict lands in a file nobody reads back to it. Checking here hands the error to the
@@ -174,6 +195,8 @@ def stage(params, *, run_id, root=None):
         intent_queue.append(run_id, intent, root)
     except ValueError as exc:
         return {"ok": False, "errors": [("queue", str(exc))], "intent": None}
+    except OSError:
+        return {"ok": False, "errors": [("queue", "unable to persist intent")], "intent": None}
     return {"ok": True, "errors": [], "intent": intent}
 
 
@@ -199,6 +222,8 @@ def handle(request, *, run_id, root=None):
                                        "inputSchema": TOOL_SCHEMA}]})
     if method == "tools/call":
         params = request.get("params") or {}
+        if not isinstance(params, dict):
+            return _err(req_id, -32602, "invalid params: expected an object")
         if params.get("name") != TOOL_NAME:
             return _err(req_id, -32602, f"unknown tool: {params.get('name')}")
         out = stage(params.get("arguments") or {}, run_id=run_id, root=root)
@@ -211,6 +236,9 @@ def handle(request, *, run_id, root=None):
 
 
 def serve(stdin=None, stdout=None):
+    if stdin is None and hasattr(sys.stdin, "reconfigure"):
+        # JSON-RPC arrives as UTF-8 whatever the locale codec is; responses are ASCII JSON
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     run_id = os.environ.get(config.RUN_ID_ENV) or config.INTERACTIVE_RUN_ID
@@ -219,7 +247,19 @@ def serve(stdin=None, stdout=None):
         line = line.strip()
         if not line:
             continue
-        response = handle(json.loads(line), run_id=run_id, root=root)
+        try:
+            request = json.loads(line)
+        except json.JSONDecodeError:
+            response = _err(None, -32700, "parse error")
+        else:
+            if not isinstance(request, dict):
+                response = _err(None, -32600, "invalid request")
+            else:
+                try:
+                    response = handle(request, run_id=run_id, root=root)
+                except Exception:  # last resort: one bad request must not end the session's server
+                    req_id = request.get("id")
+                    response = None if req_id is None else _err(req_id, -32603, "internal error")
         if response is not None:
             stdout.write(json.dumps(response) + "\n")
             stdout.flush()

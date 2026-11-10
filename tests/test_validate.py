@@ -1,3 +1,5 @@
+import pytest
+
 from autoharness.lib import validate
 
 GOOD_BODY = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---\n# Foo\nUse strftime.\n"
@@ -22,6 +24,33 @@ def test_safety_rejects_injection():
 def test_structure_missing_description():
     body = "---\nname: foo\n---\n# Foo\n"
     assert "structure" in _families(validate.validate(GOOD_INTENT, body))
+
+
+@pytest.mark.parametrize("closing", ["----", "---broken"])
+@pytest.mark.parametrize("later_rule", [False, True])
+def test_structure_rejects_malformed_frontmatter_closing_delimiter(closing, later_rule):
+    body = GOOD_BODY.replace("\n---\n", f"\n{closing}\n")
+    if later_rule:
+        from autoharness import config
+        body += "Use strftime.\n" * (config.SKILL_BODY_MAX_LINES + 1) + "---\n"
+    v = validate.validate(GOOD_INTENT, body)
+    assert not v["ok"]
+    assert ("structure", "missing/invalid frontmatter") in v["findings"]
+    if later_rule:
+        assert "altitude" in _families(v)
+
+
+def test_frontmatter_closing_delimiter_at_eof_is_structurally_valid():
+    body = "---\nname: foo\ndescription: Use when formatting a date as ISO.\n---"
+    v = validate.validate(GOOD_INTENT, body)
+    assert ("structure", "missing/invalid frontmatter") not in v["findings"]
+    assert ("completeness", "skill body is empty") in v["findings"]
+
+
+def test_indented_frontmatter_delimiter_in_block_scalar_passes():
+    body = "---\nname: foo\ndescription: |-\n  Use when formatting a date as ISO.\n  ---\n---\nUse strftime.\n"
+    v = validate.validate(GOOD_INTENT, body)
+    assert v["ok"], v["findings"]
 
 
 def test_led_required():
@@ -181,6 +210,13 @@ def test_referenced_py_escaping_ref_is_not_read(tmp_path):
         assert not any("secret_escape.py has syntax error" in m for m in msgs)
     finally:
         secret.unlink()
+
+def test_url_to_a_python_file_is_not_a_path_escape(tmp_path):
+    body = ("---\nname: foo\ndescription: d\n---\n"
+            "Fetch https://raw.githubusercontent.com/org/repo/main/tool.py before running.\n")
+    msgs = [m for _, m in validate.validate(GOOD_INTENT, body, base_dir=tmp_path)["findings"]]
+    assert not any("escapes the skill directory" in m for m in msgs)
+
 
 def test_referenced_subfile_escaping_ref_is_not_probed(tmp_path):
     # an escaping ref aimed at nothing outside must not be probed at all:
@@ -344,3 +380,88 @@ def test_secret_in_subfile_rejects():
 def test_pii_alone_does_not_reject():
     body = GOOD_BODY + "\nSet the git author to dev@example.com.\n"
     assert validate.validate(GOOD_INTENT, body)["ok"]
+
+
+def test_nested_frontmatter_keys_are_not_top_level_fields():
+    # a nested `name:` must not satisfy the required top-level name
+    body = "---\ndescription: Use when X.\nmetadata:\n  name: foo\n---\n# Foo\n"
+    v = validate.validate(GOOD_INTENT, body)
+    assert ("structure", "missing name") in v["findings"]
+    assert "name" not in validate._frontmatter(body)
+    # ...nor may a nested `category:` be validated as the skill's category
+    body = "---\nname: foo\ndescription: Use when X.\nmetadata:\n  category: a/b\n---\n# Foo\n"
+    assert "category" not in _families(validate.validate(GOOD_INTENT, body))
+    # nor a wrapped scalar line that happens to contain a colon
+    body = "---\nname: foo\ndescription: Use when X\n  and Y: z\n---\n# Foo\n"
+    assert set(validate._frontmatter(body)) == {"name", "description"}
+
+
+# cross-skill pointer resolution (#305): a name-shaped backticked span under the see/per/follow cue
+# (or matching an .archive/ name) must resolve through the same two-layer find the promoter routes
+# updates through — a reflector typo cannot land and stay.
+
+def _skill_env(monkeypatch, tmp_path):
+    g, p = tmp_path / "global", tmp_path / "project"
+    g.mkdir()
+    p.mkdir()
+    monkeypatch.setenv("AUTOHARNESS_GLOBAL_ROOT", str(g))
+    monkeypatch.setenv("AUTOHARNESS_PROJECT_ROOT", str(p))
+    return g, p
+
+
+def _store_skill(root, name):
+    s = root / "skills" / name
+    s.mkdir(parents=True)
+    (s / "SKILL.md").write_text("# S\n")
+
+
+def _ptr_body(*names):
+    return ("---\nname: foo\ndescription: Use when you need a sibling skill.\n---\n# Foo\n"
+            + "\n".join(f"(see `{n}`)" for n in names) + "\n")
+
+
+def test_missing_skill_pointer_rejected(monkeypatch, tmp_path):
+    g, _ = _skill_env(monkeypatch, tmp_path)
+    _store_skill(g, "regression-test-proves-the-bug")
+    body = _ptr_body("regression-test-fails-first")
+    msgs = [m for f, m in validate.validate(GOOD_INTENT, body, base_dir=tmp_path)["findings"]]
+    assert any(m == "referenced skill regression-test-fails-first does not exist" for m in msgs)
+
+
+def test_live_skill_pointer_from_the_other_layer_passes(monkeypatch, tmp_path):
+    g, _ = _skill_env(monkeypatch, tmp_path)
+    _store_skill(g, "regression-test-proves-the-bug")
+    v = validate.validate(GOOD_INTENT, _ptr_body("regression-test-proves-the-bug"), base_dir=tmp_path)
+    assert v["ok"], v["findings"]
+
+
+def test_ambiguous_two_layer_name_is_a_real_pointer(monkeypatch, tmp_path):
+    g, p = _skill_env(monkeypatch, tmp_path)
+    _store_skill(g, "both-layer-skill")
+    _store_skill(p, "both-layer-skill")
+    v = validate.validate(GOOD_INTENT, _ptr_body("both-layer-skill"), base_dir=tmp_path)
+    assert v["ok"], v["findings"]
+
+
+def test_name_shaped_span_without_cue_is_not_a_pointer(monkeypatch, tmp_path):
+    _skill_env(monkeypatch, tmp_path)
+    body = ("---\nname: foo\ndescription: use when composing a stack.\n---\n"
+            "Fuse `docker-compose` with the stack.\n")
+    v = validate.validate(GOOD_INTENT, body, base_dir=tmp_path)
+    assert v["ok"], v["findings"]
+
+
+def test_pointer_to_the_self_is_exempt(monkeypatch, tmp_path):
+    _skill_env(monkeypatch, tmp_path)
+    intent = {**GOOD_INTENT, "name": "new-umbrella-skill"}
+    v = validate.validate(intent, _ptr_body("new-umbrella-skill"), base_dir=tmp_path)
+    assert v["ok"], v["findings"]
+
+
+def test_archived_name_is_a_dangling_pointer_signal(monkeypatch, tmp_path):
+    p = _skill_env(monkeypatch, tmp_path)[1]
+    (p / "skills" / ".archive" / "retired-skill").mkdir(parents=True)
+    body = ("---\nname: foo\ndescription: d\n---\n"
+            "This used to live in `retired-skill` before the fold.\n")
+    msgs = [m for _, m in validate.validate(GOOD_INTENT, body, base_dir=tmp_path)["findings"]]
+    assert any("referenced skill retired-skill does not exist" in m for m in msgs)
