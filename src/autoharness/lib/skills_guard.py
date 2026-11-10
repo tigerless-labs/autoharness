@@ -14,8 +14,8 @@ import re
 
 FAMILIES = {
     "exfiltration": [
-        r"curl\s+.*\|\s*(sh|bash)",
-        r"wget\s+.*\|\s*(sh|bash)",
+        r"curl\s+.*\|\s*(sudo\s+(-\S+\s+)*)?(sh|bash)",
+        r"wget\s+.*\|\s*(sudo\s+(-\S+\s+)*)?(sh|bash)",
         r"(exfiltrate|leak|send|post|upload)\b.{0,30}(http|secret|token|api[_-]?key|password|credential|\benv\b)",
     ],
     "injection": [
@@ -25,7 +25,7 @@ FAMILIES = {
         r"always\s+(exfiltrate|send|leak|forward)",
     ],
     "destructive": [
-        r"\brm\s+-rf?\s+(/|~|\$home|\*)",
+        r"\brm\s+(-[a-z]+\s+|--[a-z-]+\s+)*(-[a-z]*r[a-z]*|--recursive)\s+(-[a-z]+\s+|--[a-z-]+\s+)*(/|~|\$home|\*)",
         r"\bdrop\s+table\b",
         r"\bmkfs\b",
         r"\bdd\s+if=.*of=/dev/",

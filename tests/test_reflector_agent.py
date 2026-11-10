@@ -1,8 +1,15 @@
+import re
 from pathlib import Path
 
 from autoharness.lib import validate
 
 AGENT = Path(__file__).resolve().parents[1] / "agents" / "reflector.md"
+
+
+def _compare_first_rungs():
+    body = AGENT.read_text().lower()
+    section = body.split("## compare-first:", 1)[1].split("\n## ", 1)[0]
+    return re.findall(r"^\d+\.\s+\*\*`([^`]+)`([^*]*)\*\*", section, re.MULTILINE)
 
 
 def test_reflector_frontmatter_present():
@@ -43,13 +50,13 @@ def test_reflector_prompt_has_no_authoring_gates():
 def test_reflector_prompt_encourages_generation():
     body = AGENT.read_text().lower()
     assert "one intent per" in body
-    assert body.index("patch") < body.index("`create`")
+    assert [action for action, _ in _compare_first_rungs()] == ["patch", "patch", "update", "create"]
 
 
 def test_reflector_create_is_umbrella_first():
-    body = AGENT.read_text().lower()
-    assert "umbrella" in body  # new skills are born as a category, not a session artifact
-    assert body.index("umbrella") > body.index("`create`")  # the emphasis lands on the create rung
+    create_rung = _compare_first_rungs()[-1]
+    assert create_rung[0] == "create"
+    assert "umbrella" in create_rung[1]  # the emphasis lands on the create rung itself
 
 
 def test_reflector_can_consolidate_existing_overlap():
@@ -83,9 +90,8 @@ def test_reflector_picks_category_from_the_injected_index():
     # our defence against category inflation: hermes gets it free (categories are directories the
     # model already sees); we have to say it, because the field is free text
     body = AGENT.read_text().lower()
-    assert "category" in body and "index" in body
-    i = body.index("`category:`")
-    assert "index" in body[i - 400:i + 400]
+    rule = next(ln for ln in body.splitlines() if "`category:`" in ln)
+    assert "index" in rule  # the reuse-from-index instruction sits on the category rule itself
 
 
 def test_reflector_may_not_claim_the_promoter_verdict():

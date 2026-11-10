@@ -21,6 +21,14 @@ def dir_link():
 
 
 @pytest.fixture(autouse=True)
+def _no_host_project_dir(monkeypatch):
+    # the host (and spawn, for a child) pin the project root in env; inherited here they would pin
+    # every cwd-based root test
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    monkeypatch.delenv(config.PROJECT_ROOT_ENV, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_notifier(monkeypatch):
     # config reads AUTOHARNESS_NOTIFY* at import: without this, a contributor's own notifier (a team
     # Slack hook, desktop popups) would fire for every drain the suite runs

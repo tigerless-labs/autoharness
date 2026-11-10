@@ -1,12 +1,12 @@
 <h1 align="center">AutoHarness</h1>
-<p align="center"><strong>Self-Learning Skills for Claude Code</strong></p>
+<p align="center"><strong>Building the self-learning layer next-gen agents will ship with</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftigerless-labs%2Fautoharness%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=release&prefix=v&color=brightgreen" alt="release" /> <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="python" /> <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg" alt="platform" /> <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" />
+  <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftigerless-labs%2Fautoharness%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=release&prefix=v&color=brightgreen" alt="release" /> <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="python" /> <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg" alt="platform" /> <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" /> <a href="https://repositoryradar.dev/repo/tigerless-labs/autoharness"><img src="https://repositoryradar.dev/badge/tigerless-labs/autoharness.svg" alt="Featured on Repository Radar" /></a>
 </p>
 
-**autoharness is a self-learning skill layer for Claude Code.** It **learns** skills from your real
-sessions, **merges** same-scenario ones instead of stacking near-duplicates, **updates** them in use,
+**With autoharness, we're building the self-learning layer next-gen agents will ship with, learning skills from real work.**
+Today it runs on Claude Code: it **learns** skills from your real sessions, **merges** same-scenario ones instead of stacking near-duplicates, **updates** them in use,
 and **prunes** any that stop getting used — so the layer **stays clean on its own**, **touching only
 the skills it wrote itself**.
 
@@ -46,22 +46,27 @@ Nothing to invoke, but one entry point exists when you want it: **`/learn`** dis
 you're in right now — say it after working something out and the lesson goes through the same
 proposal-and-validation chain the background pass uses.
 
-**MCP server naming.** The `.mcp.json` registers the server as `stage_skill`, but agent
+**MCP server naming.** `.claude-plugin/plugin.json` registers the server as `stage_skill`, but agent
 definitions reference the fully-qualified name `mcp__plugin_autoharness_stage_skill__stage_skill`.
 This translation is automatic: the plugin runtime constructs the qualified name from the plugin
-name in `.claude-plugin/plugin.json` (`autoharness`) and the server key in `.mcp.json`.
-Outside the plugin context (e.g., testing with `claude` directly), the tool would be available
-as `mcp__stage_skill__stage_skill` — but the agent allowlists still reference the plugin-namespaced
-form. Always install as a plugin to match both names.
+name (`autoharness`) and the server key. Outside the plugin context (e.g., registering the server
+by hand), the tool would be available as `mcp__stage_skill__stage_skill` — but the agent allowlists
+still reference the plugin-namespaced form. Always install as a plugin to match both names. The
+server is declared in the manifest, not in a root `.mcp.json`, because the plugin root is the repo
+root: a `.mcp.json` there would also be this checkout's project config, which outranks the plugin's
+same-command server and leaves the reflector without its tool in sessions inside the repo.
 
 
 ### Update
+
+Update and uninstall are shown in their terminal form (`claude plugin …`); inside Claude Code the same
+operations live in the `/plugin` menu.
 
 Update from a terminal — refresh the catalog by marketplace name, then update the plugin by its
 **full `plugin@marketplace` id**, then restart:
 
 ```
-claude plugin marketplace update autoharness       
+claude plugin marketplace update autoharness
 claude plugin update autoharness@autoharness
 ```
 
@@ -78,8 +83,8 @@ field is bumped.
 ### Uninstall
 
 ```
-claude plugin uninstall autoharness@autoharness     
-claude plugin marketplace remove autoharness       
+claude plugin uninstall autoharness@autoharness
+claude plugin marketplace remove autoharness
 ```
 
 Uninstalling only stops it from running — the skills it landed and its own state live **outside** the
@@ -98,6 +103,7 @@ configure unless you want to change the pace.
 | Variable | Default | What it does |
 |---|---|---|
 | `AUTOHARNESS_DISABLE_GLOBAL` | `0` | Set to `1` for a project-only deployment. Global create intents are rejected before staging and landing; global request/use/view counters, archiving, orphan sweeps, recall, curator snapshots, and metrics are skipped. Existing global skills stay untouched. Project-layer learning continues normally. |
+| `AUTOHARNESS_GLOBAL_ROOT` | _(unset)_ | Replaces `~/.claude` as the global layer's root. Unset, or set to blank, is stock behaviour — the real home. Set it when autoharness itself has to run sandboxed (a pinned clone, CI, an evaluation harness) and the production skills library must stay untouched. The project layer is unaffected: it is still keyed to the session's own checkout. |
 
 **Cadence — when it learns**
 
@@ -149,7 +155,7 @@ Set them in the environment Claude Code launches with — either the shell
 ```
 
 Hooks read the environment on every event, so a change applies from the next session. The defaults
-are deliberate placeholders pending empirical calibration (tracked under `experiments/`); byte caps
+are deliberate placeholders pending empirical calibration; byte caps
 on captured windows and staged files are fixed constants, not env knobs.
 
 ## How it works
@@ -167,7 +173,7 @@ gets offered is a property of this plugin rather than a hope about host behavior
 |---|---|
 | **CAP** · capture | Hook-driven dumb pipe: grabs each turn (user input, agent output, tool I/O), redacts at egress, points back at the host log instead of copying it. It also holds the trigger, which is deterministic and counts one thing — tool calls. The turn that crosses the threshold ends with a reflection; nothing about the content is judged here. |
 | **REF** · reflect | Reads the episode, compares it against the existing skill index, and decides add / merge / patch / drop a support file / delete — emitting an intent (body, delta, or path, plus reason and evidence). Where a new lesson contradicts an older skill, it must rewrite the stale one in the same run rather than leave the library arguing with itself. Proposes only; it has no write tools, and a fork carrier's inherited ones are denied at the hook. |
-| **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. A new skill's description has to carry its trigger early enough to survive the index's truncation — a cue that lands past the cut leaves the skill as half a sentence on the very surface meant to recall it. A fold must name the skill that absorbed the deleted one, and the umbrella has to be a live skill autoharness manages — an invented name fails the whole intent rather than losing the content. Each run leaves an account of what landed and what was rejected. |
+| **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. A new skill's description has to carry its trigger early enough to survive the index's truncation — a cue that lands past the cut leaves the skill as half a sentence on the very surface meant to recall it. A fold must name the skill that absorbed the deleted one, and the umbrella has to be a live skill autoharness manages — an invented name fails the whole intent rather than losing the content. The same goes for an umbrella the run failed to write: the delete waits for the run's writes and is rejected with them. Each run leaves an account of what landed and what was rejected. |
 | **IDX** · surface | Builds the session-start index: the skills autoharness wrote, grouped by category, one truncated description per line, tagged by layer. Archived and hand-written skills are excluded, an empty library injects nothing, and the previous run's landed/rejected line rides along — so a rejected proposal is visible instead of silent. |
 | **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by usage rate — loads over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). Three signals are kept apart: a **load** (the model invoked the skill) is the only thing the rate counts; a **view** (a session read into the skill's directory) is evidence it had recall value, but not adherence; a **patch** marks the skill being improved, so a load after one reads as reuse-after-improvement. New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. At maturity, graduation review archives only a symbol that was never loaded *and* never viewed — no evidence of use is not the same as evidence of no use. For graduates, capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
 | **curator** · consolidate | The rarer whole-library pass: reads the library as one thing and folds near-duplicates under umbrellas, which is the judgment a single episode can't make. Snapshots both skill trees before it starts, since a merge is the one operation an atomic rename can't undo. |
