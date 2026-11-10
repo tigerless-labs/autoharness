@@ -257,7 +257,8 @@ def _fake_curator_script(tmp_path):
         "              'new_string': 'body\\n## delta\\nabsorbed', 'reason': 'fold into umbrella',\n"
         "              'evidence': ev}, run_id=run_id, root=root)\n"
         "server.stage({'action': 'delete', 'name': 'widget-delta',\n"
-        "              'reason': 'absorbed into widgets', 'evidence': ev}, run_id=run_id, root=root)\n"
+        "              'reason': 'absorbed into widgets', 'absorbed_into': 'widgets', 'evidence': ev},\n"
+        "             run_id=run_id, root=root)\n"
         "sys.exit(0)\n"
     )
     return _executable(script)
@@ -434,3 +435,13 @@ def test_successful_spawn_writes_no_spawn_error(tmp_path):
     spawn.run("WINDOW", "run-ok", roots=roots, spec_path=config.FORMAT_SPEC,
               spawn_fn=lambda a, e, b: ok)
     assert not (roots["project"] / "autoharness" / "runs" / "run-ok.json").exists()
+
+
+def test_description_index_survives_a_foreign_skill_that_is_not_utf8(tmp_path):
+    # user and plugin skills are read for compare-first; one latin-1 file must not kill every reflection
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    legacy = roots["project"] / "skills" / "legacy"
+    legacy.mkdir(parents=True)
+    (legacy / "SKILL.md").write_bytes(b"---\nname: legacy\ndescription: caf\xe9 notes\n---\nbody\n")
+    out = spawn.description_index(roots)
+    assert "- legacy [project]: caf" in out
