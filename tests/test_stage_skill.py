@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from autoharness import config
 from autoharness.lib import intent_queue, layer
 from autoharness.stage_skill import server
@@ -354,6 +356,26 @@ def test_delete_accepts_absorbed_into(tmp_path):
     r = server.stage({"action": "delete", "name": "n", "reason": "r", "evidence": "e",
                       "absorbed_into": "umbrella"}, run_id="r1", root=tmp_path)
     assert r["ok"]
+
+
+@pytest.mark.parametrize("reason", [
+    "Absorbed into expo-mobile-app-release as its unit-test section.",
+    "folded  into the deploy umbrella",
+    "Merged by hand: consolidated into deploy",
+    "已合并到 deploy",
+])
+def test_delete_claiming_a_fold_must_name_the_umbrella(tmp_path, reason):
+    params = {"action": "delete", "name": "narrow", "reason": reason, "evidence": "e"}
+    refused = server.stage(params, run_id="r1", root=tmp_path)
+    assert not refused["ok"] and refused["errors"][0][0] == "schema"
+    assert intent_queue.read("r1", tmp_path) == []
+    assert server.stage({**params, "absorbed_into": "deploy"}, run_id="r1", root=tmp_path)["ok"]
+
+
+@pytest.mark.parametrize("reason", ["stale", "merged", "no longer used", "unfolded into nothing useful"])
+def test_plain_retirement_needs_no_umbrella(tmp_path, reason):
+    assert server.stage({"action": "delete", "name": "narrow", "reason": reason, "evidence": "e"},
+                        run_id="r1", root=tmp_path)["ok"]
 
 
 def test_absorbed_into_rejected_on_non_delete(tmp_path):

@@ -49,10 +49,18 @@ _WHEN = re.compile(r"(?i)\bwhen")
 # names a skill that once existed, the exact mark of a reflector referencing history it misremembers.
 _SKILL_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+")
 _SKILL_CUE = re.compile(r"\b(?:see|per|follow)\b[^\n`]{0,40}$")
+_USE_WHEN = re.compile(r"(?i)\buse\s+when\b")
+
+
+def trigger_cue_start(text):
+    """Return the first cue boundary, using the same proxy as description validation."""
+    matches = [match for pattern in (_USE_WHEN, _WHEN, _QUOTED_PHRASE)
+               if (match := pattern.search(text))]
+    return min((match.start() for match in matches), default=None)
 
 
 def _has_cue(text):
-    return bool(_WHEN.search(text) or _QUOTED_PHRASE.search(text))
+    return trigger_cue_start(text) is not None
 
 
 def _block_scalar(lines, start, parent_indent, header):

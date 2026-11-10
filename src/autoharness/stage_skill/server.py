@@ -19,6 +19,7 @@ ponytail: the MCP stdio process shell (serve) + .mcp.json registration is deferr
 """
 import json
 import os
+import re
 import sys
 
 from autoharness import config
@@ -65,6 +66,15 @@ def _nonempty(params, key):
     return isinstance(v, str) and bool(v.strip())
 
 
+# Only absorbed_into gets checked against the library, so a fold stated in prose alone would pass as a
+# plain retirement and archive the skill even if its umbrella never landed.
+_FOLD_CLAIM = re.compile(r"\b(?:absorbed|folded|merged|consolidated)\s+(?:into|to|by)\b|合并到|并入|吸收到", re.IGNORECASE)
+
+
+def _claims_a_fold(reason):
+    return isinstance(reason, str) and _FOLD_CLAIM.search(reason) is not None
+
+
 def _schema_errors(params):
     action = params.get("action")
     if action not in _ACTIONS:
@@ -94,6 +104,8 @@ def _schema_errors(params):
         errors.append(("schema", f"{action} takes no path (path is remove_file only)"))
     if action != "delete" and params.get("absorbed_into") is not None:
         errors.append(("schema", f"{action} takes no absorbed_into (delete only)"))
+    if action == "delete" and not params.get("absorbed_into") and _claims_a_fold(params.get("reason")):
+        errors.append(("schema", "reason says this skill was folded into another: name it in absorbed_into"))
     if action in _BODY_ACTIONS:
         if not has_body:
             errors.append(("schema", f"{action} requires body"))

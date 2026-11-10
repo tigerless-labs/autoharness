@@ -108,7 +108,9 @@ def _reflect(event, result, roots, launch=None):
     transcript_path = event.get("transcript_path")
     if not transcript_path:
         return
-    (launch or _detached_launch)(transcript_path, result.get("session_id", ""), _run_id(result), roots)
+    return (launch or _detached_launch)(
+        transcript_path, result.get("session_id", ""), _run_id(result), roots
+    )
 
 
 def _consolidate_launch(run_id, roots):
@@ -145,15 +147,23 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
             result = on_stop.on_stop(event, root=proot)
             if drain_error:
                 result = {**result, "drain_error": drain_error}
+            launch_error = None
             if result.get("triggered"):
-                fire(event, result, roots)
+                launch_result = fire(event, result, roots)
+                if isinstance(launch_result, dict) and launch_result.get("error"):
+                    launch_error = launch_result["error"]
             if config.CONSOLIDATE_EVERY_N and pcount % config.CONSOLIDATE_EVERY_N == 0:
                 curate(_curate_run_id(event, pcount), roots)  # periodic content-level merge pass (rarer than reflection)
-            return {"handled": name, "result": result}
+            verdict = {"handled": name, "result": result}
+            if launch_error:
+                verdict["error"] = launch_error
+            return verdict
         if name == "SessionEnd":
             result = on_session_end.on_session_end(event, root=proot)
             if result.get("triggered"):
-                fire(event, result, roots)
+                launch_result = fire(event, result, roots)
+                if isinstance(launch_result, dict) and launch_result.get("error"):
+                    return {"handled": name, "result": result, "error": launch_result["error"]}
             return {"handled": name, "result": result}
         if name == "PreToolUse":
             tool = event.get("tool_name")
@@ -185,6 +195,8 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
 
 
 def _emit(verdict):
+    if verdict.get("error"):
+        print(json.dumps({"error": verdict["error"]}), file=sys.stderr)
     if verdict.get("deny"):
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -202,8 +214,6 @@ def _emit(verdict):
     handled = verdict.get("handled")
     if handled:
         print(json.dumps({"handled": handled, "result": result}), file=sys.stderr)
-    elif verdict.get("error"):
-        print(json.dumps({"error": verdict["error"]}), file=sys.stderr)  # a crashed handler is not silent
 
 
 def main():
