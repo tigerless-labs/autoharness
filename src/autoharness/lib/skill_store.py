@@ -4,16 +4,30 @@ Persistence uses atomic (same-dir temp + os.replace) in this one place, so live 
 find extends Hermes's `_find_skill` to the union of the global+project layers; the same name across
 both layers → error (promoter uses this to disambiguate the layer when resolving update/delete).
 apply_delta requires old_string to match uniquely (rejects both not-found and multiple-match
-ambiguity), a deterministic rebuild. archive moves symbol_dir into the layer's archive (preserving
-LED/sidecar) — `skills/.archive`, or the state directory when AUTOHARNESS_STATE_HOME is set, which may
-sit on another filesystem, hence a move rather than a rename; landing a delete and MNG (Phase 6)
-eviction share this one path.
+ambiguity), a deterministic rebuild. archive atomically moves symbol_dir into `.archive` (preserving
+LED/sidecar); landing a delete and MNG (Phase 6) eviction share this one path.
 """
+import json
+import os
 import shutil
+import time
 
-from autoharness.lib import atomic, layer
+from autoharness import config
+from autoharness.lib import atomic, layer, lock
 
 SKILL_FILE = "SKILL.md"
+
+
+def _collision_safe_dest(dest):
+    if not dest.exists():
+        return dest
+    suffix = time.strftime("%Y%m%dT%H%M%S")
+    candidate = dest.with_name(f"{dest.name}.{suffix}")
+    counter = 2
+    while candidate.exists():
+        candidate = dest.with_name(f"{dest.name}.{suffix}.{counter}")
+        counter += 1
+    return candidate
 
 
 def skill_path(lyr, name, root=None):
@@ -26,7 +40,7 @@ def write_body(lyr, name, body, root=None):
 
 def read_body(lyr, name, root=None):
     p = skill_path(lyr, name, root)
-    return p.read_text() if p.exists() else None
+    return p.read_text(encoding="utf-8") if p.exists() else None
 
 
 def exists(lyr, name, root=None):
@@ -35,7 +49,7 @@ def exists(lyr, name, root=None):
 
 def find(name, roots=None):
     roots = roots or {}
-    hits = [lyr for lyr in layer.LAYERS if exists(lyr, name, roots.get(lyr))]
+    hits = [lyr for lyr in config.active_layers() if exists(lyr, name, roots.get(lyr))]
     if len(hits) > 1:
         raise ValueError(f"ambiguous skill {name!r} present in layers {hits}")
     return hits[0] if hits else None
@@ -57,15 +71,15 @@ def remove(lyr, name, root=None):
 
 
 def archive(lyr, name, root=None):
-    sdir = layer.symbol_dir(lyr, name, root)
-    if not sdir.exists():
-        return None
-    dest = layer.archive_dir(lyr, root) / name
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        shutil.rmtree(dest)
-    shutil.move(sdir, dest)
-    return dest
+    with lock.file_lock(layer.symbol_lock_path(lyr, name, root)):
+        sdir = layer.symbol_dir(lyr, name, root)
+        if not sdir.exists():
+            return None
+        dest = layer.archive_dir(lyr, root) / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest = _collision_safe_dest(dest)
+        os.replace(sdir, dest)
+        return dest
 
 
 def restore(lyr, name, root=None):
@@ -74,10 +88,36 @@ def restore(lyr, name, root=None):
         return None
     dest = layer.symbol_dir(lyr, name, root)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        shutil.rmtree(dest)
-    shutil.move(src, dest)
+    dest = _collision_safe_dest(dest)
+    os.replace(src, dest)
     return dest
+
+
+# an atomic write lives as a .tmp for milliseconds; a younger one may be another hook's write in flight
+ORPHAN_TMP_MIN_AGE_S = 60
+
+
+def _ours(d):
+    """A skill dir autoharness wrote (its sidecar says so), or the debris of one of its creates that died
+    inside the sidecar write (nothing but .tmp files). Anyone else's skill is left alone."""
+    if d.is_symlink() or not d.is_dir():
+        return False
+    try:
+        meta = json.loads((d / ".sidecar.json").read_text(encoding="utf-8"))
+        return isinstance(meta, dict) and meta.get("created_by") == "agent"
+    except (OSError, ValueError):
+        pass
+    try:
+        return all(p.is_file() and p.suffix == ".tmp" for p in d.iterdir())
+    except OSError:
+        return False  # unreadable: not something we can tell is ours
+
+
+def _listing(d):
+    try:
+        return list(d.iterdir())
+    except OSError:
+        return []  # an unreadable dir: nothing to sweep there, and the drain must still run
 
 
 def sweep_orphans(lyr, root=None):
@@ -85,7 +125,19 @@ def sweep_orphans(lyr, root=None):
     if not skills.exists():
         return []
     removed = []
-    for tmp in skills.rglob("*.tmp"):
-        tmp.unlink()
+    cutoff = time.time() - ORPHAN_TMP_MIN_AGE_S
+    archive = layer.archive_dir(lyr, root)
+    try:  # a linked .archive leads outside the layer: never walk it; an unreadable layer has none to walk
+        walk_archive = archive.is_dir() and not archive.is_symlink()
+    except OSError:
+        walk_archive = False
+    dirs = [*_listing(skills), *(_listing(archive) if walk_archive else [])]
+    for tmp in (t for d in dirs if _ours(d) for t in d.rglob("*.tmp")):
+        try:
+            if tmp.stat().st_mtime > cutoff:
+                continue
+            tmp.unlink()
+        except FileNotFoundError:
+            continue  # its writer renamed it into place meanwhile
         removed.append(tmp)
     return removed

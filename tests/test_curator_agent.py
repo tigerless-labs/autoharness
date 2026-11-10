@@ -23,7 +23,7 @@ def test_curator_tools_are_least_privilege():
 
 def test_curator_ports_umbrella_levers():
     body = AGENT.read_text().lower()
-    for lever in ("umbrella", "class-level", "prefix", "references/", "templates/", "scripts/"):
+    for lever in ("umbrella", "class-level", "prefix", "references/", "templates/", "scripts/", "assets/"):
         assert lever in body
 
 

@@ -1,3 +1,8 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from autoharness.lib import counters
@@ -10,6 +15,19 @@ def test_request_counter_per_layer_independent(tmp_path):
     assert counters.bump_request("project", p) == 1
     assert counters.request_count("global", g) == 2
     assert counters.request_count("project", p) == 1
+
+
+def test_bump_serialized_across_processes(tmp_path):
+    code = (
+        "import sys, pathlib\n"
+        "from autoharness.lib import counters\n"
+        "for _ in range(25):\n"
+        "    counters.bump_request('project', pathlib.Path(sys.argv[1]))\n"
+    )
+    env = {**os.environ, "PYTHONPATH": str(Path(counters.__file__).parents[2])}
+    procs = [subprocess.Popen([sys.executable, "-c", code, str(tmp_path)], env=env) for _ in range(4)]
+    assert [p.wait() for p in procs] == [0, 0, 0, 0]
+    assert counters.request_count("project", tmp_path) == 100
 
 
 def test_missing_counter_reads_zero(tmp_path):

@@ -55,11 +55,12 @@ def test_anchor_offsets_denominator():
     assert out == []
 
 
-def test_capacity_tiebreak_by_name_deterministic():
-    # equal rates, capacity forces one out → lexicographically-first name archived
+def test_capacity_tiebreak_by_hash_is_deterministic():
+    # Equal rates use a stable hash rather than favoring the alphabetically first name.
     members = [_m("b", 10), _m("a", 10), _m("c", 10)]  # all rate .1
-    out = lifecycle.evaluate(members, request_count=100, maturity=10, capacity=2)
-    assert out == ["a"]
+    for ordered in (members, list(reversed(members))):
+        out = lifecycle.evaluate(ordered, request_count=100, maturity=10, capacity=2)
+        assert out == ["c"]
 
 
 def test_probation_does_not_count_toward_capacity():

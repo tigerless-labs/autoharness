@@ -13,6 +13,7 @@ def test_learn_skill_exists_and_passes_own_gate():
     v = validate.validate({"action": "create", "name": "learn", "level": "project",
                            "reason": "r", "evidence": "e"}, body)
     assert v["ok"], v["findings"]  # our own linter: trigger cue, altitude, safety, completeness
+    assert "remember" in body and "distill" in body
 
 
 def test_learn_skill_routes_through_stage_skill_not_writes():

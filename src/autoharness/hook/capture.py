@@ -19,7 +19,45 @@ TRUNCATION_MARK = "...[truncated]"
 
 
 def _clip(line, cap):
-    return line if len(line) <= cap else line[:cap] + TRUNCATION_MARK
+    """Clip *line* so its UTF-8 encoding stays within *cap* bytes."""
+    encoded = line.encode("utf-8")
+    if len(encoded) <= cap:
+        return line
+    marker = TRUNCATION_MARK.encode("utf-8")[:max(0, cap)]
+    truncated = encoded[:max(0, cap - len(marker))].decode("utf-8", errors="ignore")
+    return truncated + marker.decode("utf-8")
+
+
+def _bounded_records(lines, cap):
+    """Fit a newest-first tail without cutting into its first retained record."""
+    if len("\n".join(lines).encode("utf-8")) <= cap:
+        return "\n".join(lines)
+    marker = TRUNCATION_MARK.encode("utf-8")[:cap].decode("utf-8")
+    remaining = cap - len(marker.encode("utf-8"))
+    kept = []
+    for line in reversed(lines):
+        cost = len(line.encode("utf-8")) + 1
+        if cost > remaining:
+            break
+        kept.append(line)
+        remaining -= cost
+    return "\n".join([marker, *reversed(kept)])
+
+
+def _bounded_records(lines, cap):
+    """Fit a newest-first tail without cutting into its first retained record."""
+    if len("\n".join(lines).encode("utf-8")) <= cap:
+        return "\n".join(lines)
+    marker = TRUNCATION_MARK.encode("utf-8")[:cap].decode("utf-8")
+    remaining = cap - len(marker.encode("utf-8"))
+    kept = []
+    for line in reversed(lines):
+        cost = len(line.encode("utf-8")) + 1
+        if cost > remaining:
+            break
+        kept.append(line)
+        remaining -= cost
+    return "\n".join([marker, *reversed(kept)])
 
 
 def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes=None,
@@ -29,20 +67,32 @@ def window(transcript_path, offset=0, *, max_record_bytes=None, max_window_bytes
     path = Path(transcript_path)
     if not path.exists():
         return "", 0
-    data = path.read_bytes()
-    new_offset = len(data)
-    if not 0 <= offset <= new_offset:
-        offset = 0
+    # Seek past the offset rather than reading the file to slice it away: a hook
+    # runs per turn, and a long session's transcript is megabytes of history this
+    # call already knows it does not need.
+    with open(path, "rb") as f:
+        new_offset = f.seek(0, 2)
+        if not 0 <= offset <= new_offset:
+            offset = 0
+        f.seek(offset)
+        tail = f.read(new_offset - offset)
     lines = [_clip(line, record_cap)
-             for line in data[offset:].decode("utf-8", errors="replace").splitlines()]
+             for line in tail.decode("utf-8", errors="replace").splitlines()]
     kept, total = [], 0
     for line in reversed(lines):
-        total += len(line) + 1
+        total += len(line.encode("utf-8")) + 1
         if total > window_cap:
             kept.append(TRUNCATION_MARK)
             break
         kept.append(line)
-    return redact.redact("\n".join(reversed(kept)), rules_path), new_offset
+    text = redact.redact(_bounded_records(list(reversed(kept)), window_cap), rules_path)
+    encoded = text.encode("utf-8")
+    if len(encoded) > window_cap:
+        marker = TRUNCATION_MARK.encode("utf-8")[:window_cap]
+        budget = window_cap - len(marker)
+        tail = encoded[-budget:].decode("utf-8", errors="ignore") if budget else ""
+        text = marker.decode("utf-8") + tail
+    return text, new_offset
 
 
 def _digest_record(line, max_chars):
@@ -77,7 +127,8 @@ def digest(transcript_path, end_offset, *, max_exchanges=None, max_record_chars=
     path = Path(transcript_path)
     if not path.exists() or end_offset <= 0:
         return ""
-    data = path.read_bytes()[:end_offset]
+    with open(path, "rb") as f:
+        data = f.read(end_offset)
     kept, total, users_seen = [], 0, 0
     for line in reversed(data.decode("utf-8", errors="replace").splitlines()):
         try:
@@ -88,7 +139,7 @@ def digest(transcript_path, end_offset, *, max_exchanges=None, max_record_chars=
             continue
         role, text = entry
         rendered = f"{role}: {text}"
-        total += len(rendered) + 1
+        total += len(rendered.encode("utf-8")) + 1
         if total > digest_cap:
             kept.append(TRUNCATION_MARK)
             break
@@ -97,4 +148,11 @@ def digest(transcript_path, end_offset, *, max_exchanges=None, max_record_chars=
             users_seen += 1
             if users_seen >= exchanges:
                 break
-    return redact.redact("\n".join(reversed(kept)), rules_path) if kept else ""
+    text = redact.redact(_bounded_records(list(reversed(kept)), digest_cap), rules_path) if kept else ""
+    encoded = text.encode("utf-8")
+    if len(encoded) > digest_cap:
+        marker = TRUNCATION_MARK.encode("utf-8")[:digest_cap]
+        budget = digest_cap - len(marker)
+        tail = encoded[-budget:].decode("utf-8", errors="ignore") if budget else ""
+        text = marker.decode("utf-8") + tail
+    return text

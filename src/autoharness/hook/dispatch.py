@@ -15,24 +15,49 @@ platform contract pins the details:
 
 ponytail: detached launch is a fire-and-forget Popen; robustness of orphan / timeout isolation left for observation.
 """
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import uuid
 
-from autoharness import config
-from autoharness.hook import (
+MIN_PYTHON = (3, 11)  # tomllib (lib/redact.py) entered the stdlib here; README badge and CI matrix pin the same floor
+
+
+def _below_floor(version):
+    return (f"autoharness: needs Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+, got "
+            f"{version[0]}.{version[1]} at {sys.executable}. Every hook is off for this session; "
+            f"point the hooks.json commands at a newer interpreter.")
+
+
+# this guard runs before the package imports on purpose: the chain below is module level end to end
+# (dispatch -> promoter -> redact -> tomllib), so on an older interpreter the process dies at import
+# and the fail-safe in dispatch() never gets the chance to catch it -- the host shows a generic hook
+# error and nothing inside the plugin names the cause. Exit 0: a host hook must not fail the session.
+if sys.version_info[:2] < MIN_PYTHON:
+    print(_below_floor(sys.version_info), file=sys.stderr)
+    raise SystemExit(0)
+
+from autoharness import config  # noqa: E402
+from autoharness.hook import (  # noqa: E402
     on_session_end,
     on_session_start,
     on_skill_call,
     on_stop,
     promoter,
 )
-from autoharness.lib import counters, layer
+from autoharness.lib import counters, layer  # noqa: E402
 
 _SANITIZE = re.compile(r"[^A-Za-z0-9_-]")
 _WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+_CHILD_ALLOWED_TOOLS = frozenset((
+    "Read",
+    "Grep",
+    "Glob",
+    "mcp__plugin_autoharness_stage_skill__stage_skill",
+))
 
 
 def _roots(roots):
@@ -40,35 +65,52 @@ def _roots(roots):
 
 
 def _run_id(result):
-    sid = _SANITIZE.sub("", str(result.get("session_id") or "")) or "run"
-    return f"{sid}-{result.get('count', 0)}"
+    raw = str(result.get("session_id") or "")
+    sid = _SANITIZE.sub("", raw)
+    if not sid:
+        sid = hashlib.sha256(raw.encode()).hexdigest()[:8] if raw else "run"
+    return f"{sid}-{result.get('count', 0)}-{uuid.uuid4().hex}"
 
 
 def _curate_run_id(event, pcount):
-    sid = _SANITIZE.sub("", str(event.get("session_id") or "")) or "run"
+    raw = str(event.get("session_id") or "")
+    sid = _SANITIZE.sub("", raw)
+    if not sid:
+        sid = hashlib.sha256(raw.encode()).hexdigest()[:8] if raw else "run"
     return f"{sid}-c{pcount}"  # keyed on the monotonic request count → unique per curator launch
 
 
 def _is_reflector(event):
     at = str(event.get("agent_type") or "")
-    return at == config.REFLECTOR_AGENT or at.endswith("reflector")
+    return at == config.REFLECTOR_AGENT
+
+
+def _is_curator(event):
+    at = str(event.get("agent_type") or "")
+    return at == config.CURATOR_AGENT
 
 
 def _detached_launch(transcript_path, session_id, run_id, roots):
-    subprocess.Popen(  # host-detach: fire-and-forget so the Stop hook returns immediately
-        [sys.executable, "-m", "autoharness.hook.spawn",
-         str(transcript_path), str(session_id), run_id,
-         str(roots[layer.PROJECT]), str(roots[layer.GLOBAL])],
-        start_new_session=True, stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+    try:
+        subprocess.Popen(  # host-detach: fire-and-forget so the Stop hook returns immediately
+            [sys.executable, "-m", "autoharness.hook.spawn",
+             str(transcript_path), str(session_id), run_id,
+             str(roots[layer.PROJECT]), str(roots[layer.GLOBAL])],
+            start_new_session=True, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        return {"error": f"detached_launch failed: {type(exc).__name__}: {exc}"}
+    return None
 
 
 def _reflect(event, result, roots, launch=None):
     transcript_path = event.get("transcript_path")
     if not transcript_path:
         return
-    (launch or _detached_launch)(transcript_path, result.get("session_id", ""), _run_id(result), roots)
+    return (launch or _detached_launch)(
+        transcript_path, result.get("session_id", ""), _run_id(result), roots
+    )
 
 
 def _consolidate_launch(run_id, roots):
@@ -81,6 +123,8 @@ def _consolidate_launch(run_id, roots):
 
 
 def dispatch(event, *, roots=None, reflect=None, consolidate=None):
+    if not isinstance(event, dict):
+        return {"ignored": True, "reason": "non-object hook input"}
     name = event.get("hook_event_name")
     roots = _roots(roots)
     proot = roots.get(layer.PROJECT)
@@ -92,26 +136,44 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
         if name == "Stop":
             if os.environ.get(config.CHILD_SESSION_ENV):
                 return {"handled": name, "result": {"triggered": False, "reason": "recursion_guard"}}
-            counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG denominator (per turn)
+            if not config.DISABLE_GLOBAL:
+                counters.bump_request(layer.GLOBAL, roots.get(layer.GLOBAL))  # MNG denominator (per turn)
             pcount = counters.bump_request(layer.PROJECT, proot)
-            promoter.drain(config.INTERACTIVE_RUN_ID, roots=roots)  # /learn and other in-session proposals; no-op when empty
+            drain_error = None
+            try:
+                promoter.drain(config.INTERACTIVE_RUN_ID, roots=roots)  # /learn and other in-session proposals; no-op when empty
+            except Exception as exc:  # the queue stays for the next Stop; this turn still counts and reflects
+                drain_error = f"{type(exc).__name__}: {exc}"
             result = on_stop.on_stop(event, root=proot)
+            if drain_error:
+                result = {**result, "drain_error": drain_error}
+            launch_error = None
             if result.get("triggered"):
-                fire(event, result, roots)
+                launch_result = fire(event, result, roots)
+                if isinstance(launch_result, dict) and launch_result.get("error"):
+                    launch_error = launch_result["error"]
             if config.CONSOLIDATE_EVERY_N and pcount % config.CONSOLIDATE_EVERY_N == 0:
                 curate(_curate_run_id(event, pcount), roots)  # periodic content-level merge pass (rarer than reflection)
-            return {"handled": name, "result": result}
+            verdict = {"handled": name, "result": result}
+            if launch_error:
+                verdict["error"] = launch_error
+            return verdict
         if name == "SessionEnd":
             result = on_session_end.on_session_end(event, root=proot)
             if result.get("triggered"):
-                fire(event, result, roots)
+                launch_result = fire(event, result, roots)
+                if isinstance(launch_result, dict) and launch_result.get("error"):
+                    return {"handled": name, "result": result, "error": launch_result["error"]}
             return {"handled": name, "result": result}
         if name == "PreToolUse":
             tool = event.get("tool_name")
             child = bool(os.environ.get(config.CHILD_SESSION_ENV))
-            if tool in _WRITE_TOOLS and (child or _is_reflector(event)):
+            if child and tool not in _CHILD_ALLOWED_TOOLS:
+                return {"deny": True, "reason": "autoharness child may only read and stage intents"}
+            maintenance_agent = _is_reflector(event) or _is_curator(event)
+            if tool in _WRITE_TOOLS and (child or maintenance_agent):
                 return {"deny": True, "reason": "reflector may only stage intents, not write files"}
-            if not child:  # direction H: every main-session tool call advances the activity numerator
+            if not child and not maintenance_agent:  # direction H: every main-session tool call advances the activity numerator
                 sid = event.get("session_id")
                 if isinstance(sid, str) and sid:
                     try:
@@ -119,9 +181,11 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
                     except ValueError:
                         pass  # unsafe session id: skip counting, never crash the host hook
             if tool == "Skill":
+                if maintenance_agent:
+                    return {"handled": name, "result": {"counted": False, "reason": "recursion_guard"}}
                 return {"handled": name, "result": on_skill_call.on_skill_call(event, roots=roots)}
             if tool == "Read":
-                if _is_reflector(event):
+                if child or maintenance_agent:
                     return {"handled": name, "result": {"counted": False, "reason": "reflector_read"}}
                 return {"handled": name, "result": on_skill_call.on_skill_read(event, roots=roots)}
             return {"ignored": True, "reason": "untracked PreToolUse"}
@@ -131,6 +195,8 @@ def dispatch(event, *, roots=None, reflect=None, consolidate=None):
 
 
 def _emit(verdict):
+    if verdict.get("error"):
+        print(json.dumps({"error": verdict["error"]}), file=sys.stderr)
     if verdict.get("deny"):
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -144,9 +210,16 @@ def _emit(verdict):
             "hookEventName": "SessionStart",
             "additionalContext": result["context"],
         }}))
+        return
+    handled = verdict.get("handled")
+    if handled:
+        print(json.dumps({"handled": handled, "result": result}), file=sys.stderr)
 
 
 def main():
+    # the host writes UTF-8 JSON, whatever the locale codec (cp1252 on Windows) is; output is ASCII JSON
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     try:
         event = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):

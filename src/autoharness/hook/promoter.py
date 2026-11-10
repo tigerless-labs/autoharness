@@ -8,8 +8,9 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
 - Shaping: create/update = intent body; patch = read live + apply delta; delete = None (removal).
 - Layer resolution: create takes the intent `level`; update/patch/delete go through skill_store.find
   (same name across layers errors, missing is rejected).
-- Validation: reuse lib.validate's six classes, fed {**intent, level: resolved layer} (the global gate
-  applies to update too).
+- Validation: reuse lib.validate's six classes, fed {**intent, level: resolved layer} (the global gate applies
+  to update too); backticked cross-skill pointers resolve against the same two-layer store, with the
+  batch's own names (including the create's) pre-seeded so same-run references cannot false-positive.
 - Land (after pass): land intent subfiles first (paths re-gated; every landing parent resolved and
   escape-checked BEFORE any write — a pre-planted symlink rejects with zero writes) → materialize the
   evidence slice into references/evidence-<hash>.md (redacted again at this egress, content-addressed →
@@ -20,12 +21,14 @@ validating admission (validate in-flight, persist only on allow) + POSIX atomic-
   os.replace carries the slices along). remove_file = drop one subfile (path re-gated + escape-checked;
   rejected while the live SKILL.md still references it; missing target = no-op, so crash replays stay
   idempotent) + evidence + LED with the removed path. Reject = zero writes, no stamp, no ledger.
-- Drain: read queue → promote one by one → clear at the end (at-least-once + atomic land = effectively
+- Drain: read queue → promote one by one (a delete folding into a skill the same run writes waits for
+  that write and falls with it) → clear at the end (at-least-once + atomic land = effectively
   exactly-once); on startup sweep orphan .tmp. On a crash, unprocessed intents stay in the durable queue
   and are retried next time; in the extreme of never running → zero land (fail-safe).
 
-ponytail: a single synchronous process already satisfies "serial single writer"; cross-process locking see mng open. LED watermark still pends true values from CAP; the create anchor reads the layer request counter at land time (probation is fiction without a true anchor). Whole-run clear, the tiny crash window (between land and clear) may re-append the LED — per-item idempotent watermark pending the intent-queue granularity being finalized (validate-store open).
+ponytail: one drain per project root is now serialized through lib.lock (see drain). LED watermark still pends true values from CAP; the create anchor reads the layer request counter at land time (probation is fiction without a true anchor). Whole-run clear, the tiny crash window (between land and clear) may re-append the LED — per-item idempotent watermark pending the intent-queue granularity being finalized (validate-store open).
 """
+import errno
 import hashlib
 import json
 
@@ -37,13 +40,17 @@ from autoharness.lib import (
     intent_queue,
     layer,
     ledger,
+    lock,
+    notify,
     redact,
+    run_owners,
     sidecar,
     skill_store,
     validate,
 )
 
 _MODIFY = ("update", "patch", "remove_file", "delete")
+_WRITES = ("create", "update", "patch")
 
 
 def _reject(action, level, findings):
@@ -86,7 +93,7 @@ def _led(intent, evidence_ref):
 
 def _materialize_evidence(level, name, evidence, root):
     text = redact.redact(evidence)
-    rel = f"{layer.EVIDENCE_PREFIX}{hashlib.sha256(text.encode('utf-8')).hexdigest()[:8]}.md"
+    rel = f"{layer.EVIDENCE_PREFIX}{hashlib.sha256(text.encode('utf-8')).hexdigest()}.md"
     p = layer.subfile_path(level, name, rel, root)
     if not p.exists():
         atomic.write_text(p, text)
@@ -111,10 +118,27 @@ def _remove_subfile(level, name, rel, root):
     if not p.resolve().is_relative_to(sdir):
         raise ValueError(f"subfile escapes the skill dir: {rel}")
     live = skill_store.read_body(level, name, root) or ""
-    if rel in live:
+    # Use the same contextual pointer interpretation as admission. Mark the
+    # requested path known even if it is already absent: its pointer still needs patching out.
+    if rel in validate.subfile_references(live, base_dir=sdir, files={rel: ""}):
         raise ValueError(f"{rel} is still referenced by the live SKILL.md (patch the pointer out first)")
     if p.is_file():
         p.unlink()
+
+
+def _occupied(base_dir):
+    # a create that died inside its own sidecar write leaves only the bare dir and, after a hard kill,
+    # a top-level *.tmp orphan; anything else — a subdir, a symlink, the dir itself linked — is not ours
+    if base_dir.is_symlink():
+        return True
+    if not base_dir.is_dir():
+        return base_dir.exists()  # a plain file there is the user's too, not a free slot
+    return any(p.is_symlink() or not p.is_file() or (p.suffix != ".tmp" and p.name not in _OS_DEBRIS)
+               for p in base_dir.iterdir())
+
+
+# what a file manager drops into any folder it opens; not anyone's content
+_OS_DEBRIS = {".DS_Store", "Thumbs.db", "desktop.ini"}
 
 
 def _land(action, intent, body, level, name, root):
@@ -128,12 +152,14 @@ def _land(action, intent, body, level, name, root):
         evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
         ledger.append(level, name, _led(intent, evidence_ref), root)
         return
-    files = {rel: redact.redact(content) for rel, content in (intent.get("files") or {}).items()}
-    _land_files(level, name, files, root)
-    evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
-    skill_store.write_body(level, name, redact.redact(body), root)
-    if action == "create":
+    if action == "create" and not sidecar.read(level, name, root):
+        # claim the dir before anything lands in it, so a create that dies midway replays as ours, not
+        # as a hand-written skill; an existing sidecar is a crash replay — keep its counters
         sidecar.create(level, name, counters.request_count(level, root), root)
+    _land_files(level, name, intent.get("files"), root)
+    evidence_ref = _materialize_evidence(level, name, intent.get("evidence"), root)
+    skill_store.write_body(level, name, body, root)
+    if action == "create":
         git_exclude.ensure(layer.skills_dir(level, root), config.SKILL_PREFIX)
     else:
         sidecar.bump_patch(level, name, root)  # update/patch: feeds the reuse-after-improvement pair
@@ -144,6 +170,11 @@ def promote(intent, *, roots=None, repo_name=None):
     roots = roots or {}
     action = intent.get("action")
     name = intent.get("name")
+    if action == "create":
+        try:  # before any filesystem call: a name past NAME_MAX would raise, not reject
+            layer.check_new_name(name)
+        except ValueError as exc:
+            return _reject(action, None, [("shape", str(exc))])
 
     try:
         level = _resolve_level(intent, roots)
@@ -151,7 +182,30 @@ def promote(intent, *, roots=None, repo_name=None):
         return _reject(action, None, [("routing", str(exc))])
     if level not in layer.LAYERS:
         return _reject(action, level, [("routing", f"unresolved/illegal level: {level!r}")])
+    if level == layer.GLOBAL and config.DISABLE_GLOBAL:
+        return _reject(action, level,
+                       [("routing", "global layer is disabled by AUTOHARNESS_DISABLE_GLOBAL")])
+    if action == "create":
+        # a second live copy in the other layer makes every later update/patch/delete and every load
+        # count ambiguous for good, whoever wrote the first one. Both layers, even with global disabled:
+        # disabling it stops writes there, and re-enabling it must not surface a collision.
+        try:
+            other = [lyr for lyr in layer.LAYERS
+                     if lyr != level and skill_store.exists(lyr, name, roots.get(lyr))]
+        except ValueError as exc:
+            return _reject(action, level, [("routing", str(exc))])
+        if other:
+            return _reject(action, level, [("routing", f"{name!r} is already live in the {other[0]} layer")])
 
+    if level == layer.GLOBAL:
+        # Per-project drain locks cannot coordinate another project's edits to
+        # the same global library. Keep local-only promotions independent.
+        with lock.file_lock(layer.state_dir(level, roots.get(level)) / "promote.lock"):
+            return _promote_resolved(intent, action, name, level, roots, repo_name)
+    return _promote_resolved(intent, action, name, level, roots, repo_name)
+
+
+def _promote_resolved(intent, action, name, level, roots, repo_name):
     root = roots.get(level)
     try:
         body = _shape(intent, level, root)
@@ -159,20 +213,13 @@ def promote(intent, *, roots=None, repo_name=None):
     except (ValueError, KeyError) as exc:
         return _reject(action, level, [("shape", str(exc))])
 
-    target_created = sidecar.is_agent_created(level, name, root) if action in _MODIFY else None
-
-    if action == "create":
-        # a create over a live skill someone else wrote would replace it wholesale; only a replayed
-        # create of our own (crash between land and queue clear) may land on an existing directory.
-        try:
-            existing = skill_store.find(name, roots)
-        except ValueError as exc:
-            return _reject(action, level, [("routing", str(exc))])
-        if existing and not sidecar.is_agent_created(existing, name, roots.get(existing)):
-            return _reject(action, level, [("routing", f"{name!r} is an existing skill autoharness did not "
-                                                       "write; choose another name")])
+    target_created = None
+    if action in _MODIFY or (action == "create" and _occupied(base_dir)):
+        # a create into an occupied directory is an overwrite: only of a skill we wrote (crash replay)
+        target_created = sidecar.is_agent_created(level, name, root)
 
     absorbed = intent.get("absorbed_into")
+    umbrella_level = None
     if action == "delete" and absorbed:
         # fail-closed absorption claim (direction D, Hermes trust-chain tier 1): the umbrella must be
         # a live, self-produced skill distinct from the target — a hallucinated name rejects the intent.
@@ -184,18 +231,25 @@ def promote(intent, *, roots=None, repo_name=None):
                 or not sidecar.is_agent_created(alevel, absorbed, roots.get(alevel)):
             return _reject(action, level,
                            [("absorbed_into", f"umbrella {absorbed!r} is not a live self-produced skill")])
+        umbrella_level = alevel
 
     verdict = validate.validate(
         {**intent, "level": level}, body,
         target_is_agent_created=target_created, repo_name=repo_name, base_dir=base_dir,
+        skill_roots=roots,
     )
     if not verdict["ok"]:
         return _reject(action, level, verdict["findings"])
 
+    earned = sidecar.read(level, name, root) if umbrella_level else {}
     try:
         _land(action, intent, body, level, name, root)
     except ValueError as exc:
         return _reject(action, level, [("landing", str(exc))])
+    if umbrella_level:
+        # the umbrella inherits the evidence of use, or graduation review reads it as a zero-use skill
+        sidecar.credit(umbrella_level, absorbed, use=earned.get("use", 0), view=earned.get("view", 0),
+                       root=roots.get(umbrella_level))
     return {"ok": True, "action": action, "level": level, "findings": [], "notes": _notes(action, body)}
 
 
@@ -214,7 +268,7 @@ def _notes(action, body):
 def sweep(roots=None):
     roots = roots or {}
     removed = []
-    for lyr in layer.LAYERS:
+    for lyr in config.active_layers():
         removed += skill_store.sweep_orphans(lyr, roots.get(lyr))
     return removed
 
@@ -233,23 +287,149 @@ def _account(run_id, intents, verdicts, proot):
     state = layer.state_dir(layer.PROJECT, proot)
     runs = state / "runs"
     runs.mkdir(parents=True, exist_ok=True)
-    atomic.write_text(runs / f"{run_id}.json",
-                      json.dumps({"run_id": run_id, "verdicts": rows}, ensure_ascii=False, indent=2))
+    record = {"run_id": run_id, "verdicts": rows}
+    atomic.write_text(runs / f"{run_id}.json", json.dumps(record, ensure_ascii=False, indent=2))
     atomic.write_text(state / "last_run.json",
                       json.dumps({"run_id": run_id, "landed": landed,
                                   "rejected": len(rows) - landed, "absorbed": absorbed,
                                   "families": families,
                                   "uncategorized": sum(1 for r in rows if "category" in r["notes"])},
                                  ensure_ascii=False))
+    return record
+
+
+# the environment, not the intent: disk, quota, I/O, a read-only mount, transient pressure. Keep the
+# queue and retry. Any other OSError (permissions, a name too long, not a directory, ...) belongs to
+# this intent and would fail again on every Stop, wedging everything queued behind it.
+_ENVIRONMENTAL_ERRNOS = {getattr(errno, n) for n in ("ENOSPC", "EDQUOT", "EIO", "EROFS", "EAGAIN", "EINTR",
+                                                      "EBUSY", "ENFILE", "EMFILE") if hasattr(errno, n)}
+# Windows folds device, media, sharing and lock failures into EACCES (CPython PC/errmap.h); those are
+# transient too. A plain access denial (5, 65) and the rest stay with the intent.
+_ENVIRONMENTAL_WINERRORS = {*range(19, 37), 83, 108, 132, 167}
+
+
+def _environmental(exc):
+    return isinstance(exc, OSError) and (getattr(exc, "_autoharness_retryable_read", False)
+                                         or exc.errno in _ENVIRONMENTAL_ERRNOS
+                                         or getattr(exc, "winerror", None) in _ENVIRONMENTAL_WINERRORS)
+
+
+def _promote_one(intent, roots, repo_name):
+    if intent_queue.UNREADABLE in intent:
+        return _reject(None, None, [("queue", f"unreadable queue line: {intent[intent_queue.UNREADABLE]!r}")])
+    try:
+        return promote(intent, roots=roots, repo_name=repo_name)
+    except Exception as exc:
+        if _environmental(exc):
+            raise  # keep the queue so the next drain retries it
+        # a malformed or unlandable intent: account it once instead of replaying it on every Stop
+        return _reject(intent.get("action"), None, [("crash", f"{type(exc).__name__}: {exc}")])
+
+
+def _written_name(intent):
+    name = intent.get("name")
+    return name if intent.get("action") in _WRITES and isinstance(name, str) else None
+
+
+def _waits_for_umbrella(intent, written):
+    # a delete of a skill the run also writes is a replacement, and only works in queue order
+    name, absorbed = intent.get("name"), intent.get("absorbed_into")
+    return (intent.get("action") == "delete" and isinstance(name, str) and name not in written
+            and isinstance(absorbed, str) and absorbed in written)
+
+
+def _waits_for_skill_pointer(verdict, written):
+    """A missing pointer into this run may become valid after its target lands."""
+    prefix, suffix = "referenced skill ", " does not exist"
+    return any(family == "structure" and detail.startswith(prefix) and detail.endswith(suffix)
+               and detail[len(prefix):-len(suffix)] in written
+               for family, detail in verdict.get("findings", []))
+
+
+def _promote_run(intents, roots, repo_name):
+    """Judge one run's intents; the verdicts come back in queue order.
+
+    Intents stand alone, except that a delete folding into a skill this run writes is the second half
+    of one move. It waits until the run's writes are judged and is rejected if one to its umbrella
+    was: the umbrella may well be live, but the skill's content never reached it."""
+    written = {_written_name(i) for i in intents} - {None}
+    verdicts = [None] * len(intents)
+    held, pointer_waiters = [], []
+    for index, intent in enumerate(intents):
+        if _waits_for_umbrella(intent, written):
+            held.append(index)
+            continue
+        verdicts[index] = _promote_one(intent, roots, repo_name)
+        if _waits_for_skill_pointer(verdicts[index], written):
+            pointer_waiters.append(index)
+
+    # A source may precede its target, and dependency chains may be reversed. Retry only after
+    # another waiter actually lands; a rejected target never becomes an exemption.
+    while pointer_waiters:
+        pending, progress = [], False
+        for index in pointer_waiters:
+            verdicts[index] = _promote_one(intents[index], roots, repo_name)
+            if verdicts[index]["ok"]:
+                progress = True
+            elif _waits_for_skill_pointer(verdicts[index], written):
+                pending.append(index)
+        if not progress:
+            break
+        pointer_waiters = pending
+
+    rejected = {intent["name"] for intent, verdict in zip(intents, verdicts, strict=True)
+                if verdict is not None and not verdict["ok"] and _written_name(intent)}
+    for index in held:
+        umbrella = intents[index]["absorbed_into"]
+        verdicts[index] = (
+            _reject("delete", None, [("absorbed_into", f"umbrella {umbrella!r} was rejected in this run")])
+            if umbrella in rejected else _promote_one(intents[index], roots, repo_name))
+    return verdicts
+
+
+def _drain_run(run_id, *, roots, repo_name, proot):
+    """Land one run's queued intents: take (atomic claim), promote, account, drop. Notification
+    is the caller's job, so a fire-and-forget send never holds the drain lock. A promotion that
+    raises (a transient read failure on a referenced file, say) puts the whole batch back in the
+    queue, so the next drain retries it instead of waiting for the orphans scan."""
+    intents = intent_queue.take(run_id, proot)
+    try:
+        verdicts = _promote_run(intents, roots, repo_name)
+        record = _account(run_id, intents, verdicts, proot) if intents else None
+    except BaseException:
+        intent_queue.release(run_id, proot)
+        raise
+    intent_queue.drop(run_id, proot)
+    return verdicts, record
 
 
 def drain(run_id, *, roots=None, repo_name=None):
     roots = roots or {}
-    sweep(roots)
     proot = roots.get(layer.PROJECT)
-    intents = intent_queue.read(run_id, proot)
-    verdicts = [promote(i, roots=roots, repo_name=repo_name) for i in intents]
-    if intents:
-        _account(run_id, intents, verdicts, proot)
-    intent_queue.clear(run_id, proot)
+    # One drain per project root at a time. A hook is a short-lived process, so two passes on the same
+    # state dir (parallel worktrees remapped to one root, or a killed session leaving a detached
+    # promotion running) interleave at the file level: each reads the library without seeing the
+    # other's skill, and each lands. Held across read→land→clear, which also closes the crash window
+    # the account comment below used to leave open to an external writer.
+    with lock.file_lock(layer.state_dir(layer.PROJECT, proot) / "drain.lock"):
+        sweep(roots)
+        # the queue is per-run, so a child that exits before its drain leaves its intents in the
+        # directory for good; land them here under the dead run's own id, which is the at-least-once
+        # recovery the module docstring promises (atomic land makes the replay idempotent). A run
+        # whose spawn parent still holds its live lock is not abandoned: it drains itself when the
+        # child exits, and a foreign drain would land its intents mid-flight. Tracked detached runs
+        # use the stronger process-group recovery policy, so ordinary drains leave them to
+        # SessionStart even after the supervisor lock disappears (orphans also covers a .draining
+        # claim left by a drain that crashed before drop).
+        landed = [_drain_run(orphan, roots=roots, repo_name=repo_name, proot=proot)
+                  for orphan in intent_queue.orphans(proot)
+                  if (orphan != run_id and not intent_queue.is_live(orphan, proot)
+                      and not run_owners.tracked(orphan, proot))]
+        verdicts, record = _drain_run(run_id, roots=roots, repo_name=repo_name, proot=proot)
+        landed.append((verdicts, record))
+    # after clear and outside the lock: the notification is fire-and-forget and must not hold
+    # the next pass out of the state dir
+    for _, rec in landed:
+        if rec:
+            notify.send(rec)
     return verdicts

@@ -16,7 +16,7 @@ def pattern(skills_dir, prefix):
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"],
-            cwd=skills_dir, capture_output=True, text=True, timeout=5,
+            cwd=skills_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -35,7 +35,7 @@ def ensure(skills_dir, prefix):
     if found is None:
         return None
     line, exclude = found
-    text = exclude.read_text() if exclude.exists() else ""
+    text = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
     if line not in text.splitlines():
         exclude.parent.mkdir(parents=True, exist_ok=True)
         with exclude.open("a", encoding="utf-8") as f:

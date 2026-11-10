@@ -1,6 +1,6 @@
 ---
 name: learn
-description: Use when the user says /learn or asks to save this lesson.
+description: "Use when users /learn, save, remember, or distill lessons."
 category: general
 ---
 # Learn: distill this session into the skill library

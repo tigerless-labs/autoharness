@@ -1,3 +1,7 @@
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from autoharness import config
@@ -88,7 +92,7 @@ def test_child_env_sets_guard_and_coords_without_polluting():
     env = spawn.child_env("run-1", Path("/repo"), base_env=base)
     assert env[config.CHILD_SESSION_ENV]
     assert env[config.RUN_ID_ENV] == "run-1"
-    assert env[config.PROJECT_ROOT_ENV] == "/repo"
+    assert env[config.PROJECT_ROOT_ENV] == str(Path("/repo"))
     assert env["PATH"] == "/x"
     assert base == {"PATH": "/x"}  # input dict untouched (no parent pollution)
 
@@ -191,6 +195,16 @@ def test_run_curator_cannot_touch_native_skill(tmp_path):
     assert skill_store.read_body("project", "native", root) is not None  # native untouched
 
 
+def _executable(script):
+    """A claude_bin stand-in: POSIX execs the shebang script; Windows cannot, so it gets a .cmd shim."""
+    if os.name != "nt":
+        script.chmod(0o755)
+        return script
+    shim = script.with_suffix(".cmd")
+    shim.write_text(f'@"{sys.executable}" "{script}" %*\n')
+    return shim
+
+
 def _fake_reflector_script(tmp_path):
     script = tmp_path / "fake_reflector.py"
     script.write_text(
@@ -208,8 +222,7 @@ def _fake_reflector_script(tmp_path):
         "res = server.stage(params, run_id=run_id, root=root)\n"
         "sys.exit(0 if res['ok'] else 1)\n"
     )
-    script.chmod(0o755)
-    return script
+    return _executable(script)
 
 
 def test_system_fake_reflector_cross_process_lands(tmp_path, monkeypatch):
@@ -244,11 +257,11 @@ def _fake_curator_script(tmp_path):
         "              'new_string': 'body\\n## delta\\nabsorbed', 'reason': 'fold into umbrella',\n"
         "              'evidence': ev}, run_id=run_id, root=root)\n"
         "server.stage({'action': 'delete', 'name': 'widget-delta',\n"
-        "              'reason': 'absorbed into widgets', 'evidence': ev}, run_id=run_id, root=root)\n"
+        "              'reason': 'absorbed into widgets', 'absorbed_into': 'widgets', 'evidence': ev},\n"
+        "             run_id=run_id, root=root)\n"
         "sys.exit(0)\n"
     )
-    script.chmod(0o755)
-    return script
+    return _executable(script)
 
 
 def test_system_fake_curator_cross_process_merges(tmp_path, monkeypatch):
@@ -347,10 +360,91 @@ def test_snapshot_rotation_keeps_newest(tmp_path, monkeypatch):
 
 def test_snapshot_failure_never_blocks_the_run(tmp_path, monkeypatch):
     roots = _snap_roots(tmp_path)
+    bodies = {root: (root / "skills" / "x" / "SKILL.md").read_text()
+              for root in roots.values()}
     monkeypatch.setattr(spawn, "_snapshot_skills", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
     called = []
     spawn.run_curator("c1", roots=roots, spawn_fn=lambda a, e, b: called.append(1))
     assert called  # a transient disk issue must not silently disable curation
+    assert all((root / "skills" / "x" / "SKILL.md").read_text() == body
+               for root, body in bodies.items())
+
+
+def test_unexpected_snapshot_failure_is_logged(tmp_path, monkeypatch, caplog):
+    roots = _snap_roots(tmp_path)
+    monkeypatch.setattr(spawn, "_snapshot_skills",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("snapshot bug")))
+    called = []
+
+    spawn.run_curator("c1", roots=roots, spawn_fn=lambda a, e, b: called.append(1))
+
+    assert called  # reporting a programming error does not change curator scheduling
+    assert "unexpected snapshot error" in caplog.text
+    assert "RuntimeError: snapshot bug" in caplog.text
+
+
+# --- #160: a crashed reflector must not fail silently (stderr was captured and discarded) ---
+
+def test_detached_spawn_reports_child_crash_on_stderr(capsys):
+    argv = [sys.executable, "-c",
+            "import sys; print('reflector died', file=sys.stderr); raise SystemExit(3)"]
+    proc = spawn._detached_spawn(argv, {}, "bundle")
+    assert proc.returncode == 3
+    assert "reflector died" in capsys.readouterr().err
+
+
+def test_run_records_spawn_error_in_run_account(tmp_path):
+    roots = _roots(tmp_path)
+    secret = "ghp_" + "a" * 36
+    crash = subprocess.CompletedProcess([config.CLAUDE_BIN], 3, "",
+                                        f"Error: agent not found; token={secret}")
+    verdicts = spawn.run("WINDOW", "run-x", roots=roots, spec_path=config.FORMAT_SPEC,
+                         spawn_fn=lambda a, e, b: crash)
+    assert verdicts == []
+    account = json.loads((roots["project"] / "autoharness" / "runs" / "run-x.json").read_text())
+    assert account["run_id"] == "run-x"
+    assert account["spawn_error"]["returncode"] == 3
+    assert "agent not found" in account["spawn_error"]["stderr_tail"]
+    assert secret not in account["spawn_error"]["stderr_tail"]
+    assert "REDACTED" in account["spawn_error"]["stderr_tail"]
+
+
+def test_spawn_error_record_preserves_landed_verdicts(tmp_path):
+    roots = _roots(tmp_path)
+
+    def crashed_after_staging(argv, env, bundle):
+        from autoharness.lib import intent_queue
+        intent_queue.append(env[config.RUN_ID_ENV],
+                            {"action": "create", "name": "learned", "level": "project",
+                             "body": GOOD.format(n="learned", d="use when doing a specific thing"),
+                             "reason": "compare-first new", "evidence": "window slice"},
+                            roots["project"])
+        return subprocess.CompletedProcess(argv, 3, "", "late crash")
+
+    verdicts = spawn.run("WINDOW", "run-x", roots=roots, spec_path=config.FORMAT_SPEC,
+                         spawn_fn=crashed_after_staging)
+    assert [v["ok"] for v in verdicts] == [True]
+    account = json.loads((roots["project"] / "autoharness" / "runs" / "run-x.json").read_text())
+    assert account["spawn_error"]["returncode"] == 3
+    assert account["verdicts"]  # child diagnostics augment, never replace, promoter verdicts
+
+
+def test_successful_spawn_writes_no_spawn_error(tmp_path):
+    roots = _roots(tmp_path)
+    ok = subprocess.CompletedProcess([config.CLAUDE_BIN], 0, "", "")
+    spawn.run("WINDOW", "run-ok", roots=roots, spec_path=config.FORMAT_SPEC,
+              spawn_fn=lambda a, e, b: ok)
+    assert not (roots["project"] / "autoharness" / "runs" / "run-ok.json").exists()
+
+
+def test_description_index_survives_a_foreign_skill_that_is_not_utf8(tmp_path):
+    # user and plugin skills are read for compare-first; one latin-1 file must not kill every reflection
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    legacy = roots["project"] / "skills" / "legacy"
+    legacy.mkdir(parents=True)
+    (legacy / "SKILL.md").write_bytes(b"---\nname: legacy\ndescription: caf\xe9 notes\n---\nbody\n")
+    out = spawn.description_index(roots)
+    assert "- legacy [project]: caf" in out
 
 
 def test_isolation_is_off_by_default():
@@ -360,8 +454,11 @@ def test_isolation_is_off_by_default():
 
 def test_isolated_child_loads_only_this_plugin(monkeypatch):
     monkeypatch.setattr(config, "CHILD_ISOLATION", True)
-    for cmd in (spawn.build_command(agent="autoharness:reflector", claude_bin="claude"),
-                spawn.build_fork_command(session_id="s", claude_bin="claude")):
+    commands = (
+        spawn.build_command(agent="autoharness:reflector", claude_bin="claude"),
+        spawn.build_fork_command(session_id="s", claude_bin="claude"),
+    )
+    for cmd in commands:
         assert cmd[cmd.index("--setting-sources") + 1] == ""
         assert cmd[cmd.index("--plugin-dir") + 1] == str(config.PLUGIN_ROOT)
         assert "--no-session-persistence" in cmd
@@ -371,7 +468,12 @@ def test_isolated_child_loads_only_this_plugin(monkeypatch):
 def test_isolated_bundle_child_runs_from_the_state_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CHILD_ISOLATION", True)
     seen = {}
-    monkeypatch.setattr(spawn.subprocess, "run", lambda argv, **kw: seen.update(kw))
+
+    def fake_run(argv, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(spawn.subprocess, "run", fake_run)
     roots = _roots(tmp_path)
     spawn.run("WINDOW", "r1", roots=roots, spec_path=config.FORMAT_SPEC)
     assert seen["cwd"] == str(layer.state_dir("project", roots["project"]))
@@ -380,10 +482,15 @@ def test_isolated_bundle_child_runs_from_the_state_dir(tmp_path, monkeypatch):
 def test_isolated_fork_child_keeps_the_parent_cwd(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CHILD_ISOLATION", True)
     seen = {}
-    monkeypatch.setattr(spawn.subprocess, "run", lambda argv, **kw: seen.update(kw))
+
+    def fake_run(argv, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(spawn.subprocess, "run", fake_run)
     spawn.run("WINDOW", "r1", roots=_roots(tmp_path), session_id="s", carrier="fork",
               spec_path=config.FORMAT_SPEC)
-    assert seen["cwd"] is None  # --resume finds the session by the cwd it was started in
+    assert seen["cwd"] is None
 
 
 def test_description_index_names_each_skill_path(tmp_path):

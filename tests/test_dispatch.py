@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -81,6 +84,25 @@ def test_triggered_stop_fires_reflect(tmp_path, monkeypatch):
     dispatch.dispatch({"hook_event_name": "Stop", "transcript_path": "/t.jsonl"},
                       roots=_roots(tmp_path), reflect=lambda ev, res, roots: calls.append(res))
     assert calls and calls[0]["session_id"] == "s1"
+
+
+def test_triggered_session_end_fires_reflect(tmp_path, monkeypatch):
+    # tail-catch: activity below the cadence at session close still reflects, through the dispatcher
+    monkeypatch.setattr(dispatch.on_session_end, "on_session_end",
+                        lambda e, **k: {"triggered": True, "session_id": "s1", "count": 3, "window_n": 3})
+    calls = []
+    out = dispatch.dispatch({"hook_event_name": "SessionEnd", "transcript_path": "/t.jsonl"},
+                            roots=_roots(tmp_path), reflect=lambda ev, res, roots: calls.append(res))
+    assert out["handled"] == "SessionEnd"
+    assert len(calls) == 1 and calls[0]["session_id"] == "s1"
+
+
+def test_untriggered_session_end_does_not_reflect(tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatch.on_session_end, "on_session_end", lambda e, **k: {"triggered": False})
+    calls = []
+    dispatch.dispatch({"hook_event_name": "SessionEnd", "transcript_path": "/t.jsonl"},
+                      roots=_roots(tmp_path), reflect=lambda *a: calls.append(a))
+    assert calls == []
 
 
 def test_real_onstop_triggers_at_cadence(tmp_path):
@@ -197,7 +219,9 @@ def test_reflect_builds_run_id_and_skips_without_transcript(tmp_path):
     result = {"session_id": "abc", "count": 7, "window_n": 7}
     dispatch._reflect({"transcript_path": "/t.jsonl"}, result, _roots(tmp_path),
                       launch=lambda tp, sid, run_id, roots: launched.append((tp, sid, run_id)))
-    assert launched == [("/t.jsonl", "abc", "abc-7")]
+    assert len(launched) == 1
+    assert launched[0][:2] == ("/t.jsonl", "abc")
+    assert launched[0][2].startswith("abc-7-")
 
     launched.clear()
     dispatch._reflect({}, result, _roots(tmp_path), launch=lambda *a: launched.append(a))
@@ -226,6 +250,52 @@ def test_emit_session_start_no_context_prints_nothing(capsys):
     assert capsys.readouterr().out == ""
 
 
+# --- _emit deny output: the host reads stdout, not the return value, so the write
+# backstop's stdout JSON is the security boundary and needs its own coverage (#138) ---
+
+
+def test_emit_deny_writes_permission_decision_to_stdout(capsys):
+    dispatch._emit({"deny": True, "reason": "reflector may only stage intents, not write files"})
+    payload = json.loads(capsys.readouterr().out)
+    hso = payload["hookSpecificOutput"]
+    assert hso["hookEventName"] == "PreToolUse"
+    assert hso["permissionDecision"] == "deny"
+    assert hso["permissionDecisionReason"] == "reflector may only stage intents, not write files"
+
+
+def test_emit_deny_falls_back_to_a_reason_when_absent(capsys):
+    # a deny without a reason must still deny, with a non-empty reason the host can show
+    dispatch._emit({"deny": True})
+    hso = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert hso["permissionDecision"] == "deny"
+    assert hso["permissionDecisionReason"]
+
+
+def test_emit_deny_is_single_line_json_on_stdout_only(capsys):
+    # the host parses one JSON object per hook invocation: a wrapped payload would not parse
+    dispatch._emit({"deny": True, "reason": "no"})
+    captured = capsys.readouterr()
+    assert len(captured.out.strip().splitlines()) == 1
+    assert captured.err == ""
+
+
+def test_denied_reflector_write_reaches_the_host_as_deny_json(tmp_path, capsys):
+    # end to end through the dispatcher: dispatch() decides, _emit is what the host actually reads
+    dispatch._emit(dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Write",
+                                       "agent_type": "autoharness:reflector"}, roots=_roots(tmp_path)))
+    hso = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert hso["permissionDecision"] == "deny"
+    assert "stage intents" in hso["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("tool", ["Write", "Bash", "mcp__user_server__dangerous_tool"])
+def test_denied_child_tool_reaches_the_host_as_deny_json(tmp_path, monkeypatch, capsys, tool):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    dispatch._emit(dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": tool,
+                                       "session_id": "s7"}, roots=_roots(tmp_path)))
+    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 # --- Phase 11 (H): every PreToolUse advances the activity counter; Stop no longer bumps it ---
 
 def test_pretooluse_advances_activity_counter(tmp_path):
@@ -250,13 +320,26 @@ def test_stop_does_not_advance_activity(tmp_path):
     assert counters.session_count("s7", roots["project"]) == 0  # denominator yes, activity no
 
 
-# --- Phase 11 (G): child-session (fork) write tools are denied ---
+# --- Phase 11 (G): a fork child gets only the reflector's read/stage tool surface ---
 
-def test_child_session_write_denied(tmp_path, monkeypatch):
+
+@pytest.mark.parametrize("tool", ["Write", "Bash", "Skill", "WebFetch", "mcp__user__tool"])
+def test_child_session_tool_outside_allowlist_denied(tmp_path, monkeypatch, tool):
     monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
-    v = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": "Write",
+    v = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": tool,
                            "session_id": "s7"}, roots=_roots(tmp_path))
     assert v.get("deny")
+
+
+@pytest.mark.parametrize(
+    "tool",
+    ["Read", "Grep", "Glob", "mcp__plugin_autoharness_stage_skill__stage_skill"],
+)
+def test_child_session_read_and_stage_allowlist_is_not_denied(tmp_path, monkeypatch, tool):
+    monkeypatch.setenv(config.CHILD_SESSION_ENV, "1")
+    v = dispatch.dispatch({"hook_event_name": "PreToolUse", "tool_name": tool,
+                           "tool_input": {}, "session_id": "s7"}, roots=_roots(tmp_path))
+    assert not v.get("deny")
 
 
 def _interactive_intent(name="learned"):
@@ -298,3 +381,87 @@ def test_stop_with_empty_interactive_queue_writes_no_run_account(tmp_path, monke
     state = layer.state_dir("project", roots["project"])
     assert not (state / "last_run.json").exists()
     assert not list((state / "runs").glob("*.json")) if (state / "runs").exists() else True
+
+
+def _run_under_old_python(tmp_path, version=(3, 9, 6, "final", 0)):
+    # the host's bare `python3` may be older than the 3.11 floor (Xcode ships 3.9.6 at
+    # /usr/bin/python3); simulate it in a child by pinning version_info and hiding tomllib,
+    # which is the stdlib module that entered in 3.11 and that redact.py imports at module level
+    probe = tmp_path / "old_python_probe.py"
+    probe.write_text(
+        "import sys\n"
+        f"sys.version_info = {version!r}\n"
+        "class _NoTomllib:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name == 'tomllib':\n"
+        "            raise ModuleNotFoundError(\"No module named 'tomllib'\", name='tomllib')\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, _NoTomllib())\n"
+        "import autoharness.hook.dispatch\n"
+    )
+    root = Path(__file__).resolve().parents[1]
+    return subprocess.run(
+        [sys.executable, str(probe)], capture_output=True, text=True,
+        env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(root / "src")},
+    )
+
+
+def test_below_floor_python_exits_clean_instead_of_crashing_at_import(tmp_path):
+    # hooks.json invokes bare `python3` for all four events, and every import in the chain is
+    # module level, so an interpreter below the floor dies before dispatch() is entered and the
+    # fail-safe handler never gets the chance to catch it: the whole plugin goes off silently
+    r = _run_under_old_python(tmp_path)
+    assert r.returncode == 0, f"expected a clean exit, got {r.returncode}:\n{r.stderr}"
+    assert "Traceback" not in r.stderr
+    assert "tomllib" not in r.stderr
+
+
+def test_below_floor_python_names_the_floor_and_the_interpreter(tmp_path):
+    # the point of the guard is that the operator can act on it: a generic host hook error with
+    # nothing logged is what this replaces
+    r = _run_under_old_python(tmp_path)
+    assert "3.11" in r.stderr
+    assert "3.9" in r.stderr
+    assert "hooks.json" in r.stderr
+
+
+def test_supported_python_still_imports_and_dispatches(tmp_path):
+    # the guard must not fire on a supported interpreter
+    assert dispatch.dispatch({"hook_event_name": "Nope"}) == {
+        "ignored": True, "reason": "unrouted event: 'Nope'"}
+
+
+def test_a_failing_drain_does_not_cost_the_turn_its_reflection(tmp_path, monkeypatch):
+    def broken(*a, **k):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(dispatch.promoter, "drain", broken)
+    monkeypatch.setattr(dispatch.on_stop, "on_stop",
+                        lambda e, **k: {"triggered": True, "session_id": "s1", "count": 50, "window_n": 50})
+    calls = []
+    out = dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1", "transcript_path": "/t.jsonl"},
+                            roots=_roots(tmp_path), reflect=lambda ev, res, roots: calls.append(res))
+    assert calls and out["result"]["drain_error"].startswith("OSError")
+
+
+def test_torn_interactive_queue_line_no_longer_wedges_every_stop(tmp_path):
+    roots = _roots(tmp_path)
+    proot = roots[layer.PROJECT]
+    q = layer.state_dir(layer.PROJECT, proot) / "intents" / "interactive.jsonl"
+    q.parent.mkdir(parents=True)
+    q.write_text('{"action": "create", "name": "foo", "body": "---\\nname: foo\\ndesc')  # torn mid-write
+    for _ in range(config.REFLECT_EVERY_N):
+        counters.bump_session("s1", proot)
+    calls = []
+    out = dispatch.dispatch({"hook_event_name": "Stop", "session_id": "s1", "transcript_path": "/t.jsonl"},
+                            roots=roots, reflect=lambda ev, res, roots: calls.append(res))
+    assert "error" not in out and calls  # on_stop ran and reflection fired
+    assert not q.exists()  # accounted once and cleared, not replayed on every Stop
+    run = json.loads((layer.state_dir(layer.PROJECT, proot) / "runs" / "interactive.json").read_text())
+    assert run["verdicts"][0]["findings"] == ["queue"]
+
+
+def test_a_crashed_handler_is_reported_on_stderr(capsys):
+    dispatch._emit({"error": "TypeError: boom"})
+    lines = capsys.readouterr().err.splitlines()
+    assert len(lines) == 1
+    assert "TypeError: boom" in lines[0]

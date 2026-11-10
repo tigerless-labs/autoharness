@@ -1,12 +1,12 @@
 <h1 align="center">AutoHarness</h1>
-<p align="center"><strong>Self-Learning Skills for Claude Code</strong></p>
+<p align="center"><strong>Building the self-learning layer next-gen agents will ship with</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftigerless-labs%2Fautoharness%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=release&prefix=v&color=brightgreen" alt="release" /> <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="python" /> <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg" alt="platform" /> <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" />
+  <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftigerless-labs%2Fautoharness%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=release&prefix=v&color=brightgreen" alt="release" /> <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="python" /> <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg" alt="platform" /> <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="license MIT" /> <a href="https://repositoryradar.dev/repo/tigerless-labs/autoharness"><img src="https://repositoryradar.dev/badge/tigerless-labs/autoharness.svg" alt="Featured on Repository Radar" /></a>
 </p>
 
-**autoharness is a self-learning skill layer for Claude Code.** It **learns** skills from your real
-sessions, **merges** same-scenario ones instead of stacking near-duplicates, **updates** them in use,
+**With autoharness, we're building the self-learning layer next-gen agents will ship with, learning skills from real work.**
+Today it runs on Claude Code: it **learns** skills from your real sessions, **merges** same-scenario ones instead of stacking near-duplicates, **updates** them in use,
 and **prunes** any that stop getting used — so the layer **stays clean on its own**, **touching only
 the skills it wrote itself**.
 
@@ -25,8 +25,10 @@ hand every model generation. autoharness bets one slice of it — the skill laye
 
 ## Install
 
-**Requires `python3` on your PATH** — autoharness runs entirely as Python (zero third-party
-dependencies); its hooks and MCP server won't fire without it.
+**Requires Python 3.11+ as the `python3` on your PATH** — autoharness runs entirely as Python
+(zero third-party dependencies); its hooks and MCP server won't fire without it. The hooks resolve
+bare `python3`, so an older interpreter earlier on your PATH (Xcode ships 3.9.6 at
+`/usr/bin/python3`) turns every hook off for the session; autoharness says so on stderr.
 
 Type these in the Claude Code input box.
 
@@ -44,13 +46,27 @@ Nothing to invoke, but one entry point exists when you want it: **`/learn`** dis
 you're in right now — say it after working something out and the lesson goes through the same
 proposal-and-validation chain the background pass uses.
 
+**MCP server naming.** `.claude-plugin/plugin.json` registers the server as `stage_skill`, but agent
+definitions reference the fully-qualified name `mcp__plugin_autoharness_stage_skill__stage_skill`.
+This translation is automatic: the plugin runtime constructs the qualified name from the plugin
+name (`autoharness`) and the server key. Outside the plugin context (e.g., registering the server
+by hand), the tool would be available as `mcp__stage_skill__stage_skill` — but the agent allowlists
+still reference the plugin-namespaced form. Always install as a plugin to match both names. The
+server is declared in the manifest, not in a root `.mcp.json`, because the plugin root is the repo
+root: a `.mcp.json` there would also be this checkout's project config, which outranks the plugin's
+same-command server and leaves the reflector without its tool in sessions inside the repo.
+
+
 ### Update
 
-Update from a terminal — refresh the catalog, then update with the **full `plugin@marketplace`
-id**, then restart:
+Update and uninstall are shown in their terminal form (`claude plugin …`); inside Claude Code the same
+operations live in the `/plugin` menu.
+
+Update from a terminal — refresh the catalog by marketplace name, then update the plugin by its
+**full `plugin@marketplace` id**, then restart:
 
 ```
-claude plugin marketplace update autoharness       
+claude plugin marketplace update autoharness
 claude plugin update autoharness@autoharness
 ```
 
@@ -67,8 +83,8 @@ field is bumped.
 ### Uninstall
 
 ```
-claude plugin uninstall autoharness@autoharness     
-claude plugin marketplace remove autoharness       
+claude plugin uninstall autoharness@autoharness
+claude plugin marketplace remove autoharness
 ```
 
 Uninstalling only stops it from running — the skills it landed and its own state live **outside** the
@@ -83,6 +99,17 @@ If you configured a skill prefix, also drop the one line it added to the reposit
 
 Every knob is an `AUTOHARNESS_*` environment variable with a built-in default — nothing to
 configure unless you want to change the pace.
+
+**Placement — which layers it manages**
+
+| Variable | Default | What it does |
+|---|---|---|
+| `AUTOHARNESS_DISABLE_GLOBAL` | `0` | Set to `1` for a project-only deployment. Global create intents are rejected before staging and landing; global request/use/view counters, archiving, orphan sweeps, recall, curator snapshots, and metrics are skipped. Existing global skills stay untouched. Project-layer learning continues normally. |
+| `AUTOHARNESS_GLOBAL_ROOT` | _(unset)_ | Replaces the global layer root. Unset or blank follows `$CLAUDE_CONFIG_DIR` when set, otherwise `~/.claude`. Set it when autoharness itself has to run sandboxed (a pinned clone, CI, an evaluation harness) and the production skills library must stay untouched. The project layer is unaffected. |
+| `AUTOHARNESS_PROJECT_DIR` | `.claude` | Directory under the project root whose `skills/` holds the project layer. For example, `.agents` shares the library with other agent runtimes. |
+| `AUTOHARNESS_STATE_HOME` | _(unset)_ | Moves counters, intent queues, run accounts, snapshots, and the archive outside the layer roots into one directory per layer and root. Unset keeps state under each layer root. |
+| `AUTOHARNESS_SKILL_PREFIX` | _(unset)_ | Prefix required for every new skill name, such as `ah-`. On first landing in a Git repository, the matching skill-directory pattern is added to the clone-local shared `info/exclude`; hand-written skills remain visible to Git. |
+| `AUTOHARNESS_CHILD_ISOLATION` | `0` | Set to `1` to launch reflector and curator children without user or project settings sources, with only this plugin loaded and no session persistence. Off by default because a child may depend on settings such as an `apiKeyHelper`. |
 
 **Cadence — when it learns**
 
@@ -108,24 +135,23 @@ configure unless you want to change the pace.
 |---|---|---|
 | `AUTOHARNESS_MATURITY_PROJECT` | `100` | Probation gate, project layer: after this many requests have arrived in its layer since a skill landed, it faces graduation review. Until then it's recalled as usual but can't be archived. |
 | `AUTOHARNESS_MATURITY_GLOBAL` | `300` | Same gate for the global layer — higher because a global skill loads in every project. |
-| `AUTOHARNESS_CAPACITY_PROJECT` | `50` | Cap on *mature* skills in the project layer. It is also what bounds the session-start index: one line per live skill, so the index can never exceed the two caps combined. For graduates, capacity contention is the only death: nothing is archived until the mature pool exceeds this, then the lowest usage rates go first. |
+| `AUTOHARNESS_CAPACITY_PROJECT` | `50` | Cap on *mature* skills in the project layer. For graduates, capacity contention is the only death: nothing is archived until the mature pool exceeds this, then the lowest usage rates go first. It does not bound the session-start index: probation members are indexed too and are outside this cap, so the index is a function of the creation rate rather than of the two caps. |
 | `AUTOHARNESS_CAPACITY_GLOBAL` | `20` | Same cap for the global layer — smaller because its blast radius is every project. |
 | `AUTOHARNESS_GRADUATION_SUSPENDED` | `0` | Set to `1` to park graduation review entirely, so nothing is archived for going unused. Meant for when you have reason to doubt the recall surface: archiving on zero use would then be punishing skills for never having been offered. Capacity contention still applies. |
 | `AUTOHARNESS_SNAPSHOT_KEEP` | `5` | How many pre-run snapshots of each skill tree the curator keeps before merging. A merge is the one operation a single atomic rename can't undo. |
 
-**Placement — where it writes**
+**Notify — hearing about it as it happens**
+
+Off by default. The session-start summary line reports a run one session late, with counts but no
+names; these push the same run account out as soon as a drain finishes. Fail-open: the notifier runs
+only after the account is written and the intent queue cleared, so a missing, failing or hung
+notifier can delay a drain but never fail or replay it.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `AUTOHARNESS_PROJECT_DIR` | `.claude` | Directory under the project root whose `skills/` holds the project layer. `.agents` shares the library with other agent runtimes; Claude Code still needs a `.claude/skills` pointing there to load it natively (see below). |
-| `AUTOHARNESS_GLOBAL_DIR` | `$CLAUDE_CONFIG_DIR`, else `~/.claude` | Root of the global layer, whose `skills/` holds global skills. |
-| `AUTOHARNESS_STATE_HOME` | *(unset)* | Moves counters, intent queues, run accounts, snapshots, and the archive out of the layer roots into one directory per root under this path (e.g. `~/.local/state/autoharness`), so the only paths autoharness adds to a repository are live skill directories. Unset keeps them in `<root>/autoharness/` and `skills/.archive/`. |
-| `AUTOHARNESS_SKILL_PREFIX` | *(none)* | Name prefix every new skill must carry, e.g. `ah-`. A create without it is refused back to the reflector, so the library never shares a namespace with hand-written or installed skills. When a project skill first lands inside a git repository, one pattern for the prefix (e.g. `/.claude/skills/ah-*`) is added to the repository's shared `.git/info/exclude` — local to the clone, covering every worktree, never committed. |
-| `AUTOHARNESS_CHILD_ISOLATION` | `0` | Set to `1` to launch the reflector and curator without your settings sources (`--setting-sources ""`): no other plugins, no user hooks, no project settings, only this plugin (by `--plugin-dir`), no session persistence, and — for `bundle` — a working directory outside the project, so no project `CLAUDE.md` is read. Keeps other memory plugins from capturing reflection sessions and trims every reflection's context. Off by default because it also drops settings a child might depend on, such as an `apiKeyHelper`. |
-
-When the host does not load a library on its own — a linked worktree reads its own `.claude/skills`,
-not the main checkout's, and a `PROJECT_DIR` of `.agents` needs a `.claude/skills` link — each line of
-the session-start index carries the skill's `SKILL.md` path, so it can still be read.
+| `AUTOHARNESS_NOTIFY` | _(unset)_ | Set to `desktop` for a native notification per run — `osascript` on macOS, `notify-send` on Linux when installed (a silent no-op otherwise). Names what landed and what was rejected, e.g. `create foo, patch bar · rejected: baz`. On macOS the notification is attributed to Script Editor; if nothing appears, allow it under System Settings → Notifications. |
+| `AUTOHARNESS_NOTIFY_CMD` | _(unset)_ | A command (split like a shell argv, never run through a shell) that receives the run record JSON — the same shape as `runs/<run-id>.json` — on stdin, with the one-line summary in `AUTOHARNESS_NOTIFY_SUMMARY`. The hook for Slack, webhooks, or anything else. Skill names are redacted first, and the command runs with the child-session guard set, so a notifier that launches `claude` isn't itself captured. Works alongside `desktop`. |
+| `AUTOHARNESS_NOTIFY_TIMEOUT_S` | `5` | Whole seconds, minimum 1, per channel: how long a notifier may hold up a drain. The `/learn` drain runs inside the host's Stop hook, so this is also the most it can delay a turn. |
 
 Set them in the environment Claude Code launches with — either the shell
 (`export AUTOHARNESS_REFLECT_EVERY_N=10`) or the `env` map in `.claude/settings.json`:
@@ -135,7 +161,7 @@ Set them in the environment Claude Code launches with — either the shell
 ```
 
 Hooks read the environment on every event, so a change applies from the next session. The defaults
-are deliberate placeholders pending empirical calibration (tracked under `experiments/`); byte caps
+are deliberate placeholders pending empirical calibration; byte caps
 on captured windows and staged files are fixed constants, not env knobs.
 
 ## How it works
@@ -153,7 +179,7 @@ gets offered is a property of this plugin rather than a hope about host behavior
 |---|---|
 | **CAP** · capture | Hook-driven dumb pipe: grabs each turn (user input, agent output, tool I/O), redacts at egress, points back at the host log instead of copying it. It also holds the trigger, which is deterministic and counts one thing — tool calls. The turn that crosses the threshold ends with a reflection; nothing about the content is judged here. |
 | **REF** · reflect | Reads the episode, compares it against the existing skill index, and decides add / merge / patch / drop a support file / delete — emitting an intent (body, delta, or path, plus reason and evidence). Where a new lesson contradicts an older skill, it must rewrite the stale one in the same run rather than leave the library arguing with itself. Proposes only; it has no write tools, and a fork carrier's inherited ones are denied at the hook. |
-| **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. A new skill's description has to carry its trigger early enough to survive the index's truncation — a cue that lands past the cut leaves the skill as half a sentence on the very surface meant to recall it. A fold must name the skill that absorbed the deleted one, and the umbrella has to be a live skill autoharness manages — an invented name fails the whole intent rather than losing the content. Each run leaves an account of what landed and what was rejected. |
+| **promoter** · validate·store | The only writer. Lints the intent in memory (safety, structure, ledger, completeness, self-authored-only) and on pass does an atomic rename into the live skill directory. A new skill's description has to carry its trigger early enough to survive the index's truncation — a cue that lands past the cut leaves the skill as half a sentence on the very surface meant to recall it. A fold must name the skill that absorbed the deleted one, and the umbrella has to be a live skill autoharness manages — an invented name fails the whole intent rather than losing the content. The same goes for an umbrella the run failed to write: the delete waits for the run's writes and is rejected with them. Each run leaves an account of what landed and what was rejected. |
 | **IDX** · surface | Builds the session-start index: the skills autoharness wrote, grouped by category, one truncated description per line, tagged by layer. Archived and hand-written skills are excluded, an empty library injects nothing, and the previous run's landed/rejected line rides along — so a rejected proposal is visible instead of silent. |
 | **MNG** · lifecycle | Daemon-free: recomputed lazily at session start, once per session. Ranks symbols by usage rate — loads over the requests that arrived since the symbol was created, so the measure is opportunity-relative and a closed laptop doesn't age anyone out (the wall-clock replacement). Three signals are kept apart: a **load** (the model invoked the skill) is the only thing the rate counts; a **view** (a session read into the skill's directory) is evidence it had recall value, but not adherence; a **patch** marks the skill being improved, so a load after one reads as reuse-after-improvement. New symbols sit in probation until they've had a fair sample of requests: recalled as usual, but neither counted against the cap nor evictable. At maturity, graduation review archives only a symbol that was never loaded *and* never viewed — no evidence of use is not the same as evidence of no use. For graduates, capacity contention is the only death — nothing is archived until a layer's mature pool exceeds its cap, then the lowest rates go first. Archives, never deletes: an archived symbol is a directory moved out of recall, and moving it back revives it. |
 | **curator** · consolidate | The rarer whole-library pass: reads the library as one thing and folds near-duplicates under umbrellas, which is the judgment a single episode can't make. Snapshots both skill trees before it starts, since a merge is the one operation an atomic rename can't undo. |

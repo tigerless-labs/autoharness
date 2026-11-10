@@ -12,13 +12,12 @@ graduation review); `patch` = promoter landed an update/patch. `reused_gen` mark
 after a patch (Hermes patch_generation pair) — the closest available "the skill helped" signal,
 consumed by metrics only. Legacy single-numerator `calls` migrates into `use` on read, once.
 
-ponytail: bumps are read-modify-write, not atomic across processes; the lock for concurrently
-modifying the same symbol is deferred to mng (merged with promoter's single-writer lock); the unit
-path is serial.
+Counter bumps hold an exclusive per-symbol lock across the whole read-modify-write, so concurrent
+hooks preserve independent use/view/patch increments and the reuse generation.
 """
 import json
 
-from autoharness.lib import atomic, layer
+from autoharness.lib import atomic, layer, lock
 
 FILENAME = ".sidecar.json"
 
@@ -37,7 +36,7 @@ def read(lyr, name, root=None):
     p = path(lyr, name, root)
     if not p.exists():
         return {}
-    return _migrate(json.loads(p.read_text()))
+    return _migrate(json.loads(p.read_text(encoding="utf-8")))
 
 
 def write(lyr, name, data, root=None):
@@ -52,11 +51,15 @@ def create(lyr, name, anchor, root=None):
 
 
 def _bump(lyr, name, key, root=None):
-    data = read(lyr, name, root)
-    data[key] = data.get(key, 0) + 1
-    if key == "use" and data.get("patch", 0) > data.get("reused_gen", 0):
-        data["reused_gen"] = data["patch"]  # first use after a patch = reuse-after-improvement
-    write(lyr, name, data, root)
+    lock_path = layer.symbol_lock_path(lyr, name, root)
+    with lock.file_lock(lock_path):
+        data = read(lyr, name, root)
+        if not data:
+            raise FileNotFoundError(path(lyr, name, root))
+        data[key] = data.get(key, 0) + 1
+        if key == "use" and data.get("patch", 0) > data.get("reused_gen", 0):
+            data["reused_gen"] = data["patch"]  # first use after a patch = reuse-after-improvement
+        write(lyr, name, data, root)
     return data[key]
 
 
@@ -70,6 +73,20 @@ def bump_view(lyr, name, root=None):
 
 def bump_patch(lyr, name, root=None):
     return _bump(lyr, name, "patch", root)
+
+
+def credit(lyr, name, *, use=0, view=0, root=None):
+    """Add counts earned elsewhere to a live symbol, under the same lock the bumps take."""
+    if not (use or view):
+        return
+    lock_path = layer.symbol_lock_path(lyr, name, root)
+    with lock.file_lock(lock_path):
+        data = read(lyr, name, root)
+        if not data:
+            return
+        data["use"] = data.get("use", 0) + use
+        data["view"] = data.get("view", 0) + view
+        write(lyr, name, data, root)
 
 
 def is_agent_created(lyr, name, root=None):

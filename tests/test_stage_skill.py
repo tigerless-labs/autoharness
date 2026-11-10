@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from autoharness import config
 from autoharness.lib import intent_queue, layer
 from autoharness.stage_skill import server
@@ -356,6 +358,26 @@ def test_delete_accepts_absorbed_into(tmp_path):
     assert r["ok"]
 
 
+@pytest.mark.parametrize("reason", [
+    "Absorbed into expo-mobile-app-release as its unit-test section.",
+    "folded  into the deploy umbrella",
+    "Merged by hand: consolidated into deploy",
+    "已合并到 deploy",
+])
+def test_delete_claiming_a_fold_must_name_the_umbrella(tmp_path, reason):
+    params = {"action": "delete", "name": "narrow", "reason": reason, "evidence": "e"}
+    refused = server.stage(params, run_id="r1", root=tmp_path)
+    assert not refused["ok"] and refused["errors"][0][0] == "schema"
+    assert intent_queue.read("r1", tmp_path) == []
+    assert server.stage({**params, "absorbed_into": "deploy"}, run_id="r1", root=tmp_path)["ok"]
+
+
+@pytest.mark.parametrize("reason", ["stale", "merged", "no longer used", "unfolded into nothing useful"])
+def test_plain_retirement_needs_no_umbrella(tmp_path, reason):
+    assert server.stage({"action": "delete", "name": "narrow", "reason": reason, "evidence": "e"},
+                        run_id="r1", root=tmp_path)["ok"]
+
+
 def test_absorbed_into_rejected_on_non_delete(tmp_path):
     for action, extra in (("create", {"body": "b", "level": "project"}),
                           ("patch", {"old_string": "a", "new_string": "b"}),
@@ -400,6 +422,28 @@ def test_serve_without_run_id_env_uses_the_interactive_queue(tmp_path, monkeypat
     reply = json.loads(out.getvalue().strip().splitlines()[-1])
     assert "unsafe" not in json.dumps(reply)
     assert len(list(intent_queue.read(config.INTERACTIVE_RUN_ID, tmp_path))) == 1
+
+
+def test_unusable_names_are_rejected_at_stage_time(tmp_path):
+    # the model hears it while it can still rename, instead of a promoter verdict it never reads
+    for bad in ["a" * 101, "../escape", "con"]:
+        v = server.stage(_params(name=bad), run_id=RUN, root=tmp_path)
+        assert not v["ok"] and "schema" in _errs(v), bad
+
+
+def test_existing_unusual_names_can_still_be_updated(tmp_path):
+    # the new-name limits apply to create only; a legacy skill named `con` can still be maintained
+    v = server.stage(_params(action="patch", name="con", body=None, old_string="a", new_string="b"),
+                     run_id=RUN, root=tmp_path)
+    assert v["ok"], v["errors"]
+
+
+def test_non_string_fields_are_rejected_at_stage_time(tmp_path):
+    # `is not None` checks alone let these reach the queue, where they crashed the drain
+    for kw in ({"action": "patch", "body": None, "old_string": 5, "new_string": ["x"]},
+               {"body": {"not": "text"}}, {"level": 1}):
+        v = server.stage(_params(**kw), run_id=RUN, root=tmp_path)
+        assert not v["ok"] and "schema" in _errs(v), kw
 
 
 def test_stage_hands_the_prefix_rule_back_to_the_author(tmp_path, monkeypatch):

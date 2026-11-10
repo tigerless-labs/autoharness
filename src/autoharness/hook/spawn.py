@@ -11,30 +11,50 @@ here: the reflector only appends intents, the promoter exclusively validates and
 ponytail: run() is the body of the "detached background job" (synchronous spawn→wait→drain); the "do not block the host Stop" detach is started in the background at the hook top level by the Phase 7 dispatch calling run(). spawn_fn is injectable (system tests use a fake reflector script in place of the real claude). Precise handling of the transcript upper-bound race (cap.md open) is still tolerated at v0.
 """
 import functools
+import json
+import logging
 import os
 import subprocess
 import sys
 import tarfile
 from pathlib import Path
+from types import SimpleNamespace
 
 from autoharness import config
-from autoharness.hook import capture, promoter
-from autoharness.lib import counters, layer, sidecar, skill_store, validate
+from autoharness.hook import capture, promoter, recovery
+from autoharness.lib import (
+    atomic,
+    counters,
+    intent_queue,
+    layer,
+    redact,
+    sidecar,
+    skill_store,
+    validate,
+)
+
+log = logging.getLogger(__name__)
 
 
 def description_index(roots=None, *, agent_only=False):
     roots = roots or {}
     lines = []
-    for lyr in layer.LAYERS:
+    for lyr in config.active_layers():
         root = roots.get(lyr)
         skills = layer.skills_dir(lyr, root)
         if not skills.exists():
             continue
         for path in sorted(skills.glob(f"*/{skill_store.SKILL_FILE}")):
             symbol = path.parent.name
+            if agent_only:
+                try:
+                    layer._check_name(symbol)
+                except ValueError:
+                    continue  # handwritten skills cannot belong to the managed pool
             if agent_only and not sidecar.is_agent_created(lyr, symbol, root):
                 continue  # curator only ever sees its own skills; native/user stay out of the pool
-            fm = validate._frontmatter(path.read_text()) or {}
+            # anyone's skill can sit here; a latin-1 SKILL.md must not take the whole reflection down
+            fm = validate._frontmatter(path.read_text(encoding="utf-8", errors="replace")) or {}
             name = fm.get("name") or symbol
             desc = fm.get("description") or "(no description)"
             lines.append(f"- {name} [{lyr}]: {desc} ({path})")
@@ -111,13 +131,29 @@ def child_env(run_id, root, *, base_env=None):
     return env
 
 
+def _spawn_error(proc, argv):
+    """Return bounded, redacted child diagnostics safe for the run account."""
+    stderr = redact.redact(str(proc.stderr or "")).strip()[-2000:]
+    return {
+        "argv0": redact.redact(str(argv[0])) if argv else None,
+        "returncode": proc.returncode,
+        "stderr_tail": stderr,
+    }
+
+
 def _detached_spawn(argv, env, bundle, cwd=None):
-    subprocess.run(argv, input=bundle, text=True, env=env, cwd=cwd, capture_output=True, check=False)
+    """Run the reflector child to completion; report a crash on stderr instead of discarding it."""
+    proc = subprocess.run(argv, input=bundle, text=True, encoding="utf-8", errors="replace",
+                          env=env, cwd=cwd, capture_output=True, check=False)
+    if proc.returncode != 0:
+        error = _spawn_error(proc, argv)
+        print(f"reflector child {error['argv0']} exited {proc.returncode}: "
+              f"{error['stderr_tail']}", file=sys.stderr)
+    return proc
 
 
 def _launcher(spawn_fn, proot, *, keep_cwd=False):
-    """An isolated child runs from the state directory, so it reads no project CLAUDE.md; a forked
-    one keeps the parent's cwd, because --resume looks the session up by it."""
+    """Run isolated bundle children from state; forks retain the cwd used to find the session."""
     if spawn_fn or keep_cwd or not config.CHILD_ISOLATION:
         return spawn_fn or _detached_spawn
     cwd = layer.state_dir(layer.PROJECT, proot)
@@ -125,11 +161,38 @@ def _launcher(spawn_fn, proot, *, keep_cwd=False):
     return functools.partial(_detached_spawn, cwd=str(cwd))
 
 
+def _record_spawn_failure(run_id, roots, proc, argv):
+    """Persist a crashed reflector in the run account (#160).
+
+    The detached launch DEVNULLs this whole process (dispatch.py), so neither the print above nor
+    the exit code reaches an operator. The runs/ account is where landed runs already live; verdicts
+    (if the child staged intents before dying) are preserved alongside the crash record.
+    """
+    if proc is None or getattr(proc, "returncode", 0) == 0:
+        return
+    state = layer.state_dir(layer.PROJECT, roots.get(layer.PROJECT))
+    runs = state / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    account = runs / f"{run_id}.json"
+    record = json.loads(account.read_text(encoding="utf-8")) if account.exists() else {"run_id": run_id}
+    record["spawn_error"] = _spawn_error(proc, argv)
+    atomic.write_text(account, json.dumps(record, ensure_ascii=False, indent=2))
+
+
+def _invoke_spawn(spawn_fn, argv, env, payload, run_id, roots):
+    try:
+        return spawn_fn(argv, env, payload)
+    except OSError as exc:
+        proc = SimpleNamespace(returncode=None, stderr=f"{type(exc).__name__}: {exc}")
+        _record_spawn_failure(run_id, roots, proc, argv)
+        raise
+
+
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
         spec_path=None, digest="", session_id=None, carrier=None, spawn_fn=None):
     roots = roots or {}
     proot = roots.get(layer.PROJECT)
-    spec = (spec_path or config.FORMAT_SPEC).read_text()
+    spec = (spec_path or config.FORMAT_SPEC).read_text(encoding="utf-8")
 
     carrier = carrier or config.REFLECTOR_CARRIER
     forked = carrier == "fork" and bool(session_id)
@@ -142,9 +205,15 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
         payload = build_bundle(window_text, description_index(roots), spec, digest=digest)
 
     env = child_env(run_id, proot)
-    _launcher(spawn_fn, proot, keep_cwd=forked)(argv, env, payload)
-
-    return promoter.drain(run_id, roots=roots, repo_name=repo_name)
+    # the live lock marks the run as having a spawn parent: between here and the own drain below,
+    # a foreign drain (the main session's Stop) leaves this queue alone instead of landing the
+    # child's intents mid-flight or racing its appends
+    with intent_queue.live_lock(run_id, proot):
+        proc = _invoke_spawn(_launcher(spawn_fn, proot, keep_cwd=forked),
+                             argv, env, payload, run_id, roots)
+        verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
+        _record_spawn_failure(run_id, roots, proc, argv)
+    return verdicts
 
 
 def _snapshot_skills(run_id, roots):
@@ -153,7 +222,7 @@ def _snapshot_skills(run_id, roots):
     manual unpack; rotation keeps SNAPSHOT_KEEP per layer."""
     snapdir = layer.state_dir(layer.PROJECT, roots.get(layer.PROJECT)) / "snapshots"
     snapdir.mkdir(parents=True, exist_ok=True)
-    for lyr in layer.LAYERS:
+    for lyr in config.active_layers():
         skills = layer.skills_dir(lyr, roots.get(lyr))
         if not skills.exists():
             continue
@@ -169,31 +238,41 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
     roots = roots or {}
     try:
         _snapshot_skills(run_id, roots)
+    except OSError:
+        pass  # a transient disk issue must not silently disable curation
     except Exception:
-        pass  # a transient disk issue must not silently disable curation (Hermes's exact trade-off)
-    spec = (spec_path or config.FORMAT_SPEC).read_text()
+        log.exception('unexpected snapshot error; curator running without safety net')
+    spec = (spec_path or config.FORMAT_SPEC).read_text(encoding="utf-8")
     bundle = build_curator_bundle(description_index(roots, agent_only=True), spec)
 
     argv = build_command(agent=agent or config.CURATOR_AGENT,
                          claude_bin=claude_bin or config.CLAUDE_BIN)
     env = child_env(run_id, roots.get(layer.PROJECT))
-    _launcher(spawn_fn, roots.get(layer.PROJECT))(argv, env, bundle)
-
-    return promoter.drain(run_id, roots=roots, repo_name=repo_name)
+    with intent_queue.live_lock(run_id, roots.get(layer.PROJECT)):  # same liveness marker as reflection
+        proc = _invoke_spawn(_launcher(spawn_fn, roots.get(layer.PROJECT)),
+                             argv, env, bundle, run_id, roots)
+        verdicts = promoter.drain(run_id, roots=roots, repo_name=repo_name)
+        _record_spawn_failure(run_id, roots, proc, argv)
+    return verdicts
 
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "--curate":
         run_id, proot, groot = argv[1:]
-        return run_curator(run_id, roots={layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)})
+        owner = recovery.track(run_id, Path(proot))
+        result = run_curator(run_id, roots={layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)})
+        recovery.complete(owner)
+        return result
     transcript_path, session_id, run_id, proot, groot = argv
     roots = {layer.PROJECT: Path(proot), layer.GLOBAL: Path(groot)}
+    owner = recovery.track(run_id, roots[layer.PROJECT])
     offset = counters.session_offset(session_id, roots[layer.PROJECT])
     window_text, new_offset = capture.window(transcript_path, offset)
     result = run(window_text, run_id, roots=roots, session_id=session_id,
                  digest=capture.digest(transcript_path, offset))
     counters.write_session_offset(session_id, new_offset, roots[layer.PROJECT])
+    recovery.complete(owner)
     return result
 
 
