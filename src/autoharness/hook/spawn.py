@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -152,13 +153,28 @@ def _detached_spawn(argv, env, bundle, cwd=None):
     return proc
 
 
+def _isolated_cwd(proot):
+    project = Path(proot).resolve().parent
+    key = layer._state_key(proot)
+    candidates = (
+        layer.state_dir(layer.PROJECT, proot),
+        Path(tempfile.gettempdir()) / "autoharness-child" / key,
+        Path.home() / ".cache" / "autoharness-child" / key,
+    )
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.is_relative_to(project):
+            continue
+        resolved.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return resolved
+    raise OSError(f"no isolated child working directory outside {project}")
+
+
 def _launcher(spawn_fn, proot, *, keep_cwd=False):
     """Run isolated bundle children from state; forks retain the cwd used to find the session."""
     if spawn_fn or keep_cwd or not config.CHILD_ISOLATION:
         return spawn_fn or _detached_spawn
-    cwd = layer.state_dir(layer.PROJECT, proot)
-    cwd.mkdir(parents=True, exist_ok=True)
-    return functools.partial(_detached_spawn, cwd=str(cwd))
+    return functools.partial(_detached_spawn, cwd=str(_isolated_cwd(proot)))
 
 
 def _record_spawn_failure(run_id, roots, proc, argv):

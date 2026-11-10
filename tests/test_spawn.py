@@ -465,7 +465,7 @@ def test_isolated_child_loads_only_this_plugin(monkeypatch):
     assert (config.PLUGIN_ROOT / ".claude-plugin" / "plugin.json").is_file()
 
 
-def test_isolated_bundle_child_runs_from_the_state_dir(tmp_path, monkeypatch):
+def test_isolated_bundle_child_runs_outside_the_project(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CHILD_ISOLATION", True)
     seen = {}
 
@@ -476,7 +476,17 @@ def test_isolated_bundle_child_runs_from_the_state_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(spawn.subprocess, "run", fake_run)
     roots = _roots(tmp_path)
     spawn.run("WINDOW", "r1", roots=roots, spec_path=config.FORMAT_SPEC)
-    assert seen["cwd"] == str(layer.state_dir("project", roots["project"]))
+    cwd = Path(seen["cwd"])
+    assert cwd.is_absolute()
+    assert not cwd.is_relative_to(roots["project"].parent)
+
+
+def test_isolated_bundle_child_uses_external_state_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "CHILD_ISOLATION", True)
+    monkeypatch.setenv("AUTOHARNESS_STATE_HOME", str(tmp_path / "external-state"))
+    roots = _roots(tmp_path / "project")
+    launcher = spawn._launcher(None, roots["project"])
+    assert Path(launcher.keywords["cwd"]) == layer.state_dir("project", roots["project"])
 
 
 def test_isolated_fork_child_keeps_the_parent_cwd(tmp_path, monkeypatch):
