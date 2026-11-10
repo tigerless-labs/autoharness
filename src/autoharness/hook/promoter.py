@@ -163,7 +163,7 @@ def _land(action, intent, body, level, name, root):
     ledger.append(level, name, _led(intent, evidence_ref), root)
 
 
-def promote(intent, *, roots=None, repo_name=None, known_names=None):
+def promote(intent, *, roots=None, repo_name=None):
     roots = roots or {}
     action = intent.get("action")
     name = intent.get("name")
@@ -198,11 +198,11 @@ def promote(intent, *, roots=None, repo_name=None, known_names=None):
         # Per-project drain locks cannot coordinate another project's edits to
         # the same global library. Keep local-only promotions independent.
         with lock.file_lock(layer.state_dir(level, roots.get(level)) / "promote.lock"):
-            return _promote_resolved(intent, action, name, level, roots, repo_name, known_names)
-    return _promote_resolved(intent, action, name, level, roots, repo_name, known_names)
+            return _promote_resolved(intent, action, name, level, roots, repo_name)
+    return _promote_resolved(intent, action, name, level, roots, repo_name)
 
 
-def _promote_resolved(intent, action, name, level, roots, repo_name, known_names):
+def _promote_resolved(intent, action, name, level, roots, repo_name):
     root = roots.get(level)
     try:
         body = _shape(intent, level, root)
@@ -233,7 +233,7 @@ def _promote_resolved(intent, action, name, level, roots, repo_name, known_names
     verdict = validate.validate(
         {**intent, "level": level}, body,
         target_is_agent_created=target_created, repo_name=repo_name, base_dir=base_dir,
-        skill_roots=roots, known_names=known_names,
+        skill_roots=roots,
     )
     if not verdict["ok"]:
         return _reject(action, level, verdict["findings"])
@@ -311,11 +311,11 @@ def _environmental(exc):
                                          or getattr(exc, "winerror", None) in _ENVIRONMENTAL_WINERRORS)
 
 
-def _promote_one(intent, roots, repo_name, batch_names):
+def _promote_one(intent, roots, repo_name):
     if intent_queue.UNREADABLE in intent:
         return _reject(None, None, [("queue", f"unreadable queue line: {intent[intent_queue.UNREADABLE]!r}")])
     try:
-        return promote(intent, roots=roots, repo_name=repo_name, known_names=batch_names)
+        return promote(intent, roots=roots, repo_name=repo_name)
     except Exception as exc:
         if _environmental(exc):
             raise  # keep the queue so the next drain retries it
@@ -335,6 +335,14 @@ def _waits_for_umbrella(intent, written):
             and isinstance(absorbed, str) and absorbed in written)
 
 
+def _waits_for_skill_pointer(verdict, written):
+    """A missing pointer into this run may become valid after its target lands."""
+    prefix, suffix = "referenced skill ", " does not exist"
+    return any(family == "structure" and detail.startswith(prefix) and detail.endswith(suffix)
+               and detail[len(prefix):-len(suffix)] in written
+               for family, detail in verdict.get("findings", []))
+
+
 def _promote_run(intents, roots, repo_name):
     """Judge one run's intents; the verdicts come back in queue order.
 
@@ -342,22 +350,37 @@ def _promote_run(intents, roots, repo_name):
     of one move. It waits until the run's writes are judged and is rejected if one to its umbrella
     was: the umbrella may well be live, but the skill's content never reached it."""
     written = {_written_name(i) for i in intents} - {None}
-    batch_names = {name for intent in intents if isinstance((name := intent.get("name")), str)}
     verdicts = [None] * len(intents)
-    rejected = set()
-    held = []
+    held, pointer_waiters = [], []
     for index, intent in enumerate(intents):
         if _waits_for_umbrella(intent, written):
             held.append(index)
             continue
-        verdicts[index] = _promote_one(intent, roots, repo_name, batch_names)
-        if not verdicts[index]["ok"] and _written_name(intent):
-            rejected.add(intent["name"])
+        verdicts[index] = _promote_one(intent, roots, repo_name)
+        if _waits_for_skill_pointer(verdicts[index], written):
+            pointer_waiters.append(index)
+
+    # A source may precede its target, and dependency chains may be reversed. Retry only after
+    # another waiter actually lands; a rejected target never becomes an exemption.
+    while pointer_waiters:
+        pending, progress = [], False
+        for index in pointer_waiters:
+            verdicts[index] = _promote_one(intents[index], roots, repo_name)
+            if verdicts[index]["ok"]:
+                progress = True
+            elif _waits_for_skill_pointer(verdicts[index], written):
+                pending.append(index)
+        if not progress:
+            break
+        pointer_waiters = pending
+
+    rejected = {intent["name"] for intent, verdict in zip(intents, verdicts, strict=True)
+                if verdict is not None and not verdict["ok"] and _written_name(intent)}
     for index in held:
         umbrella = intents[index]["absorbed_into"]
         verdicts[index] = (
             _reject("delete", None, [("absorbed_into", f"umbrella {umbrella!r} was rejected in this run")])
-            if umbrella in rejected else _promote_one(intents[index], roots, repo_name, batch_names))
+            if umbrella in rejected else _promote_one(intents[index], roots, repo_name))
     return verdicts
 
 

@@ -451,11 +451,8 @@ def test_name_shaped_span_without_cue_is_not_a_pointer(monkeypatch, tmp_path):
     assert v["ok"], v["findings"]
 
 
-def test_pointer_to_the_self_and_to_batch_names_is_exempt(monkeypatch, tmp_path):
+def test_pointer_to_the_self_is_exempt(monkeypatch, tmp_path):
     _skill_env(monkeypatch, tmp_path)
-    v = validate.validate(GOOD_INTENT, _ptr_body("new-umbrella-skill"), base_dir=tmp_path,
-                          known_names={"new-umbrella-skill"})
-    assert v["ok"], v["findings"]
     intent = {**GOOD_INTENT, "name": "new-umbrella-skill"}
     v = validate.validate(intent, _ptr_body("new-umbrella-skill"), base_dir=tmp_path)
     assert v["ok"], v["findings"]

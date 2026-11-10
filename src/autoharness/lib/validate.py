@@ -21,8 +21,9 @@ in both directions: carrying one in `files` and removing one via remove_file are
 
 When base_dir is present, `_skill_ptr_findings` also resolves backticked cross-skill pointers (cue
 see/per/follow or an .archive/ name) against the two-layer store (`skill_store.find`), so a
-misremembered skill name is rejected at the gate instead of dangling in a landed skill. Names the
-same drain is creating come in as `known_names`, so a same-batch reference cannot false-positive.
+misremembered skill name is rejected at the gate instead of dangling in a landed skill. The promoter
+retries a same-run dependent only after its target actually lands, so a rejected target cannot create
+a false exemption.
 """
 import ast
 import re
@@ -48,7 +49,7 @@ _WHEN = re.compile(r"(?i)\bwhen")
 # (`docker-compose`, `gh-cli`) out; when no cue is present, an .archive/ name is enough signal — it
 # names a skill that once existed, the exact mark of a reflector referencing history it misremembers.
 _SKILL_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+")
-_SKILL_CUE = re.compile(r"\b(?:see|per|follow)\b[^\n`]{0,40}$")
+_SKILL_CUE = re.compile(r"(?i)\b(?:see|per|follow)\b[^\n`]{0,40}$")
 _USE_WHEN = re.compile(r"(?i)\buse\s+when\b")
 
 
@@ -238,13 +239,13 @@ def _archived_name(name, roots):
                for lyr in config.active_layers())
 
 
-def _skill_ptr_findings(body, roots, known_names):
+def _skill_ptr_findings(body, roots, exempt_names):
     """Backticked pointers into the handoff graph (issue #305: a reflector-typoed skill name lands
     and stays, ten days eighty requests, until a human reads it). Name-shaped spans carrying the
     cross-skill cue, or matching an .archive/ name, must resolve with the same cross-layer find the
     promoter routes updates through; ambiguity (live in both layers) is a real pointer. Names the
-    same drain is creating are pre-resolved — creating A and pointing see `A` in the same batch is
-    legal, and the store cannot know it yet."""
+    caller explicitly exempts only the skill's own name; same-run dependencies are retried by the
+    promoter after their targets actually land."""
     findings = []
     cue_room = 49  # chars before the opening tick (excluded here): a few words, not a paragraph scan
     for start, end in _backtick_spans(body):
@@ -254,7 +255,7 @@ def _skill_ptr_findings(body, roots, known_names):
         text = body[max(0, start - cue_room):start - 1]
         if not _SKILL_CUE.search(text) and not _archived_name(name, roots):
             continue
-        if name in known_names:
+        if name in exempt_names:
             continue
         try:
             live = skill_store.find(name, roots)
@@ -285,7 +286,7 @@ def subfile_references(body, *, base_dir, files=None):
             yield ref
 
 
-def _structure(body, base_dir, files=None, roots=None, known_names=()):
+def _structure(body, base_dir, files=None, roots=None, exempt_names=()):
     findings = []
     fm = _frontmatter(body)
     if fm is None:
@@ -326,7 +327,7 @@ def _structure(body, base_dir, files=None, roots=None, known_names=()):
         for ref in subfile_references(body, base_dir=base_dir, files=files):
             if ref not in (files or {}) and not (base_dir / ref).is_file():
                 findings.append(("structure", f"referenced {ref} neither carried in intent nor live"))
-        findings += _skill_ptr_findings(body, roots or {}, known_names)
+        findings += _skill_ptr_findings(body, roots or {}, exempt_names)
     for rel in files or {}:
         if isinstance(rel, str):
             pointer = re.compile(r"(?<![A-Za-z0-9_./-])(?:\./|\$\{CLAUDE_SKILL_DIR\}/)?" + re.escape(rel) + r"(?![A-Za-z0-9_/-])(?!\.[A-Za-z0-9_])")
@@ -340,7 +341,7 @@ def structure(body, files=None):
 
 
 def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base_dir=None,
-             skill_roots=None, known_names=None):
+             skill_roots=None):
     findings = []
     files = intent.get("files")
 
@@ -353,7 +354,7 @@ def validate(intent, body, *, target_is_agent_created=None, repo_name=None, base
             findings.append(("secret", secrets))
 
         findings += _structure(body, base_dir, files, roots=skill_roots,
-                               known_names=set(known_names or ()) | {intent.get("name")})
+                               exempt_names={intent.get("name")})
         findings += check_files(files, base_dir=base_dir, creating=intent.get("action") == "create")
 
         if _PLACEHOLDER.search(body):
