@@ -104,3 +104,19 @@ def test_negative_reflect_cadence_does_not_trigger_every_turn(tmp_path):
         assert on_stop.on_stop({"session_id": "s1"}, root=tmp_path)["triggered"] is False
     finally:
         importlib.reload(cfg)
+
+
+def test_invalid_min_flush_falls_back_to_one():
+    import importlib
+
+    from autoharness import config as cfg
+    try:
+        with patch.dict(os.environ, {"AUTOHARNESS_MIN_FLUSH_N": "0"}):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                importlib.reload(cfg)
+        assert cfg.MIN_FLUSH_N == 1
+        assert any("AUTOHARNESS_MIN_FLUSH_N=0 is below the minimum 1" in str(item.message)
+                   for item in caught)
+    finally:
+        importlib.reload(cfg)
