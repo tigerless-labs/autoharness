@@ -65,6 +65,18 @@ def test_env_overrides_knobs_else_defaults(monkeypatch):
         importlib.reload(config)  # restore defaults for the rest of the suite
 
 
+def test_maintenance_models_are_independently_configurable(monkeypatch):
+    monkeypatch.setenv("AUTOHARNESS_REFLECTOR_MODEL", "sonnet")
+    monkeypatch.setenv("AUTOHARNESS_CURATOR_MODEL", "provider/curator-v1")
+    importlib.reload(config)
+    try:
+        assert config.REFLECTOR_MODEL == "sonnet"
+        assert config.CURATOR_MODEL == "provider/curator-v1"
+    finally:
+        monkeypatch.undo()
+        importlib.reload(config)
+
+
 # #150: the README documents these as operator-settable, but no override test
 # reached them. A knob nothing sets always reads its default, so every default
 # assertion in this file still passed while the documented env var could have

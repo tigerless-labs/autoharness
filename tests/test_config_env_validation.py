@@ -90,6 +90,17 @@ def test_int_env_accepts_value_at_minimum():
             assert len(w) == 0
 
 
+def test_string_env_trims_values_and_rejects_explicit_blank():
+    from autoharness import config as cfg
+    with patch.dict(os.environ, {"AUTOHARNESS_TEST_MODEL": "  sonnet  "}):
+        assert cfg._str_env("AUTOHARNESS_TEST_MODEL") == "sonnet"
+    with patch.dict(os.environ, {"AUTOHARNESS_TEST_MODEL": "   "}):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert cfg._str_env("AUTOHARNESS_TEST_MODEL") is None
+        assert any("AUTOHARNESS_TEST_MODEL is empty" in str(item.message) for item in caught)
+
+
 def test_negative_reflect_cadence_does_not_trigger_every_turn(tmp_path):
     import importlib
 

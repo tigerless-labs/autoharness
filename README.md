@@ -119,6 +119,8 @@ configure unless you want to change the pace.
 | `AUTOHARNESS_CONSOLIDATE_EVERY_N` | `250` | Same quantum for the curator, the periodic pass that merges the library as a whole. Held well above the reflection cadence — consolidation is rarer than distillation. |
 | `AUTOHARNESS_DIGEST_EXCHANGES` | `20` | How many exchanges *before* the episode window are compressed into the reflector's prior-context digest (text + tool names only). Unused by the fork carrier, which replays the real conversation instead. |
 | `AUTOHARNESS_CARRIER` | `bundle` | What carries the reflection. `bundle` hands a redacted window + digest to a fresh subagent. `fork` resumes and forks the session that just ended, so the reflector reads the real conversation on the parent's warm cache. Stays `bundle` until the cache-hit measurement is in. |
+| `AUTOHARNESS_REFLECTOR_MODEL` | `haiku` (agent default) | Model alias or full provider model ID for reflector sessions. Unset leaves the agent's `model: haiku` frontmatter in control. An explicit value is passed with `--model`; when combined with the `fork` carrier, changing away from the parent model gives up the warm cross-session model cache. |
+| `AUTOHARNESS_CURATOR_MODEL` | `haiku` (agent default) | Independent model alias or full provider model ID for curator sessions. Unset leaves the curator agent frontmatter in control. |
 
 **Recall — what the model sees**
 

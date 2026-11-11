@@ -27,6 +27,20 @@ def _int_env(name, default, minimum=None):
     return value
 
 
+def _str_env(name, default=None):
+    """Read a non-empty string knob; an explicit blank is a typo, not an override."""
+    try:
+        raw = os.environ[name]
+    except KeyError:
+        return default
+    value = raw.strip()
+    if not value:
+        fallback = repr(default) if default is not None else "the agent default"
+        warnings.warn(f"{name} is empty; using {fallback}", stacklevel=2)
+        return default
+    return value
+
+
 # trigger cadence, counted in the activity quantum (main-session tool calls, direction H) — not turns.
 # Recalibrated with the numerator: the old turn-based 10 lands near 30-50 tool calls, and the standing
 # ruling is to err sparse (precipitation is maintenance, and SessionEnd flushes the tail).
@@ -126,6 +140,10 @@ REFLECTOR_CARRIER = os.environ.get("AUTOHARNESS_CARRIER", "bundle")
 
 REFLECTOR_AGENT = "autoharness:reflector"  # the --agent reference for spawn (plugin namespace, Phase 0 resolution pending live test)
 CURATOR_AGENT = "autoharness:curator"      # the --agent reference for the periodic consolidation pass (same spawn chain as reflector)
+# Unset means "let the agent frontmatter decide" (currently `model: haiku`), preserving the exact
+# historical command line. An explicit value becomes a --model override for the maintenance session.
+REFLECTOR_MODEL = _str_env("AUTOHARNESS_REFLECTOR_MODEL")
+CURATOR_MODEL = _str_env("AUTOHARNESS_CURATOR_MODEL")
 CLAUDE_BIN = shutil.which("claude") or "claude"  # the child-session executable for spawn; which() honours PATHEXT so Windows resolves claude.cmd (bare "claude" raises WinError 2 under CreateProcess); overridable in tests
 RUN_ID_ENV = "AUTOHARNESS_RUN_ID"           # spawn injects the intent-queue run_id into the child session via env (read by stage_skill)
 # The queue for intents staged from a live user session (/learn, or the model acting on its own).
