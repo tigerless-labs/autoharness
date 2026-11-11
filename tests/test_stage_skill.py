@@ -115,6 +115,28 @@ def test_delete_rejects_body(tmp_path):
     assert not v["ok"] and "schema" in _errs(v)
 
 
+def test_suggest_accepts_read_only_owner_label_without_touching_tree(tmp_path):
+    params = {"action": "suggest", "name": "plugin:deploy@market",
+              "reason": "Update the deploy command", "evidence": "Use make release now"}
+
+    verdict = server.stage(params, run_id=RUN, root=tmp_path)
+
+    assert verdict["ok"]
+    assert _queue(tmp_path) == [params]
+    assert not layer.skills_dir("project", tmp_path).exists()
+
+
+def test_suggest_rejects_skill_mutation_fields(tmp_path):
+    verdict = server.stage(
+        {"action": "suggest", "name": "CLAUDE.md", "reason": "Update the rule",
+         "evidence": "new rule", "body": GOOD_BODY},
+        run_id=RUN, root=tmp_path,
+    )
+
+    assert not verdict["ok"] and "schema" in _errs(verdict)
+    assert _queue(tmp_path) == []
+
+
 def test_bad_level_rejected_zero_append(tmp_path):
     v = server.stage(_params(level="planetary"), run_id=RUN, root=tmp_path)
     assert not v["ok"] and "schema" in _errs(v)

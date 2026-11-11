@@ -22,7 +22,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from autoharness import config
-from autoharness.hook import capture, on_session_start, promoter, recovery
+from autoharness.hook import capture, dedupe_index, on_session_start, promoter, recovery
 from autoharness.lib import (
     atomic,
     counters,
@@ -139,6 +139,13 @@ def description_index(roots=None, *, agent_only=False, include_body_paths=None):
         return "(no live skills yet)"
     index = "\n".join(lines)
     return f"{BODY_PATH_INSTRUCTION}\n\n{index}" if include_body_paths else index
+
+
+def reflector_index(roots=None, *, transcript_path=None):
+    """Writable live skills plus separately tagged owners used only for compare-first dedupe."""
+    writable = description_index(roots)
+    read_only = dedupe_index.read_only_index(roots or {}, transcript_path=transcript_path)
+    return writable + "\n\n" + read_only if read_only else writable
 
 
 def build_bundle(window, index, spec, digest=""):
@@ -284,7 +291,8 @@ def _invoke_spawn(spawn_fn, argv, env, payload, run_id, roots):
 
 
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
-        spec_path=None, digest="", session_id=None, carrier=None, spawn_fn=None):
+        spec_path=None, digest="", session_id=None, transcript_path=None, carrier=None,
+        spawn_fn=None):
     roots = roots or {}
     proot = roots.get(layer.PROJECT)
     spec = (spec_path or config.FORMAT_SPEC).read_text(encoding="utf-8")
@@ -293,11 +301,18 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     forked = carrier == "fork" and bool(session_id)
     if forked:  # no session to fork -> bundle chain (fail-safe)
         argv = build_fork_command(session_id=session_id, claude_bin=claude_bin or config.CLAUDE_BIN)
-        payload = build_fork_prompt(description_index(roots), spec)  # -p reads the prompt from stdin
+        payload = build_fork_prompt(
+            reflector_index(roots, transcript_path=transcript_path), spec
+        )  # -p reads the prompt from stdin
     else:
         argv = build_command(agent=agent or config.REFLECTOR_AGENT,
                              claude_bin=claude_bin or config.CLAUDE_BIN)
-        payload = build_bundle(window_text, description_index(roots), spec, digest=digest)
+        payload = build_bundle(
+            window_text,
+            reflector_index(roots, transcript_path=transcript_path),
+            spec,
+            digest=digest,
+        )
 
     env = child_env(run_id, proot)
     # the live lock marks the run as having a spawn parent: between here and the own drain below,
@@ -365,6 +380,7 @@ def main(argv=None):
     offset = counters.session_offset(session_id, roots[layer.PROJECT])
     window_text, new_offset = capture.window(transcript_path, offset)
     result = run(window_text, run_id, roots=roots, session_id=session_id,
+                 transcript_path=transcript_path,
                  digest=capture.digest(transcript_path, offset))
     counters.write_session_offset(session_id, new_offset, roots[layer.PROJECT])
     recovery.complete(owner)

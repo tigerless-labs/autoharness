@@ -231,6 +231,23 @@ def test_summary_names_the_run_that_drained(tmp_path):
     assert "deadrun" in line and "landed 1" in line
 
 
+def test_summary_surfaces_read_only_owner_suggestions(tmp_path):
+    roots = {"global": tmp_path / "g", "project": tmp_path / "p"}
+    state = layer.state_dir("project", roots["project"])
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "last_run.json").write_text(json.dumps({
+        "run_id": "suggest-run", "landed": 0, "rejected": 0, "suggested": 1,
+        "suggestions": [{"owner": "plugin:deploy@market",
+                         "suggestion": "Replace deploy-old with deploy-new"}],
+    }))
+
+    line = on_session_start.last_run_summary(roots)
+
+    assert "recorded 1 read-only owner suggestion" in line
+    assert "plugin:deploy@market" in line
+    assert "Replace deploy-old with deploy-new" in line
+
+
 def test_summary_line_reports_uncategorized_landings(tmp_path):
     # fail-open still has to be visible: a run that landed skills without a category says so
     roots = {"global": tmp_path / "g", "project": tmp_path / "p"}

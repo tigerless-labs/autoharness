@@ -733,6 +733,40 @@ def test_drain_writes_run_account_and_last_run(tmp_path):
     assert last["landed"] == 1 and last["rejected"] == 1
 
 
+def test_suggestion_is_accounted_and_never_touches_skill_trees(tmp_path):
+    roots = _roots12(tmp_path)
+    intent_queue.append(
+        "suggest", {"action": "suggest", "name": "plugin:deploy@market",
+                    "reason": "Replace deploy-old with deploy-new", "evidence": "user correction"},
+        roots["project"],
+    )
+
+    verdicts = promoter.drain("suggest", roots=roots)
+
+    assert verdicts == [{"ok": True, "action": "suggest", "level": None,
+                         "findings": [], "notes": []}]
+    assert not layer.skills_dir("project", roots["project"]).exists()
+    state = layer.state_dir("project", roots["project"])
+    run = json.loads((state / "runs" / "suggest.json").read_text())
+    assert run["verdicts"][0]["suggestion"] == "Replace deploy-old with deploy-new"
+    last = json.loads((state / "last_run.json").read_text())
+    assert last["landed"] == 0 and last["rejected"] == 0 and last["suggested"] == 1
+
+
+def test_malformed_suggestion_is_rejected_by_promoter_authority(tmp_path):
+    roots = _roots12(tmp_path)
+
+    verdict = promoter.promote(
+        {"action": "suggest", "name": ["not", "a", "string"], "reason": "change it",
+         "evidence": "e", "body": "must never land"},
+        roots=roots,
+    )
+
+    assert not verdict["ok"]
+    assert {family for family, _ in verdict["findings"]} == {"schema"}
+    assert not layer.skills_dir("project", roots["project"]).exists()
+
+
 # --- a fold is one move: its deletes wait for the umbrella's write and fall with it (#296) ---
 
 def _write_umbrella(name="umbrella", body=None):
