@@ -49,9 +49,12 @@ SKILL_BODY_MAX_LINES = _int_env("AUTOHARNESS_SKILL_BODY_MAX_LINES", 25, minimum=
 # description is the trigger: the host preloads name+description and matches recall on it, so a skill
 # lives or dies here. Cap = Anthropic's documented 1024-char host limit (past it the host truncates).
 SKILL_DESC_MAX_CHARS = _int_env("AUTOHARNESS_SKILL_DESC_MAX_CHARS", 1024)
-# self-injected recall index (SessionStart additionalContext): per-line description truncation,
-# mirroring Hermes's tier-0 index discipline — the index is a scan surface, not the full trigger text.
+# Description budget used by authoring validation and reflector indexes. SessionStart does not repeat
+# descriptions: Claude Code already supplies every native skill name and full description.
 INDEX_DESC_MAX_CHARS = _int_env("AUTOHARNESS_INDEX_DESC_MAX_CHARS", 60, minimum=4)
+# Keep SessionStart's additive layer/category map below Claude Code's persisted-output threshold.
+# The native skill list remains the complete recall surface when the compact map omits names.
+SESSION_INDEX_MAX_BYTES = 1_600
 # self-injection off switch: the index stops being emitted, everything else (lifecycle pass,
 # use/view counters, the last-run summary) is untouched. Needed because the only other way to run
 # without the index is to run without the plugin — which also removes the counters that measure the

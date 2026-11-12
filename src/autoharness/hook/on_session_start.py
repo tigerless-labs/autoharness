@@ -22,47 +22,18 @@ from autoharness.lib import counters, layer, lifecycle, sidecar, skill_store, va
 
 log = logging.getLogger(__name__)
 
-# Recall self-injection (mng.md §召回面自持): the host's native description recall stays untouched;
-# this compact index of self-produced skills rides SessionStart additionalContext so "whether the
-# library is offered" is our own config, not host behavior. Grouped by frontmatter category
-# (open set, absent -> general), alphabetical within a group, layer-tagged per line.
+# Claude Code already injects every available skill name and full description. SessionStart adds only
+# autoharness ownership metadata the native list lacks: category and layer. Repeating descriptions
+# wastes context and makes large hook output get persisted behind a short preview.
 INDEX_HEADER = (
-    "Self-accumulated skills (autoharness-managed). When the task at hand matches a "
-    "description below, you MUST consider loading that skill before proceeding."
+    "Autoharness-managed skills are already present with full descriptions in Claude Code's native "
+    "skill list. You MUST consider loading a matching skill before proceeding. This compact map adds "
+    "category and ownership layer only."
 )
 
 
 def _sanitize(text, limit):
     return " ".join(str(text).split())[:limit]  # line-based surface: newlines are forgery, collapse them
-
-
-def _fit(text, limit):
-    """Fit one description, retaining a validated trigger cue when the prefix would lose it.
-
-    Create/update descriptions fit the budget already. Legacy and patch-exempt descriptions may not;
-    keep their first recognized cue on the scan surface without expanding the per-entry budget."""
-    flat = " ".join(str(text).split())
-    if len(flat) <= limit:
-        return flat
-
-    def clipped(value, budget):
-        return value if len(value) <= budget else value[:budget - 3] + "..."
-
-    cue_start = validate.trigger_cue_start(flat)
-    if cue_start in (None, 0):
-        return clipped(flat, limit)
-
-    omission = "... "
-    cue_text = flat[cue_start:].strip()
-    cue_budget = limit - len(omission)
-    if cue_budget <= 3:
-        return clipped(flat, limit)
-    if len(cue_text) > cue_budget:
-        return omission + clipped(cue_text, cue_budget)
-
-    prefix_budget = cue_budget - len(cue_text)
-    prefix = flat[:cue_start].strip()[:prefix_budget]
-    return prefix + omission + cue_text
 
 
 def _read_hint(roots, cwd):
@@ -76,6 +47,30 @@ def _read_hint(roots, cwd):
         return None
     return (f"[project] skills live outside this checkout, so the Skill tool cannot load them: "
             f"Read {skills}/<name>/SKILL.md instead.")
+
+
+def _compact_map(groups, hint=None):
+    entries = [(category, line) for category in sorted(groups) for line in sorted(groups[category])]
+    lines = [INDEX_HEADER]
+    if hint:
+        lines.extend(["", _sanitize(hint, 512)])
+    lines.append("")
+    included = 0
+    current_category = None
+    for category, entry in entries:
+        addition = ([f"## {category}"] if category != current_category else []) + [entry]
+        remaining = len(entries) - included - 1
+        tail = (["", f"... {remaining} more managed skills; use the native list for the complete set."]
+                if remaining else [])
+        if len("\n".join(lines + addition + tail).encode("utf-8")) > config.SESSION_INDEX_MAX_BYTES:
+            break
+        lines.extend(addition)
+        current_category = category
+        included += 1
+    omitted = len(entries) - included
+    if omitted:
+        lines.extend(["", f"... {omitted} more managed skills; use the native list for the complete set."])
+    return "\n".join(lines)
 
 
 def recall_index(roots, cwd=None):
@@ -106,20 +101,13 @@ def recall_index(roots, cwd=None):
                 log.warning("skipping unreadable skill description: %s", path)
                 continue
             fm = validate._frontmatter(text) or {}
-            desc = _fit(fm.get("description") or "(no description)", config.INDEX_DESC_MAX_CHARS)
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
-            groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]: {desc}")
+            groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]")
             has_project = has_project or lyr == layer.PROJECT
     if not groups:
         return None  # empty library -> zero injection
-    lines = [INDEX_HEADER, ""]
-    for cat in sorted(groups):
-        lines.append(f"## {cat}")
-        lines.extend(sorted(groups[cat]))
     hint = _read_hint(roots, cwd) if has_project else None
-    if hint:
-        lines += ["", hint]
-    return "\n".join(lines)
+    return _compact_map(groups, hint)
 
 
 def last_run_summary(roots):

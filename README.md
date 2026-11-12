@@ -126,7 +126,7 @@ configure unless you want to change the pace.
 |---|---|---|
 | `AUTOHARNESS_INDEX_SUSPENDED` | `0` | Set to `1` to stop injecting the index entirely. Everything else keeps running — the lifecycle pass, the use/view counters, the last-run summary — so this is the switch for measuring what the index is actually worth, and for anyone unwilling to spend the context on it. |
 | `AUTOHARNESS_INDEX_BODY_PATHS` | `0` | Set to `1` to include absolute `SKILL.md` paths in reflector and curator indexes so child sessions can read bodies before modifying, merging, or deduplicating them. Child isolation enables these paths automatically. The session-start recall index is unaffected. |
-| `AUTOHARNESS_INDEX_DESC_MAX_CHARS` | `60` | Per-line description budget in the session-start index. The index is a scan surface, not the full trigger text — raise it for longer lines, at the cost of context on every session. |
+| `AUTOHARNESS_INDEX_DESC_MAX_CHARS` | `60` | Description budget used by authoring validation and reflector/curator comparison indexes. SessionStart does not repeat descriptions already present in Claude Code's native skill list; it emits only a byte-bounded category/layer map. |
 | `AUTOHARNESS_SKILL_DESC_MAX_CHARS` | `1024` | Hard cap on a skill's own description, matching the host's documented limit; a longer one is rejected rather than silently truncated at load. |
 | `AUTOHARNESS_SKILL_BODY_MAX_LINES` | `25` | Altitude cap: a `SKILL.md` body over this many non-blank lines is rejected as a transcript rather than a rule. Backing detail belongs in the skill's `references/`. |
 

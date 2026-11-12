@@ -18,7 +18,8 @@ def test_bad_utf8_skill_does_not_disable_other_recall_or_reflection_entries(
     damaged.write_bytes(b"\xff\xfe invalid UTF-8")
     before = damaged.read_bytes()
     recall = on_session_start.on_session_start(roots=roots)["context"]
-    assert "useful-healthy" in recall
+    assert "- healthy [project]" in recall
+    assert "useful-healthy" not in recall
     assert "damaged" not in recall
     assert "useful-healthy" in spawn.description_index(roots)
     assert "skipping unreadable skill" in caplog.text

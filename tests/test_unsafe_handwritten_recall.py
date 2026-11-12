@@ -10,7 +10,9 @@ def test_unsafe_handwritten_name_does_not_disable_managed_recall(tmp_path):
     handwritten.parent.mkdir(parents=True)
     handwritten.write_text('---\nname: My Notes\ndescription: handwritten\n---\nbody')
     before = handwritten.read_bytes()
-    assert 'useful-healthy' in on_session_start.on_session_start(roots=roots)['context']
+    recall = on_session_start.on_session_start(roots=roots)['context']
+    assert '- healthy [project]' in recall
+    assert 'useful-healthy' not in recall
     index = spawn.description_index(roots, agent_only=True)
     assert 'useful-healthy' in index
     assert not any(line.startswith('- My Notes ') for line in index.splitlines())

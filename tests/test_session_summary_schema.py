@@ -20,5 +20,6 @@ def test_bad_previous_run_summary_does_not_starve_skill_recall(tmp_path, record)
     state.mkdir(parents=True, exist_ok=True)
     (state / "last_run.json").write_text(json.dumps(record))
     result = on_session_start.on_session_start(roots=roots)
-    assert "healthy recall" in result["context"]
+    assert "- useful [project]" in result["context"]
+    assert "healthy recall" not in result["context"]
     assert not (state / "last_run.json.consuming").exists()
