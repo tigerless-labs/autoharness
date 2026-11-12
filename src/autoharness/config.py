@@ -27,10 +27,28 @@ def _int_env(name, default, minimum=None):
     return value
 
 
+def _str_env(name, default=None):
+    """Read a non-empty string knob; an explicit blank is a typo, not an override."""
+    try:
+        raw = os.environ[name]
+    except KeyError:
+        return default
+    value = raw.strip()
+    if not value:
+        fallback = repr(default) if default is not None else "the agent default"
+        warnings.warn(f"{name} is empty; using {fallback}", stacklevel=2)
+        return default
+    return value
+
+
 # trigger cadence, counted in the activity quantum (main-session tool calls, direction H) — not turns.
 # Recalibrated with the numerator: the old turn-based 10 lands near 30-50 tool calls, and the standing
 # ruling is to err sparse (precipitation is maintenance, and SessionEnd flushes the tail).
 REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 50, minimum=1)  # the window itself is watermark-delimited (capture)
+# SessionEnd tail flushes are independent of the mid-session cadence above. Keep the historical
+# flush-any-positive-tail behaviour by default, while allowing operators to decline tiny, expensive
+# reflector runs. A skipped tail is deliberately discarded when the session counter is cleared.
+MIN_FLUSH_N = _int_env("AUTOHARNESS_MIN_FLUSH_N", 1, minimum=1)
 CONSOLIDATE_EVERY_N = _int_env("AUTOHARNESS_CONSOLIDATE_EVERY_N", 250)  # ponytail: placeholder, calibrate in experiments/; curator (content-level merge) beat, same quantum as REFLECT_EVERY_N and held sparser than it
 
 # raw-capture byte caps (ponytail: placeholders, calibrate in experiments/): per transcript record,
@@ -126,6 +144,10 @@ REFLECTOR_CARRIER = os.environ.get("AUTOHARNESS_CARRIER", "bundle")
 
 REFLECTOR_AGENT = "autoharness:reflector"  # the --agent reference for spawn (plugin namespace, Phase 0 resolution pending live test)
 CURATOR_AGENT = "autoharness:curator"      # the --agent reference for the periodic consolidation pass (same spawn chain as reflector)
+# Unset means "let the agent frontmatter decide" (currently `model: haiku`), preserving the exact
+# historical command line. An explicit value becomes a --model override for the maintenance session.
+REFLECTOR_MODEL = _str_env("AUTOHARNESS_REFLECTOR_MODEL")
+CURATOR_MODEL = _str_env("AUTOHARNESS_CURATOR_MODEL")
 CLAUDE_BIN = shutil.which("claude") or "claude"  # the child-session executable for spawn; which() honours PATHEXT so Windows resolves claude.cmd (bare "claude" raises WinError 2 under CreateProcess); overridable in tests
 RUN_ID_ENV = "AUTOHARNESS_RUN_ID"           # spawn injects the intent-queue run_id into the child session via env (read by stage_skill)
 # The queue for intents staged from a live user session (/learn, or the model acting on its own).

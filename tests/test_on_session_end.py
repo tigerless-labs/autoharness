@@ -11,6 +11,7 @@ def _unguard(monkeypatch):
 
 def test_flush_remaining_window_equals_count(monkeypatch, tmp_path):
     _unguard(monkeypatch)
+    monkeypatch.setattr(config, "MIN_FLUSH_N", 1)
     counters.bump_session("sess-1", tmp_path)
     counters.bump_session("sess-1", tmp_path)
     counters.bump_session("sess-1", tmp_path)  # tail below threshold = 3
@@ -25,6 +26,37 @@ def test_self_deletes_counter(monkeypatch, tmp_path):
     assert p.exists()
     on_session_end.on_session_end(EV, root=tmp_path)
     assert not p.exists()  # self-deletes on teardown
+
+
+def test_tail_below_minimum_is_discarded_and_counter_cleared(monkeypatch, tmp_path):
+    _unguard(monkeypatch)
+    monkeypatch.setattr(config, "MIN_FLUSH_N", 3)
+    counters.bump_session("sess-1", tmp_path)
+    counters.bump_session("sess-1", tmp_path)
+    p = counters._session_path("sess-1", tmp_path)
+
+    verdict = on_session_end.on_session_end(EV, root=tmp_path)
+
+    assert verdict == {
+        "triggered": False,
+        "reason": "below_min_flush",
+        "session_id": "sess-1",
+        "count": 2,
+        "minimum": 3,
+    }
+    assert not p.exists()
+
+
+def test_tail_at_minimum_flushes(monkeypatch, tmp_path):
+    _unguard(monkeypatch)
+    monkeypatch.setattr(config, "MIN_FLUSH_N", 2)
+    counters.bump_session("sess-1", tmp_path)
+    counters.bump_session("sess-1", tmp_path)
+
+    verdict = on_session_end.on_session_end(EV, root=tmp_path)
+
+    assert verdict["triggered"] is True
+    assert verdict["window_n"] == 2
 
 
 def test_no_flush_when_zero(monkeypatch, tmp_path):

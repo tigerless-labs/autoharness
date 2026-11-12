@@ -190,9 +190,13 @@ def isolation_args():
     return ["--setting-sources", "", "--plugin-dir", str(config.PLUGIN_ROOT), "--no-session-persistence"]
 
 
-def build_fork_command(*, session_id, claude_bin):
+def _model_args(model):
+    return ["--model", model] if model else []
+
+
+def build_fork_command(*, session_id, claude_bin, model=None):
     return [claude_bin, "-p", "--resume", str(session_id), "--fork-session",
-            "--dangerously-skip-permissions", *isolation_args()]
+            "--dangerously-skip-permissions", *_model_args(model), *isolation_args()]
 
 
 def build_fork_prompt(index, spec):
@@ -201,13 +205,14 @@ def build_fork_prompt(index, spec):
             + "\n\n# Authoring + format spec (write to satisfy this)\n\n" + spec + "\n")
 
 
-def build_command(*, agent, claude_bin):
+def build_command(*, agent, claude_bin, model=None):
     # Reflection is an unattended background job — nobody is there to approve tool calls, so skip the
     # permission prompt. The security boundary is held by the agent's tools allowlist
     # (Read/Grep/Glob/stage_skill) + the top-level PreToolUse write backstop, not by the prompt.
     # (live e2e: a reflector's real stage_skill call gets blocked by the permission gate and can only
     # "narrate"; only with this flag does it land.)
-    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions", *isolation_args()]
+    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions",
+            *_model_args(model), *isolation_args()]
 
 
 def child_env(run_id, root, *, base_env=None):
@@ -300,13 +305,18 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     carrier = carrier or config.REFLECTOR_CARRIER
     forked = carrier == "fork" and bool(session_id)
     if forked:  # no session to fork -> bundle chain (fail-safe)
-        argv = build_fork_command(session_id=session_id, claude_bin=claude_bin or config.CLAUDE_BIN)
+        argv = build_fork_command(
+            session_id=session_id,
+            claude_bin=claude_bin or config.CLAUDE_BIN,
+            model=config.REFLECTOR_MODEL,
+        )
         payload = build_fork_prompt(
             reflector_index(roots, transcript_path=transcript_path), spec
         )  # -p reads the prompt from stdin
     else:
         argv = build_command(agent=agent or config.REFLECTOR_AGENT,
-                             claude_bin=claude_bin or config.CLAUDE_BIN)
+                             claude_bin=claude_bin or config.CLAUDE_BIN,
+                             model=config.REFLECTOR_MODEL)
         payload = build_bundle(
             window_text,
             reflector_index(roots, transcript_path=transcript_path),
@@ -356,7 +366,8 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
     bundle = build_curator_bundle(description_index(roots, agent_only=True), spec)
 
     argv = build_command(agent=agent or config.CURATOR_AGENT,
-                         claude_bin=claude_bin or config.CLAUDE_BIN)
+                         claude_bin=claude_bin or config.CLAUDE_BIN,
+                         model=config.CURATOR_MODEL)
     env = child_env(run_id, roots.get(layer.PROJECT))
     with intent_queue.live_lock(run_id, roots.get(layer.PROJECT)):  # same liveness marker as reflection
         proc = _invoke_spawn(_launcher(spawn_fn, roots.get(layer.PROJECT)),

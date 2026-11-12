@@ -116,9 +116,12 @@ configure unless you want to change the pace.
 | Variable | Default | What it does |
 |---|---|---|
 | `AUTOHARNESS_REFLECT_EVERY_N` | `50` | Reflection cadence, counted in **tool calls**, not turns: every main-session tool call advances a counter, and the turn that pushes it past N ends with a background reflection. A working stretch triggers; a conversation that only talks never does. Lower = learns faster and spawns more child sessions. |
+| `AUTOHARNESS_MIN_FLUSH_N` | `1` | Minimum tail size, in tool calls, that SessionEnd will flush to a reflector. The default preserves the existing flush-any-positive-tail behaviour. Raising it avoids full reflector runs for tiny sessions; a smaller tail is discarded when the session counter is cleared. This does not change the mid-session cadence above. |
 | `AUTOHARNESS_CONSOLIDATE_EVERY_N` | `250` | Same quantum for the curator, the periodic pass that merges the library as a whole. Held well above the reflection cadence — consolidation is rarer than distillation. |
 | `AUTOHARNESS_DIGEST_EXCHANGES` | `20` | How many exchanges *before* the episode window are compressed into the reflector's prior-context digest (text + tool names only). Unused by the fork carrier, which replays the real conversation instead. |
 | `AUTOHARNESS_CARRIER` | `bundle` | What carries the reflection. `bundle` hands a redacted window + digest to a fresh subagent. `fork` resumes and forks the session that just ended, so the reflector reads the real conversation on the parent's warm cache. Stays `bundle` until the cache-hit measurement is in. |
+| `AUTOHARNESS_REFLECTOR_MODEL` | `haiku` (agent default) | Model alias or full provider model ID for reflector sessions. Unset leaves the agent's `model: haiku` frontmatter in control. An explicit value is passed with `--model`; when combined with the `fork` carrier, changing away from the parent model gives up the warm cross-session model cache. |
+| `AUTOHARNESS_CURATOR_MODEL` | `haiku` (agent default) | Independent model alias or full provider model ID for curator sessions. Unset leaves the curator agent frontmatter in control. |
 
 **Recall — what the model sees**
 
@@ -277,6 +280,12 @@ benchmark exists.
 | Puts its own library in front of the model | No | No | Yes | Yes |
 | Needs a benchmark / oracle | No | Yes | No | No |
 | Needs a resident daemon | No | No | Yes | No |
+
+## Contributing
+
+Bug reports and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers local setup,
+the two commands CI runs (`ruff check .` and `python3 -m pytest -m "not live" -q`), the layout of
+the source tree, and what a reviewable first change looks like.
 
 ## Acknowledgements
 

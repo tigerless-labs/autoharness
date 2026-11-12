@@ -38,6 +38,8 @@ def _no_host_project_dir(monkeypatch):
     monkeypatch.setattr(config, "SKILL_PREFIX", "")
     monkeypatch.setattr(config, "CHILD_ISOLATION", False)
     monkeypatch.setattr(config, "INDEX_BODY_PATHS", False)
+    monkeypatch.setattr(config, "REFLECTOR_MODEL", None)
+    monkeypatch.setattr(config, "CURATOR_MODEL", None)
 
 
 @pytest.fixture(autouse=True)
