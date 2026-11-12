@@ -8,6 +8,7 @@ from autoharness.lib import layer
 
 def test_cadence_positive():
     assert isinstance(config.REFLECT_EVERY_N, int) and config.REFLECT_EVERY_N > 0
+    assert isinstance(config.MIN_FLUSH_N, int) and config.MIN_FLUSH_N > 0
 
 
 def test_consolidate_cadence_sparser_than_reflect():
@@ -65,6 +66,18 @@ def test_env_overrides_knobs_else_defaults(monkeypatch):
         importlib.reload(config)  # restore defaults for the rest of the suite
 
 
+def test_maintenance_models_are_independently_configurable(monkeypatch):
+    monkeypatch.setenv("AUTOHARNESS_REFLECTOR_MODEL", "sonnet")
+    monkeypatch.setenv("AUTOHARNESS_CURATOR_MODEL", "provider/curator-v1")
+    importlib.reload(config)
+    try:
+        assert config.REFLECTOR_MODEL == "sonnet"
+        assert config.CURATOR_MODEL == "provider/curator-v1"
+    finally:
+        monkeypatch.undo()
+        importlib.reload(config)
+
+
 # #150: the README documents these as operator-settable, but no override test
 # reached them. A knob nothing sets always reads its default, so every default
 # assertion in this file still passed while the documented env var could have
@@ -77,6 +90,7 @@ def test_env_overrides_knobs_else_defaults(monkeypatch):
         ("AUTOHARNESS_INDEX_SUSPENDED", "INDEX_SUSPENDED", "1", True),
         ("AUTOHARNESS_SNAPSHOT_KEEP", "SNAPSHOT_KEEP", "11", 11),
         ("AUTOHARNESS_CARRIER", "REFLECTOR_CARRIER", "fork", "fork"),
+        ("AUTOHARNESS_MIN_FLUSH_N", "MIN_FLUSH_N", "7", 7),
     ],
 )
 def test_documented_knob_reads_its_env_var(

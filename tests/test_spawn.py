@@ -90,6 +90,16 @@ def test_build_command_carries_agent_and_print():
     assert "-p" in cmd
     # autonomous spawn: no human to approve tool calls → must skip permission prompts
     assert "--dangerously-skip-permissions" in cmd
+    assert "--model" not in cmd  # unset keeps the agent frontmatter as the effective default
+
+
+def test_build_command_carries_explicit_model_as_one_argument():
+    cmd = spawn.build_command(
+        agent="autoharness:reflector",
+        claude_bin="claude",
+        model="provider/model with spaces",
+    )
+    assert cmd[cmd.index("--model") + 1] == "provider/model with spaces"
 
 
 def test_child_env_sets_guard_and_coords_without_polluting():
@@ -297,6 +307,11 @@ def test_build_fork_command_shape():
     assert "--agent" not in argv  # prefix constraint: keep the parent's system prompt
 
 
+def test_build_fork_command_accepts_explicit_reflector_model():
+    argv = spawn.build_fork_command(session_id="sess-9", claude_bin="claude", model="sonnet")
+    assert argv[argv.index("--model") + 1] == "sonnet"
+
+
 def test_run_fork_carrier_sends_instruction_not_window(tmp_path, monkeypatch):
     monkeypatch.setattr(spawn.config, "REFLECTOR_CARRIER", "fork")
     roots = {"project": tmp_path / "p", "global": tmp_path / "g"}
@@ -323,6 +338,22 @@ def test_run_bundle_carrier_unchanged(tmp_path, monkeypatch):
     spawn.run("WINDOW-TEXT", "r1", roots=roots, session_id="sess-9", spawn_fn=fake)
     assert "--fork-session" not in seen["argv"]
     assert "WINDOW-TEXT" in seen["payload"]  # bundle fallback still materializes the window
+
+
+def test_reflector_and_curator_use_independent_model_overrides(tmp_path, monkeypatch):
+    roots = _roots(tmp_path)
+    seen = []
+    monkeypatch.setattr(config, "REFLECTOR_MODEL", "sonnet")
+    monkeypatch.setattr(config, "CURATOR_MODEL", "provider/curator-v1")
+
+    def fake(argv, env, payload):
+        seen.append(argv)
+
+    spawn.run("WINDOW", "reflect", roots=roots, spawn_fn=fake)
+    spawn.run_curator("curate", roots=roots, spawn_fn=fake)
+
+    assert seen[0][seen[0].index("--model") + 1] == "sonnet"
+    assert seen[1][seen[1].index("--model") + 1] == "provider/curator-v1"
 
 
 def test_fork_without_session_falls_back_to_bundle(tmp_path, monkeypatch):

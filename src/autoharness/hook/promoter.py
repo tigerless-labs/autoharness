@@ -170,6 +170,22 @@ def promote(intent, *, roots=None, repo_name=None):
     roots = roots or {}
     action = intent.get("action")
     name = intent.get("name")
+    if action == "suggest":
+        # A suggestion is the safe escape hatch for a read-only owner: account and notify it, but
+        # never resolve a layer, validate against a writable skill, or touch the skill trees.
+        findings = []
+        for field in ("name", "reason", "evidence"):
+            value = intent.get(field)
+            if not isinstance(value, str) or not value.strip():
+                findings.append(("schema", f"suggest {field} must be a non-empty string"))
+        forbidden = [field for field in ("level", "body", "old_string", "new_string", "files",
+                                          "path", "absorbed_into")
+                     if intent.get(field) is not None]
+        if forbidden:
+            findings.append(("schema", f"suggest takes no mutation fields: {', '.join(forbidden)}"))
+        if findings:
+            return _reject(action, None, findings)
+        return {"ok": True, "action": action, "level": None, "findings": [], "notes": []}
     if action == "create":
         try:  # before any filesystem call: a name past NAME_MAX would raise, not reject
             layer.check_new_name(name)
@@ -277,10 +293,18 @@ def _account(run_id, intents, verdicts, proot):
     """Run-level verdict account (direction B, anti-silence): the per-symbol LED records only landed
     facts, so a rejected create would vanish without trace — this account is where verdicts live.
     last_run.json feeds the one-line SessionStart summary and is consumed after one injection."""
-    rows = [{"action": v.get("action"), "name": i.get("name"), "ok": v["ok"],
-             "findings": [f[0] for f in v.get("findings", [])], "notes": v.get("notes", [])}
-            for i, v in zip(intents, verdicts, strict=True)]
-    landed = sum(1 for r in rows if r["ok"])
+    rows = []
+    for intent, verdict in zip(intents, verdicts, strict=True):
+        row = {"action": verdict.get("action"), "name": intent.get("name"), "ok": verdict["ok"],
+               "findings": [f[0] for f in verdict.get("findings", [])],
+               "notes": verdict.get("notes", [])}
+        if intent.get("action") == "suggest" and verdict["ok"]:
+            row["suggestion"] = redact.redact(str(intent.get("reason") or ""))
+            row["evidence"] = redact.redact(str(intent.get("evidence") or ""))
+        rows.append(row)
+    landed = sum(1 for r in rows if r["ok"] and r.get("action") != "suggest")
+    suggested = sum(1 for r in rows if r["ok"] and r.get("action") == "suggest")
+    rejected = sum(1 for r in rows if not r["ok"])
     absorbed = sum(1 for i, v in zip(intents, verdicts, strict=True)
                    if v["ok"] and i.get("action") == "delete" and i.get("absorbed_into"))
     families = sorted({f for r in rows if not r["ok"] for f in r["findings"]})
@@ -289,10 +313,13 @@ def _account(run_id, intents, verdicts, proot):
     runs.mkdir(parents=True, exist_ok=True)
     record = {"run_id": run_id, "verdicts": rows}
     atomic.write_text(runs / f"{run_id}.json", json.dumps(record, ensure_ascii=False, indent=2))
+    suggestions = [{"owner": r["name"], "suggestion": r["suggestion"]}
+                   for r in rows if r.get("action") == "suggest" and r["ok"]]
     atomic.write_text(state / "last_run.json",
                       json.dumps({"run_id": run_id, "landed": landed,
-                                  "rejected": len(rows) - landed, "absorbed": absorbed,
+                                  "rejected": rejected, "suggested": suggested, "absorbed": absorbed,
                                   "families": families,
+                                  "suggestions": suggestions,
                                   "uncategorized": sum(1 for r in rows if "category" in r["notes"])},
                                  ensure_ascii=False))
     return record

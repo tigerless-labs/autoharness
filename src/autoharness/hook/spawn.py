@@ -22,7 +22,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from autoharness import config
-from autoharness.hook import capture, on_session_start, promoter, recovery
+from autoharness.hook import capture, dedupe_index, on_session_start, promoter, recovery
 from autoharness.lib import (
     atomic,
     counters,
@@ -141,6 +141,13 @@ def description_index(roots=None, *, agent_only=False, include_body_paths=None):
     return f"{BODY_PATH_INSTRUCTION}\n\n{index}" if include_body_paths else index
 
 
+def reflector_index(roots=None, *, transcript_path=None):
+    """Writable live skills plus separately tagged owners used only for compare-first dedupe."""
+    writable = description_index(roots)
+    read_only = dedupe_index.read_only_index(roots or {}, transcript_path=transcript_path)
+    return writable + "\n\n" + read_only if read_only else writable
+
+
 def build_bundle(window, index, spec, digest=""):
     preamble = (
         "# Prior context digest (older exchanges, tool outputs omitted — background only,"
@@ -183,9 +190,13 @@ def isolation_args():
     return ["--setting-sources", "", "--plugin-dir", str(config.PLUGIN_ROOT), "--no-session-persistence"]
 
 
-def build_fork_command(*, session_id, claude_bin):
+def _model_args(model):
+    return ["--model", model] if model else []
+
+
+def build_fork_command(*, session_id, claude_bin, model=None):
     return [claude_bin, "-p", "--resume", str(session_id), "--fork-session",
-            "--dangerously-skip-permissions", *isolation_args()]
+            "--dangerously-skip-permissions", *_model_args(model), *isolation_args()]
 
 
 def build_fork_prompt(index, spec):
@@ -194,13 +205,14 @@ def build_fork_prompt(index, spec):
             + "\n\n# Authoring + format spec (write to satisfy this)\n\n" + spec + "\n")
 
 
-def build_command(*, agent, claude_bin):
+def build_command(*, agent, claude_bin, model=None):
     # Reflection is an unattended background job — nobody is there to approve tool calls, so skip the
     # permission prompt. The security boundary is held by the agent's tools allowlist
     # (Read/Grep/Glob/stage_skill) + the top-level PreToolUse write backstop, not by the prompt.
     # (live e2e: a reflector's real stage_skill call gets blocked by the permission gate and can only
     # "narrate"; only with this flag does it land.)
-    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions", *isolation_args()]
+    return [claude_bin, "-p", "--agent", agent, "--dangerously-skip-permissions",
+            *_model_args(model), *isolation_args()]
 
 
 def child_env(run_id, root, *, base_env=None):
@@ -284,7 +296,8 @@ def _invoke_spawn(spawn_fn, argv, env, payload, run_id, roots):
 
 
 def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
-        spec_path=None, digest="", session_id=None, carrier=None, spawn_fn=None):
+        spec_path=None, digest="", session_id=None, transcript_path=None, carrier=None,
+        spawn_fn=None):
     roots = roots or {}
     proot = roots.get(layer.PROJECT)
     spec = (spec_path or config.FORMAT_SPEC).read_text(encoding="utf-8")
@@ -292,12 +305,24 @@ def run(window_text, run_id, *, roots, repo_name=None, agent=None, claude_bin=No
     carrier = carrier or config.REFLECTOR_CARRIER
     forked = carrier == "fork" and bool(session_id)
     if forked:  # no session to fork -> bundle chain (fail-safe)
-        argv = build_fork_command(session_id=session_id, claude_bin=claude_bin or config.CLAUDE_BIN)
-        payload = build_fork_prompt(description_index(roots), spec)  # -p reads the prompt from stdin
+        argv = build_fork_command(
+            session_id=session_id,
+            claude_bin=claude_bin or config.CLAUDE_BIN,
+            model=config.REFLECTOR_MODEL,
+        )
+        payload = build_fork_prompt(
+            reflector_index(roots, transcript_path=transcript_path), spec
+        )  # -p reads the prompt from stdin
     else:
         argv = build_command(agent=agent or config.REFLECTOR_AGENT,
-                             claude_bin=claude_bin or config.CLAUDE_BIN)
-        payload = build_bundle(window_text, description_index(roots), spec, digest=digest)
+                             claude_bin=claude_bin or config.CLAUDE_BIN,
+                             model=config.REFLECTOR_MODEL)
+        payload = build_bundle(
+            window_text,
+            reflector_index(roots, transcript_path=transcript_path),
+            spec,
+            digest=digest,
+        )
 
     env = child_env(run_id, proot)
     # the live lock marks the run as having a spawn parent: between here and the own drain below,
@@ -341,7 +366,8 @@ def run_curator(run_id, *, roots, repo_name=None, agent=None, claude_bin=None,
     bundle = build_curator_bundle(description_index(roots, agent_only=True), spec)
 
     argv = build_command(agent=agent or config.CURATOR_AGENT,
-                         claude_bin=claude_bin or config.CLAUDE_BIN)
+                         claude_bin=claude_bin or config.CLAUDE_BIN,
+                         model=config.CURATOR_MODEL)
     env = child_env(run_id, roots.get(layer.PROJECT))
     with intent_queue.live_lock(run_id, roots.get(layer.PROJECT)):  # same liveness marker as reflection
         proc = _invoke_spawn(_launcher(spawn_fn, roots.get(layer.PROJECT)),
@@ -365,6 +391,7 @@ def main(argv=None):
     offset = counters.session_offset(session_id, roots[layer.PROJECT])
     window_text, new_offset = capture.window(transcript_path, offset)
     result = run(window_text, run_id, roots=roots, session_id=session_id,
+                 transcript_path=transcript_path,
                  digest=capture.digest(transcript_path, offset))
     counters.write_session_offset(session_id, new_offset, roots[layer.PROJECT])
     recovery.complete(owner)
