@@ -8,6 +8,7 @@ from autoharness.lib import layer
 
 def test_cadence_positive():
     assert isinstance(config.REFLECT_EVERY_N, int) and config.REFLECT_EVERY_N > 0
+    assert isinstance(config.MIN_FLUSH_N, int) and config.MIN_FLUSH_N > 0
 
 
 def test_consolidate_cadence_sparser_than_reflect():
@@ -77,6 +78,7 @@ def test_env_overrides_knobs_else_defaults(monkeypatch):
         ("AUTOHARNESS_INDEX_SUSPENDED", "INDEX_SUSPENDED", "1", True),
         ("AUTOHARNESS_SNAPSHOT_KEEP", "SNAPSHOT_KEEP", "11", 11),
         ("AUTOHARNESS_CARRIER", "REFLECTOR_CARRIER", "fork", "fork"),
+        ("AUTOHARNESS_MIN_FLUSH_N", "MIN_FLUSH_N", "7", 7),
     ],
 )
 def test_documented_knob_reads_its_env_var(

@@ -31,6 +31,10 @@ def _int_env(name, default, minimum=None):
 # Recalibrated with the numerator: the old turn-based 10 lands near 30-50 tool calls, and the standing
 # ruling is to err sparse (precipitation is maintenance, and SessionEnd flushes the tail).
 REFLECT_EVERY_N = _int_env("AUTOHARNESS_REFLECT_EVERY_N", 50, minimum=1)  # the window itself is watermark-delimited (capture)
+# SessionEnd tail flushes are independent of the mid-session cadence above. Keep the historical
+# flush-any-positive-tail behaviour by default, while allowing operators to decline tiny, expensive
+# reflector runs. A skipped tail is deliberately discarded when the session counter is cleared.
+MIN_FLUSH_N = _int_env("AUTOHARNESS_MIN_FLUSH_N", 1, minimum=1)
 CONSOLIDATE_EVERY_N = _int_env("AUTOHARNESS_CONSOLIDATE_EVERY_N", 250)  # ponytail: placeholder, calibrate in experiments/; curator (content-level merge) beat, same quantum as REFLECT_EVERY_N and held sparser than it
 
 # raw-capture byte caps (ponytail: placeholders, calibrate in experiments/): per transcript record,
