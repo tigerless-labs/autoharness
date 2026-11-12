@@ -8,7 +8,8 @@ the deterministic side does not fully trust the tool surface).
 
 - Schema enforcement: action enum; per-action body|delta|path required-and-mutually-exclusive; LED
   reason/evidence required; create's level enum (default project; the layer for update/patch/
-  remove_file/delete is resolved by the promoter via a two-layer find).
+  remove_file/delete is resolved by the promoter via a two-layer find). A suggest intent records an
+  actionable note for a read-only owner without touching any skill tree.
 - Instant feedback on args: create/update run a structure check (frontmatter + name/description, reusing
   validate.structure) + body size, so the model can fix it on the spot within the subagent session
   instead of redoing a whole turn.
@@ -25,7 +26,7 @@ import sys
 from autoharness import config
 from autoharness.lib import intent_queue, layer, validate
 
-_ACTIONS = ("create", "update", "patch", "remove_file", "delete")
+_ACTIONS = ("create", "update", "patch", "remove_file", "delete", "suggest")
 _BODY_ACTIONS = ("create", "update")
 TOOL_NAME = "stage_skill"
 _PROTOCOL_VERSION = "2024-11-05"
@@ -35,8 +36,9 @@ TOOL_SCHEMA = {
     "properties": {
         "action": {"type": "string", "enum": list(_ACTIONS),
                    "description": "create=new (with level) / update=replace whole file / patch=small edit (delta) / "
-                                  "remove_file=drop one subfile / delete=remove the whole skill"},
-        "name": {"type": "string", "description": "skill symbol name"},
+                                  "remove_file=drop one subfile / delete=remove the whole skill / "
+                                  "suggest=record a proposed change for a read-only owner"},
+        "name": {"type": "string", "description": "skill symbol name; for suggest, the exact read-only owner label"},
         "level": {"type": "string", "enum": list(layer.LAYERS),
                   "description": "create only; defaults to project, global has a high bar"},
         "body": {"type": "string", "description": "create/update: full SKILL.md text"},
@@ -82,7 +84,7 @@ def _schema_errors(params):
     errors = []
     if not _nonempty(params, "name"):
         errors.append(("schema", "name required (non-empty)"))
-    else:
+    elif action != "suggest":
         try:  # the promoter would refuse it after the session is gone
             (layer.check_new_name if action == "create" else layer._check_name)(params["name"])
         except ValueError as exc:
@@ -136,10 +138,17 @@ def _schema_errors(params):
             errors.append(("schema", "delete takes no body/delta"))
         if has_files:
             errors.append(("schema", "delete takes no files"))
+    elif action == "suggest":
+        if has_body or has_delta or has_files:
+            errors.append(("schema", "suggest takes no body/delta/files"))
+        if params.get("level") is not None:
+            errors.append(("schema", "suggest takes no level"))
     return errors
 
 
 def _content_errors(params):
+    if params["action"] == "suggest":
+        return []
     if params["action"] == "remove_file":
         return validate.check_remove_path(params["path"])
     body = params.get("body")

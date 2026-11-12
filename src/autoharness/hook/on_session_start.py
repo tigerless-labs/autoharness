@@ -154,8 +154,21 @@ def last_run_summary(roots):
         line += f" ({', '.join(families)})"
     if last.get("absorbed"):
         line += f"; merged {last['absorbed']} into umbrellas"
+    if last.get("suggested"):
+        line += f"; recorded {last['suggested']} read-only owner suggestion(s)"
     if last.get("uncategorized"):
         line += f"; {last['uncategorized']} landed with no category (grouped under general)"
+    suggestions = last.get("suggestions")
+    if isinstance(suggestions, list):
+        rendered = []
+        for item in suggestions[:3]:
+            if not isinstance(item, dict):
+                continue
+            owner = _sanitize(item.get("owner") or "unknown owner", 80)
+            suggestion = _sanitize(item.get("suggestion") or "review suggested change", 160)
+            rendered.append(f"{owner}: {suggestion}")
+        if rendered:
+            line += "; read-only suggestions: " + " | ".join(rendered)
     return line
 
 
