@@ -1,7 +1,7 @@
 """Expected string values follow YAML block scalar indentation, folding and chomping."""
 import pytest
 
-from autoharness.hook import on_session_start, promoter
+from autoharness.hook import on_session_start, promoter, spawn
 from autoharness.lib import validate
 from autoharness.stage_skill import server
 
@@ -55,7 +55,7 @@ def test_quoted_indicators_are_literal_strings(literal):
 
 
 @pytest.mark.parametrize("header", [">-", "|-", ">", "|", ">2-"])
-def test_stage_drain_and_recall_use_the_decoded_description(tmp_path, header):
+def test_stage_drain_and_indexes_use_the_decoded_description(tmp_path, header):
     body = ("---\nname: iso\ndescription: " + header
             + "\n  Use when formatting a date\n  as ISO.\n---\n# ISO\nUse strftime.\n")
     roots = {"project": tmp_path, "global": tmp_path / "unused"}
@@ -66,5 +66,8 @@ def test_stage_drain_and_recall_use_the_decoded_description(tmp_path, header):
     verdicts = promoter.drain("block", roots=roots)
     assert verdicts[0]["ok"], verdicts
     actual_context = on_session_start.on_session_start({"cwd": str(tmp_path)}, roots=roots)["context"]
-    assert "Use when formatting a date as ISO." in actual_context
-    assert ": >" not in actual_context and ": |" not in actual_context
+    assert "- iso [project]" in actual_context
+    assert "Use when formatting a date as ISO." not in actual_context
+    reflector_index = spawn.description_index(roots)
+    assert validate._frontmatter(body)["description"] in reflector_index
+    assert ": >" not in reflector_index and ": |" not in reflector_index
