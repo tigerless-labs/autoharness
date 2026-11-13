@@ -77,7 +77,9 @@ name = "url_credentials"
 # letter/digit/dot/dash stretches to the end of the string, and an unbounded `[^\s]+@` scans to
 # the end of the non-space run whenever no @ follows. Real schemes stay under 32 chars, a
 # username:password run under 512 (the same rationale as the e-mail local-part cap above).
-pattern = '''(?i)\b[a-z][a-z0-9+.-]{0,31}://[^\s:/@]+:[^\s]{1,512}@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]]|$))'''
+# The username may be empty (redis://:password@host). The host may end at a quote, backtick or
+# backslash: a URL inside a JSON string or a JSONL transcript is followed by " or an escaped \n.
+pattern = '''(?i)\b[a-z][a-z0-9+.-]{0,31}://[^\s:/@]*:[^\s]{1,512}@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]"'`\\]|$))'''
 
 [[pii]]
 name = "claude_ai_url"

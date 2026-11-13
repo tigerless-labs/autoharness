@@ -74,8 +74,39 @@ def test_url_credentials_are_redacted_as_a_unit(url):
 @pytest.mark.parametrize(
     "url",
     [
+        "redis://:s3cretpass@cache.internal:6379/0",
+        "rediss://:p%40ss@cache.internal:6380",
+        "redis://:Pa$$w0rd!x@cache.internal:6379/0",
+    ],
+)
+def test_url_credentials_without_a_username_are_redacted(url):
+    out = redact.redact(url)
+    assert "s3cretpass" not in out and "p%40ss" not in out and "Pa$$w0rd" not in out
+    assert "[REDACTED:secret:url_credentials]" in out
+    assert out.endswith(("cache.internal:6379/0", "cache.internal:6380"))
+    assert out.count("[REDACTED") == 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"url": "postgres://app:s3cretpass@db"}',
+        "DATABASE_URL=postgres://app:s3cretpass@db:5432\\nNEXT=1",  # escaped newline, as in JSONL
+        "`redis://:s3cretpass@localhost`",
+    ],
+)
+def test_url_credentials_before_a_quote_or_escaped_newline_are_redacted(text):
+    out = redact.redact(text)
+    assert "s3cretpass" not in out
+    assert "[REDACTED:secret:url_credentials]" in out
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
         "postgres://db.internal:5432/prod",
         "https://example.com/artifact",
+        "sqlite://:memory:",
     ],
 )
 def test_urls_without_embedded_credentials_are_left_alone(url):
