@@ -76,12 +76,13 @@ def _compact_map(groups, hint=None):
 def recall_index(roots, cwd=None):
     if config.INDEX_SUSPENDED:
         return None
-    groups, has_project = {}, False
+    groups, has_project, listed = {}, False, set()
     for lyr in config.active_layers():
         root = roots.get(lyr)
         skills = layer.skills_dir(lyr, root)
-        if not skills.exists():
+        if not skills.exists() or skills.resolve() in listed:
             continue
+        listed.add(skills.resolve())
         for path in skills.glob(f"*/{skill_store.SKILL_FILE}"):
             name = path.parent.name
             try:

@@ -119,6 +119,20 @@ def test_child_body_path_switches_do_not_change_session_start_recall(tmp_path, m
     assert on_session_start.recall_index(roots) == baseline
 
 
+def test_index_lists_a_skill_once_when_both_layers_share_one_folder(tmp_path):
+    home = tmp_path / "home"
+    claude_dir = home / ".claude"
+    claude_dir.mkdir(parents=True)
+    real_skills = tmp_path / "elsewhere" / "skills"
+    real_skills.mkdir(parents=True)
+    (claude_dir / "skills").symlink_to(real_skills)
+    roots = {"global": claude_dir, "project": claude_dir}
+    _seed_desc(roots, "only-once", "use when once", lvl="global")
+    ctx = on_session_start.recall_index(roots, cwd=str(home))
+    assert ctx.count("- only-once") == 1
+    assert "outside this checkout" not in ctx
+
+
 def test_index_lists_agent_skills_grouped_by_category(tmp_path):
     roots = _roots(tmp_path)
     _seed_desc(roots, "b-skill", "use when b", category="ops")
