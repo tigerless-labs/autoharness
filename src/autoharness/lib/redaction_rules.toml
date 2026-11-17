@@ -77,7 +77,10 @@ name = "url_credentials"
 # letter/digit/dot/dash stretches to the end of the string, and an unbounded `[^\s]+@` scans to
 # the end of the non-space run whenever no @ follows. Real schemes stay under 32 chars, a
 # username:password run under 512 (the same rationale as the e-mail local-part cap above).
-pattern = '''(?i)\b[a-z][a-z0-9+.-]{0,31}://[^\s:/@]+:[^\s]{1,512}@(?=[A-Za-z0-9._-]+(?::\d+)?(?:[/?#\s),.;}\]]|$))'''
+# The username may be empty (redis://:password@host). The host ends at any character that cannot
+# be part of a host, so a URL wrapped in quotes, <>, ** or | and a query like url=...@cache&x=1 are
+# caught too. A bracketed IPv6 literal host ([::1]) is allowed.
+pattern = '''(?i)\b[a-z][a-z0-9+.-]{0,31}://[^\s:/@]*:[^\s]{1,512}@(?=(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\])(?::\d+)?(?![A-Za-z0-9_:-]))'''
 
 [[pii]]
 name = "claude_ai_url"
