@@ -93,6 +93,12 @@ def test_url_credentials_without_a_username_are_redacted(url):
         '{"url": "postgres://app:s3cretpass@db"}',
         "DATABASE_URL=postgres://app:s3cretpass@db:5432\\nNEXT=1",  # escaped newline, as in JSONL
         "`redis://:s3cretpass@localhost`",
+        "<redis://:s3cretpass@localhost>",
+        "**postgres://u:s3cretpass@db**",
+        "|postgres://u:s3cretpass@db|",
+        "postgres://u:s3cretpass@db>",
+        "url=redis://:s3cretpass@cache&x=1",
+        "redis://:s3cretpass@[::1]:6379",
     ],
 )
 def test_url_credentials_before_a_quote_or_escaped_newline_are_redacted(text):
