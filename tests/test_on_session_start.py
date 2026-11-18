@@ -1,4 +1,5 @@
 import json
+import shutil
 import sys
 
 import pytest
@@ -131,6 +132,21 @@ def test_index_lists_a_skill_once_when_both_layers_share_one_folder(tmp_path):
     ctx = on_session_start.recall_index(roots, cwd=str(home))
     assert ctx.count("- only-once") == 1
     assert "outside this checkout" not in ctx
+
+
+def test_index_lists_a_skill_once_when_both_layers_symlink_it(tmp_path):
+    staging = tmp_path / "staging" / ".claude"
+    staging.mkdir(parents=True)
+    _seed_desc({"global": staging}, "shared", "use when shared", lvl="global")
+    target = tmp_path / "agents" / "skills" / "shared"
+    target.parent.mkdir(parents=True)
+    shutil.move(str(staging / "skills" / "shared"), target)
+    roots = {"global": tmp_path / "home" / ".claude", "project": tmp_path / "repo" / ".claude"}
+    for claude_dir in roots.values():
+        (claude_dir / "skills").mkdir(parents=True)
+        (claude_dir / "skills" / "shared").symlink_to(target)
+    ctx = on_session_start.recall_index(roots, cwd=str(tmp_path / "repo"))
+    assert ctx.count("- shared") == 1
 
 
 def test_index_lists_agent_skills_grouped_by_category(tmp_path):

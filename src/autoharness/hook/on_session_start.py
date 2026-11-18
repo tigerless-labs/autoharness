@@ -80,11 +80,12 @@ def recall_index(roots, cwd=None):
     for lyr in config.active_layers():
         root = roots.get(lyr)
         skills = layer.skills_dir(lyr, root)
-        if not skills.exists() or skills.resolve() in listed:
+        if not skills.exists():
             continue
-        listed.add(skills.resolve())
         for path in skills.glob(f"*/{skill_store.SKILL_FILE}"):
             name = path.parent.name
+            if path.parent.resolve() in listed:
+                continue
             try:
                 layer._check_name(name)
             except ValueError:
@@ -104,6 +105,7 @@ def recall_index(roots, cwd=None):
             fm = validate._frontmatter(text) or {}
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
             groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]")
+            listed.add(path.parent.resolve())
             has_project = has_project or lyr == layer.PROJECT
     if not groups:
         return None  # empty library -> zero injection
