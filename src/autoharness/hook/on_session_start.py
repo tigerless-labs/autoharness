@@ -76,7 +76,7 @@ def _compact_map(groups, hint=None):
 def recall_index(roots, cwd=None):
     if config.INDEX_SUSPENDED:
         return None
-    groups, has_project = {}, False
+    groups, has_project, listed = {}, False, set()
     for lyr in config.active_layers():
         root = roots.get(lyr)
         skills = layer.skills_dir(lyr, root)
@@ -84,6 +84,8 @@ def recall_index(roots, cwd=None):
             continue
         for path in skills.glob(f"*/{skill_store.SKILL_FILE}"):
             name = path.parent.name
+            if path.parent.resolve() in listed:
+                continue
             try:
                 layer._check_name(name)
             except ValueError:
@@ -103,6 +105,7 @@ def recall_index(roots, cwd=None):
             fm = validate._frontmatter(text) or {}
             cat = _sanitize(fm.get("category") or "general", 64) or "general"
             groups.setdefault(cat, []).append(f"- {_sanitize(name, 64)} [{lyr}]")
+            listed.add(path.parent.resolve())
             has_project = has_project or lyr == layer.PROJECT
     if not groups:
         return None  # empty library -> zero injection
